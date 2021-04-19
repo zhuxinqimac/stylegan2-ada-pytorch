@@ -83,14 +83,14 @@ def assert_shape(tensor, ref_shape):
     for idx, (size, ref_size) in enumerate(zip(tensor.shape, ref_shape)):
         if ref_size is None:
             pass
-        elif isinstance(ref_size, torch.Tensor):
-            with suppress_tracer_warnings(): # as_tensor results are registered as constants
-                symbolic_assert(torch.equal(torch.as_tensor(size), ref_size), f'Wrong size for dimension {idx}')
-        elif isinstance(size, torch.Tensor):
-            with suppress_tracer_warnings(): # as_tensor results are registered as constants
-                symbolic_assert(torch.equal(size, torch.as_tensor(ref_size)), f'Wrong size for dimension {idx}: expected {ref_size}')
-        elif size != ref_size:
-            raise AssertionError(f'Wrong size for dimension {idx}: got {size}, expected {ref_size}')
+        # elif isinstance(ref_size, torch.Tensor):
+            # with suppress_tracer_warnings(): # as_tensor results are registered as constants
+                # symbolic_assert(torch.equal(torch.as_tensor(size), ref_size), f'Wrong size for dimension {idx}')
+        # elif isinstance(size, torch.Tensor):
+            # with suppress_tracer_warnings(): # as_tensor results are registered as constants
+                # symbolic_assert(torch.equal(size, torch.as_tensor(ref_size)), f'Wrong size for dimension {idx}: expected {ref_size}')
+        # elif size != ref_size:
+            # raise AssertionError(f'Wrong size for dimension {idx}: got {size}, expected {ref_size}')
 
 #----------------------------------------------------------------------------
 # Function decorator that calls torch.autograd.profiler.record_function().
