@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_uneven.py
 # --- Creation Date: 19-04-2021
-# --- Last Modified: Mon 19 Apr 2021 23:40:17 AEST
+# --- Last Modified: Tue 20 Apr 2021 02:54:40 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -94,7 +94,8 @@ def training_loop(
     np.random.seed(random_seed * num_gpus + rank)
     torch.manual_seed(random_seed * num_gpus + rank)
     torch.backends.cudnn.benchmark = cudnn_benchmark    # Improves training speed.
-    # torch.backends.cuda.matmul.allow_tf32 = allow_tf32  # Allow PyTorch to internally use tf32 for matmul
+    if any(torch.__version__.startswith(x) for x in ['1.7.', '1.8.', '1.9']):
+        torch.backends.cuda.matmul.allow_tf32 = allow_tf32  # Allow PyTorch to internally use tf32 for matmul
     torch.backends.cudnn.allow_tf32 = allow_tf32        # Allow PyTorch to internally use tf32 for convolutions
     conv2d_gradfix.enabled = True                       # Improves training speed.
     grid_sample_gradfix.enabled = True                  # Avoids errors with the augmentation pipe.
@@ -252,8 +253,11 @@ def training_loop(
             # Initialize gradient accumulation.
             if phase.start_event is not None:
                 phase.start_event.record(torch.cuda.current_stream(device))
-            # phase.opt.zero_grad(set_to_none=True)
-            phase.opt.zero_grad() # Remove set_to_none to support pytorch 1.4
+            
+            if any(torch.__version__.startswith(x) for x in ['1.7.', '1.8.', '1.9']):
+                phase.opt.zero_grad(set_to_none=True)
+            else:
+                phase.opt.zero_grad() # Remove set_to_none to support pytorch 1.4
             phase.module.requires_grad_(True)
 
             # Accumulate gradients over multiple rounds.

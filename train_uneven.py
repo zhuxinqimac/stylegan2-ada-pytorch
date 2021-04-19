@@ -8,7 +8,7 @@
 
 # --- File Name: train_uneven.py
 # --- Creation Date: 19-04-2021
-# --- Last Modified: Mon 19 Apr 2021 23:34:52 AEST
+# --- Last Modified: Tue 20 Apr 2021 02:58:31 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train an UnevenGAN using the techniques described in the paper
@@ -115,8 +115,10 @@ def setup_training_loop_kwargs(
     assert data is not None
     assert isinstance(data, str)
     args.training_set_kwargs = dnnlib.EasyDict(class_name='training.dataset.ImageFolderDataset', path=data, use_labels=True, max_size=None, xflip=False)
-    # args.data_loader_kwargs = dnnlib.EasyDict(pin_memory=True, num_workers=3, prefetch_factor=2)
-    args.data_loader_kwargs = dnnlib.EasyDict(pin_memory=True, num_workers=3) # Remove prefetch_factor to support pytorch 1.4
+    if any(torch.__version__.startswith(x) for x in ['1.7.', '1.8.', '1.9']):
+        args.data_loader_kwargs = dnnlib.EasyDict(pin_memory=True, num_workers=3, prefetch_factor=2)
+    else:
+        args.data_loader_kwargs = dnnlib.EasyDict(pin_memory=True, num_workers=3) # Remove prefetch_factor to support pytorch 1.4
     try:
         training_set = dnnlib.util.construct_class_by_name(**args.training_set_kwargs) # subclass of training.dataset.Dataset
         args.training_set_kwargs.resolution = training_set.resolution # be explicit about resolution
@@ -169,7 +171,7 @@ def setup_training_loop_kwargs(
         'paper512':  dict(ref_gpus=8,  kimg=25000,  mb=64, mbstd=8,  fmaps=1,   lrate=0.0025, gamma=0.5,  ema=20,  ramp=None, map=8),
         'paper1024': dict(ref_gpus=8,  kimg=25000,  mb=32, mbstd=4,  fmaps=1,   lrate=0.002,  gamma=2,    ema=10,  ramp=None, map=8),
         'cifar':     dict(ref_gpus=2,  kimg=100000, mb=64, mbstd=32, fmaps=1,   lrate=0.0025, gamma=0.01, ema=500, ramp=0.05, map=2),
-        '3dshapes':  dict(ref_gpus=2,  kimg=250000, mb=64, mbstd=32, fmaps=0.0625,   lrate=0.002, gamma=10,   ema=20,  ramp=None, map=2),
+        '3dshapes':  dict(ref_gpus=2,  kimg=25000,  mb=64, mbstd=32, fmaps=0.0625,   lrate=0.002, gamma=10,   ema=20,  ramp=None, map=2),
     }
 
     assert cfg in cfg_specs
