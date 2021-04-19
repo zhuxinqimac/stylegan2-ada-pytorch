@@ -8,7 +8,7 @@
 
 # --- File Name: loss_uneven.py
 # --- Creation Date: 19-04-2021
-# --- Last Modified: Mon 19 Apr 2021 23:54:36 AEST
+# --- Last Modified: Mon 19 Apr 2021 23:57:16 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -35,7 +35,7 @@ class UnevenLoss(StyleGAN2Loss):
         # if self.reg_type == 'cumax_ada' or self.reg_type == 'monoconst_ada':
             # self.ada_logits = nn.Parameter(torch.ones(self.G_mapping.z_dim), requires_grad=True)
 
-    def get_w1reg_scale(self, cur_device):
+    def get_w1reg_scale(self, w1, cur_device):
         # if self.reg_type == 'cumax_ada':
             # # if self.use_cumax_adaptive:
             # reg_softmax = nn.functional.softmax(self.ada_logits, dim=0)
@@ -45,10 +45,10 @@ class UnevenLoss(StyleGAN2Loss):
             # reg_cumax = torch.cumsum(reg_softmax, dim=0)
             # reg = reg_cumax / torch.sum(reg_cumax, dim=0) * self.uneven_reg_maxval
         if self.reg_type == 'exp':
-            reg = torch.linspace(0., self.uneven_reg_maxval, weight.size(1)).to(cur_device)
+            reg = torch.linspace(0., self.uneven_reg_maxval, w1.size(1)).to(cur_device)
             reg = torch.exp(reg)
         else:
-            reg = torch.linspace(0., self.uneven_reg_maxval, weight.size(1)).to(cur_device)
+            reg = torch.linspace(0., self.uneven_reg_maxval, w1.size(1)).to(cur_device)
         return reg
 
     def accumulate_gradients(self, phase, real_img, real_c, gen_z, gen_c, sync, gain):
@@ -63,8 +63,8 @@ class UnevenLoss(StyleGAN2Loss):
             with torch.autograd.profiler.record_function('Gw1reg_forward'):
                 w1 = getattr(self.G_mapping.module, f'fc{0}').weight  # (out, z_in)
                 cur_device = w1.device
-                reg = self.get_w1reg_scale(cur_device)
-                w1_sq = torch.sum(weight * weight, dim=0)  # (z_in)
+                reg = self.get_w1reg_scale(w1, cur_device)
+                w1_sq = torch.sum(w1 * w1, dim=0)  # (z_in)
                 loss_w1reg = torch.sum(w1_sq * reg, dim=0) * self.w1reg_lambda
                 training_stats.report('Loss/G/loss_w1reg', loss_w1reg)
             with torch.autograd.profiler.record_function('Gw1reg_backward'):
