@@ -8,7 +8,7 @@
 
 # --- File Name: loss_uneven.py
 # --- Creation Date: 19-04-2021
-# --- Last Modified: Mon 19 Apr 2021 23:52:37 AEST
+# --- Last Modified: Mon 19 Apr 2021 23:54:36 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -31,6 +31,7 @@ class UnevenLoss(StyleGAN2Loss):
         super().__init__(device, G_mapping, G_synthesis, D, augment_pipe, style_mixing_prob, r1_gamma, pl_batch_shrink, pl_decay, pl_weight)
         self.w1reg_lambda = w1reg_lambda
         self.uneven_reg_maxval = uneven_reg_maxval
+        self.reg_type = reg_type
         # if self.reg_type == 'cumax_ada' or self.reg_type == 'monoconst_ada':
             # self.ada_logits = nn.Parameter(torch.ones(self.G_mapping.z_dim), requires_grad=True)
 
