@@ -1,0 +1,12 @@
+python train_uneven.py \
+    --outdir=/mnt/hdd/repo_results/stylegan2-ada-pytorch/uneven_3ds \
+    --aug=noaug \
+    --data=/mnt/hdd/Datasets/disentangle_datasets/3dshapes.zip \
+    --cfg=3dshapes \
+    --gpus=2 \
+    --gamma=50 \
+    --z_dim=10 \
+    --n_samples_per 10 \
+    --w1reg_lambda=0 \
+    --uneven_reg_type=linear \
+    --uneven_reg_maxval=0

@@ -15,6 +15,7 @@ import sys
 import tarfile
 import gzip
 import zipfile
+import h5py
 from pathlib import Path
 from typing import Callable, Optional, Tuple, Union
 
@@ -196,6 +197,31 @@ def open_mnist(images_gz: str, *, max_images: Optional[int]):
 
 #----------------------------------------------------------------------------
 
+def open_3dshapes(h5_file: str, *, max_images: Optional[int]):
+    images = []
+    labels = []
+
+    h5py_loaded = h5py.File(h5_file, 'r')
+    images = h5py_loaded['images'][:]  # array shape [480000,64,64,3], uint8 in range(256)
+    labels = h5py_loaded['labels'][:, 4].astype(np.int32)  # array shape [480000], float64
+
+    assert images.shape == (480000, 64, 64, 3) and images.dtype == np.uint8
+    assert labels.shape == (480000,) and labels.dtype in [np.int32, np.int64]
+    assert np.min(images) == 0 and np.max(images) == 255
+    assert np.min(labels) == 0 and np.max(labels) == 3
+
+    max_idx = maybe_min(len(images), max_images)
+
+    def iterate_images():
+        for idx, img in enumerate(images):
+            yield dict(img=img, label=int(labels[idx]))
+            if idx >= max_idx-1:
+                break
+
+    return max_idx, iterate_images()
+
+#----------------------------------------------------------------------------
+
 def make_transform(
     transform: Optional[str],
     output_width: Optional[int],
@@ -260,6 +286,8 @@ def open_dataset(source, *, max_images: Optional[int]):
             return open_cifar10(source, max_images=max_images)
         elif os.path.basename(source) == 'train-images-idx3-ubyte.gz':
             return open_mnist(source, max_images=max_images)
+        elif os.path.basename(source) == '3dshapes.h5':
+            return open_3dshapes(source, max_images=max_images)
         elif file_ext(source) == 'zip':
             return open_image_zip(source, max_images=max_images)
         else:
