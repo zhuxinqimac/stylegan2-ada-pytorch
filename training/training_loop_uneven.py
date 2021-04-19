@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_uneven.py
 # --- Creation Date: 19-04-2021
-# --- Last Modified: Mon 19 Apr 2021 23:30:51 AEST
+# --- Last Modified: Mon 19 Apr 2021 23:40:17 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -252,7 +252,8 @@ def training_loop(
             # Initialize gradient accumulation.
             if phase.start_event is not None:
                 phase.start_event.record(torch.cuda.current_stream(device))
-            phase.opt.zero_grad(set_to_none=True)
+            # phase.opt.zero_grad(set_to_none=True)
+            phase.opt.zero_grad() # Remove set_to_none to support pytorch 1.4
             phase.module.requires_grad_(True)
 
             # Accumulate gradients over multiple rounds.
