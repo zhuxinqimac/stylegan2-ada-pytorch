@@ -8,7 +8,7 @@
 
 # --- File Name: loss_uneven.py
 # --- Creation Date: 19-04-2021
-# --- Last Modified: Mon 19 Apr 2021 22:20:20 AEST
+# --- Last Modified: Mon 19 Apr 2021 23:52:37 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -60,7 +60,7 @@ class UnevenLoss(StyleGAN2Loss):
         # Gw1reg: Constrain first-layer w by different latent dimensions.
         if do_Gw1reg:
             with torch.autograd.profiler.record_function('Gw1reg_forward'):
-                w1 = getattr(self.G_mapping, f'fc{0}').weight  # (out, z_in)
+                w1 = getattr(self.G_mapping.module, f'fc{0}').weight  # (out, z_in)
                 cur_device = w1.device
                 reg = self.get_w1reg_scale(cur_device)
                 w1_sq = torch.sum(weight * weight, dim=0)  # (z_in)
