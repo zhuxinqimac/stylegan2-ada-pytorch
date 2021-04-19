@@ -53,7 +53,8 @@ except AttributeError:
         if neginf is None:
             neginf = torch.finfo(input.dtype).min
         assert nan == 0
-        return torch.clamp(input.unsqueeze(0).nansum(0), min=neginf, max=posinf, out=out)
+        # return torch.clamp(input.unsqueeze(0).nansum(0), min=neginf, max=posinf, out=out)
+        return torch.clamp(input, min=neginf, max=posinf, out=out) # Remove nansum for pytorch 1.4
 
 #----------------------------------------------------------------------------
 # Symbolic assert.
