@@ -1,2 +1,11 @@
 __pycache__/
 .cache/
+.*.sw*
+*/.*.sw*
+*.pkl
+*.pyc
+*.pbs
+*.sh
+*.so
+*.pbs.*
+*hpc_usage_stats.json

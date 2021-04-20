@@ -8,7 +8,7 @@
 
 # --- File Name: loss_uneven.py
 # --- Creation Date: 19-04-2021
-# --- Last Modified: Mon 19 Apr 2021 23:57:16 AEST
+# --- Last Modified: Tue 20 Apr 2021 03:41:38 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -62,6 +62,7 @@ class UnevenLoss(StyleGAN2Loss):
         if do_Gw1reg:
             with torch.autograd.profiler.record_function('Gw1reg_forward'):
                 w1 = getattr(self.G_mapping.module, f'fc{0}').weight  # (out, z_in)
+                # print('w1[0]:', w1[0])
                 cur_device = w1.device
                 reg = self.get_w1reg_scale(w1, cur_device)
                 w1_sq = torch.sum(w1 * w1, dim=0)  # (z_in)

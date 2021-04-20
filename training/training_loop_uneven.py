@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_uneven.py
 # --- Creation Date: 19-04-2021
-# --- Last Modified: Tue 20 Apr 2021 02:54:40 AEST
+# --- Last Modified: Tue 20 Apr 2021 19:31:24 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -195,6 +195,7 @@ def training_loop(
 
         tranv_grid_size = (n_samples_per, G.z_dim) # (gw, gh)
         grid_z = get_traversal(tranv_grid_size, G.z_dim, device) # N = gh * gw
+        # print('grid_z:', grid_z)
         grid_z = grid_z.split(batch_gpu)
         grid_c = torch.from_numpy(labels[:G.z_dim * n_samples_per]).to(device).split(batch_gpu)
         images = torch.cat([G_ema(z=z, c=c, noise_mode='const').cpu() for z, c in zip(grid_z, grid_c)]).numpy()
@@ -333,6 +334,7 @@ def training_loop(
             # save_image_grid(images, os.path.join(run_dir, f'fakes{cur_nimg//1000:06d}.png'), drange=[-1,1], grid_size=grid_size)
 
             grid_z = get_traversal(tranv_grid_size, G.z_dim, device) # N = gh * gw
+            # print('grid_z:', grid_z)
             grid_z = grid_z.split(batch_gpu)
             images = torch.cat([G_ema(z=z, c=c, noise_mode='const').cpu() for z, c in zip(grid_z, grid_c)]).numpy()
             save_image_grid(images, os.path.join(run_dir, f'tranv_{cur_nimg//1000:06d}.png'), drange=[-1,1], grid_size=tranv_grid_size)

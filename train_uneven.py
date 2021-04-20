@@ -8,7 +8,7 @@
 
 # --- File Name: train_uneven.py
 # --- Creation Date: 19-04-2021
-# --- Last Modified: Tue 20 Apr 2021 02:58:31 AEST
+# --- Last Modified: Tue 20 Apr 2021 20:39:33 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train an UnevenGAN using the techniques described in the paper
@@ -69,7 +69,12 @@ def setup_training_loop_kwargs(
     w1reg_lambda  = None, # The uneven regularization overall lambda.
     uneven_reg_type = None, # The regularization type in uneven loss.
     uneven_reg_maxval = None, # The regularization maxval in uneven loss.
+    g_reg_interval = None, # Generator reg interval.
     z_dim = None, # The z_dim in G.
+    w_dim = None, # The w_dim in G.
+    map_num_layers = None, # The num_layers in mapping net.
+    map_out_num_layers = 1, # The num_layers in mapping net.
+    share_zw = True, # If share w in each z_i in mapping net.
 ):
     args = dnnlib.EasyDict()
 
@@ -190,14 +195,24 @@ def setup_training_loop_kwargs(
 
     if z_dim is None:
         z_dim = 512
-    args.G_kwargs = dnnlib.EasyDict(class_name='training.networks.Generator', z_dim=z_dim, w_dim=512, mapping_kwargs=dnnlib.EasyDict(), synthesis_kwargs=dnnlib.EasyDict())
+    # args.G_kwargs = dnnlib.EasyDict(class_name='training.networks.Generator', z_dim=z_dim, w_dim=w_dim, mapping_kwargs=dnnlib.EasyDict(), synthesis_kwargs=dnnlib.EasyDict())
+    args.G_kwargs = dnnlib.EasyDict(class_name='training.networks_uneven.Generator', z_dim=z_dim, w_dim=w_dim, mapping_kwargs=dnnlib.EasyDict(), synthesis_kwargs=dnnlib.EasyDict())
     args.D_kwargs = dnnlib.EasyDict(class_name='training.networks.Discriminator', block_kwargs=dnnlib.EasyDict(), mapping_kwargs=dnnlib.EasyDict(), epilogue_kwargs=dnnlib.EasyDict())
     args.G_kwargs.synthesis_kwargs.channel_base = args.D_kwargs.channel_base = int(spec.fmaps * 32768)
     args.G_kwargs.synthesis_kwargs.channel_max = args.D_kwargs.channel_max = 512
-    args.G_kwargs.mapping_kwargs.num_layers = spec.map
+    if map_num_layers is None:
+        args.G_kwargs.mapping_kwargs.num_layers = spec.map
+    else:
+        args.G_kwargs.mapping_kwargs.num_layers = map_num_layers
+    args.G_kwargs.mapping_kwargs.out_num_layers = map_out_num_layers
+    args.G_kwargs.mapping_kwargs.share_zw = share_zw
     args.G_kwargs.synthesis_kwargs.num_fp16_res = args.D_kwargs.num_fp16_res = 4 # enable mixed-precision training
     args.G_kwargs.synthesis_kwargs.conv_clamp = args.D_kwargs.conv_clamp = 256 # clamp activations to avoid float16 overflow
     args.D_kwargs.epilogue_kwargs.mbstd_group_size = spec.mbstd
+    if g_reg_interval == 0:
+        g_reg_interval = None
+    args.G_reg_interval = g_reg_interval
+    # args.D_reg_interval = D_reg_interval
 
     args.G_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', lr=spec.lrate, betas=[0,0.99], eps=1e-8)
     args.D_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', lr=spec.lrate, betas=[0,0.99], eps=1e-8)
@@ -217,8 +232,9 @@ def setup_training_loop_kwargs(
     args.ema_rampup = spec.ramp
 
     if cfg == '3dshapes':
-        args.loss_kwargs.pl_weight = 0 # disable path length regularization
+        # args.loss_kwargs.pl_weight = 0 # disable path length regularization
         args.loss_kwargs.style_mixing_prob = 0 # disable style mixing
+        args.G_kwargs.synthesis_kwargs.architecture = 'resnet'
 
     if cfg == 'cifar':
         args.loss_kwargs.pl_weight = 0 # disable path length regularization
@@ -433,7 +449,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--metrics', help='Comma-separated list or "none" [default: fid50k_full]', type=CommaSeparatedList())
 @click.option('--seed', help='Random seed [default: 0]', type=int, metavar='INT')
 @click.option('-n', '--dry-run', help='Print training options and exit', is_flag=True)
-@click.option('--n_samples_per', help='The number of steps in traversals.', type=int, metavar='N_SAMPLES_PER')
+@click.option('--n_samples_per', help='The number of steps in traversals.', type=int, metavar='INT')
 
 # Dataset.
 @click.option('--data', help='Training data (directory or zip)', metavar='PATH', required=True)
@@ -468,7 +484,12 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--w1reg_lambda', help='The uneven regularization overall lambda.', type=float)
 @click.option('--uneven_reg_maxval', help='The regularization maxval in uneven loss.', type=float)
 @click.option('--uneven_reg_type', help='The regularization type in uneven loss.', type=str)
+@click.option('--g_reg_interval', help='G reg interval.', type=int)
 @click.option('--z_dim', help='The z_dim in G.', type=int)
+@click.option('--w_dim', help='The w_dim in G.', type=int)
+@click.option('--map_num_layers', help='The num_layers in mapping net.', type=int)
+@click.option('--map_out_num_layers', help='The out_num_layers in mapping net.', type=int)
+@click.option('--share_zw', help='If share w in each z_i in mapping net.', type=bool)
 
 def main(ctx, outdir, dry_run, **config_kwargs):
     """Train a GAN using the techniques described in the paper

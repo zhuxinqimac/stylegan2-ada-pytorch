@@ -7,6 +7,7 @@ do
         --cfg=3dshapes \
         --kimg=8000 \
         --gpus=2 \
+        --g_reg_interval=0 \
         --gamma=${i} \
         --z_dim=10 \
         --n_samples_per 10 \
