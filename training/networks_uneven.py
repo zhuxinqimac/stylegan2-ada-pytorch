@@ -8,7 +8,7 @@
 
 # --- File Name: networks_uneven.py
 # --- Creation Date: 20-04-2021
-# --- Last Modified: Tue 20 Apr 2021 20:37:08 AEST
+# --- Last Modified: Tue 20 Apr 2021 21:13:52 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -77,7 +77,7 @@ class UnevenMappingNetwork(torch.nn.Module):
             else:
                 in_features *= self.z_dim
                 out_features *= self.z_dim
-                layer = torch.nn.Conv2d(in_features, out_features, 1, groups=self.z_dim)
+                layer = torch.nn.Sequential(torch.nn.Conv2d(in_features, out_features, 1, groups=self.z_dim), torch.nn.LeakyReLU(0.2))
             setattr(self, f'fc{idx}', layer)
 
     def forward(self, z, c, truncation_psi=1, truncation_cutoff=None, skip_w_avg_update=False):
