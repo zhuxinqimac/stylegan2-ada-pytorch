@@ -8,7 +8,7 @@
 
 # --- File Name: train_uneven.py
 # --- Creation Date: 19-04-2021
-# --- Last Modified: Tue 20 Apr 2021 20:39:33 AEST
+# --- Last Modified: Tue 20 Apr 2021 21:02:32 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train an UnevenGAN using the techniques described in the paper
@@ -232,7 +232,7 @@ def setup_training_loop_kwargs(
     args.ema_rampup = spec.ramp
 
     if cfg == '3dshapes':
-        # args.loss_kwargs.pl_weight = 0 # disable path length regularization
+        args.loss_kwargs.pl_weight = 0 # disable path length regularization
         args.loss_kwargs.style_mixing_prob = 0 # disable style mixing
         args.G_kwargs.synthesis_kwargs.architecture = 'resnet'
 
