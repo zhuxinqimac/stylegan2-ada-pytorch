@@ -8,7 +8,7 @@
 
 # --- File Name: train_uneven.py
 # --- Creation Date: 19-04-2021
-# --- Last Modified: Tue 20 Apr 2021 22:44:53 AEST
+# --- Last Modified: Tue 20 Apr 2021 22:46:09 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train an UnevenGAN using the techniques described in the paper
@@ -75,6 +75,7 @@ def setup_training_loop_kwargs(
     map_num_layers = None, # The num_layers in mapping net.
     map_out_num_layers = 1, # The num_layers in mapping net.
     share_zw = True, # If share w in each z_i in mapping net.
+    architecture = 'resnet', # Which architecture to use.
 ):
     args = dnnlib.EasyDict()
 
@@ -234,7 +235,7 @@ def setup_training_loop_kwargs(
     if cfg == '3dshapes':
         args.loss_kwargs.pl_weight = 0 # disable path length regularization
         args.loss_kwargs.style_mixing_prob = 0 # disable style mixing
-        args.G_kwargs.synthesis_kwargs.architecture = 'orig'
+        args.G_kwargs.synthesis_kwargs.architecture = architecture
 
     if cfg == 'cifar':
         args.loss_kwargs.pl_weight = 0 # disable path length regularization
@@ -490,6 +491,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--map_num_layers', help='The num_layers in mapping net.', type=int)
 @click.option('--map_out_num_layers', help='The out_num_layers in mapping net.', type=int)
 @click.option('--share_zw', help='If share w in each z_i in mapping net.', type=bool)
+@click.option('--architecture', help='Which architecture to use.', type=str)
 
 def main(ctx, outdir, dry_run, **config_kwargs):
     """Train a GAN using the techniques described in the paper
