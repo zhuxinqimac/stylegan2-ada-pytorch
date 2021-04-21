@@ -8,7 +8,7 @@
 
 # --- File Name: loss_uneven.py
 # --- Creation Date: 19-04-2021
-# --- Last Modified: Wed 21 Apr 2021 22:26:45 AEST
+# --- Last Modified: Wed 21 Apr 2021 22:43:14 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -67,6 +67,7 @@ class UnevenLoss(StyleGAN2Loss):
             with torch.autograd.profiler.record_function('Gplz_forward'):
                 batch_size = gen_z.shape[0] // self.pl_batch_shrink
                 gen_z_used = gen_z[:batch_size]
+                gen_z_used.requires_grad = True
                 gen_img, _gen_ws = self.run_G(gen_z_used, gen_c[:batch_size], sync=sync)
                 plz_noise = torch.randn_like(gen_img) / np.sqrt(gen_img.shape[2] * gen_img.shape[3])
                 with torch.autograd.profiler.record_function('plz_grads'), conv2d_gradfix.no_weight_gradients():
