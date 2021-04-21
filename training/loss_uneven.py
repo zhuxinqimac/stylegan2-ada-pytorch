@@ -8,7 +8,7 @@
 
 # --- File Name: loss_uneven.py
 # --- Creation Date: 19-04-2021
-# --- Last Modified: Wed 21 Apr 2021 23:23:13 AEST
+# --- Last Modified: Wed 21 Apr 2021 23:29:43 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -62,6 +62,7 @@ class UnevenLoss(StyleGAN2Loss):
         assert phase in ['Gmain', 'Greg', 'Gboth', 'Dmain', 'Dreg', 'Dboth', 'Gw1reg', 'Dw1reg', 'Gplzreg', 'Dplzreg']
         do_Gw1reg = (phase in ['Gw1reg', 'Gboth']) and (self.w1reg_lambda != 0)
         do_Gplz   = (phase in ['Gplzreg', 'Gboth']) and (self.plz_weight != 0)
+        print('plz_weight:', plz_weight)
 
         # Gplz: Apply path length regularization on z.
         if do_Gplz:
