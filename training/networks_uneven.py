@@ -8,7 +8,7 @@
 
 # --- File Name: networks_uneven.py
 # --- Creation Date: 20-04-2021
-# --- Last Modified: Wed 21 Apr 2021 01:58:39 AEST
+# --- Last Modified: Wed 21 Apr 2021 18:46:40 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -24,6 +24,54 @@ from torch_utils.ops import upfirdn2d
 from torch_utils.ops import bias_act
 from torch_utils.ops import fma
 from training.networks import SynthesisNetwork, FullyConnectedLayer
+
+#----------------------------------------------------------------------------
+
+@persistence.persistent_class
+class GroupFullyConnectedLayer(torch.nn.Module):
+    def __init__(self,
+        in_features,                # Number of input features.
+        out_features,               # Number of output features.
+        bias            = True,     # Apply additive bias before the activation function?
+        activation      = 'linear', # Activation function: 'relu', 'lrelu', etc.
+        lr_multiplier   = 1,        # Learning rate multiplier.
+        bias_init       = 0,        # Initial value for the additive bias.
+        groups          = 1,        # The number of groups to split.
+    ):
+        super().__init__()
+        self.activation = activation
+        self.groups = groups
+        assert in_features % groups == 0
+        assert out_features % groups == 0
+        self.per_group_in = in_features // groups
+        self.per_group_out = out_features // groups
+
+        # self.weight = torch.nn.Parameter(torch.randn([groups, self.per_group_out, self.per_group_in]) / lr_multiplier)
+        self.weight = torch.nn.Parameter(torch.randn([groups, self.per_group_in, self.per_group_out]) / (lr_multiplier / np.sqrt(self.per_group_in)))
+        self.bias = torch.nn.Parameter(torch.full([out_features], np.float32(bias_init))) if bias else None
+        self.weight_gain = lr_multiplier / np.sqrt(self.per_group_in)
+        self.bias_gain = lr_multiplier
+
+    def forward(self, x):
+        # x: (b, groups, per_group_in)
+        w = self.weight.to(x.dtype) * self.weight_gain
+        b = self.bias
+        if b is not None:
+            b = b.to(x.dtype)
+            if self.bias_gain != 1:
+                b = b * self.bias_gain
+
+        batch_size = x.size(0)
+        x = torch.bmm(x.view(-1, 1, self.per_group_in), w.repeat(batch_size, 1, 1)) # x: (b*groups, 1, in), w: (b*groups, in, out)
+        x = x.view(batch_size, self.groups * self.per_group_out)
+        if self.activation == 'linear' and b is not None:
+            # x = torch.addmm(b.unsqueeze(0), x, w.t())
+            x += b.unsqueeze(0)
+        else:
+            # x = x.matmul(w.t())
+            x = bias_act.bias_act(x, b, act=self.activation)
+        x = x.view(batch_size, self.groups, self.per_group_out)
+        return x
 
 #----------------------------------------------------------------------------
 
@@ -84,7 +132,8 @@ class UnevenMappingNetwork(torch.nn.Module):
                 in_features *= self.z_dim
                 out_features *= self.z_dim
                 # layer = torch.nn.Sequential(torch.nn.Conv2d(in_features, out_features, 1, groups=self.z_dim), torch.nn.LeakyReLU(0.2))
-                layer = torch.nn.Sequential(torch.nn.Conv2d(in_features, out_features, 1, groups=1), torch.nn.LeakyReLU(0.2))
+                # layer = torch.nn.Sequential(torch.nn.Conv2d(in_features, out_features, 1, groups=1), torch.nn.LeakyReLU(0.2))
+                layer = GroupFullyConnectedLayer(in_features, out_features, activation=activation, lr_multiplier=lr_multiplier, groups=self.z_dim)
             setattr(self, f'fc{idx}', layer)
 
     def forward(self, z, c, truncation_psi=1, truncation_cutoff=None, skip_w_avg_update=False):
@@ -97,7 +146,8 @@ class UnevenMappingNetwork(torch.nn.Module):
                 if self.share_zw:
                     x = z.view(-1, 1) # (N * z_dim, 1)
                 else:
-                    x = z.view(-1, self.z_dim, 1, 1)
+                    # x = z.view(-1, self.z_dim, 1, 1)
+                    x = z.view(-1, self.z_dim, 1)
             if self.c_dim > 0:
                 misc.assert_shape(c, [None, self.c_dim])
                 y = normalize_2nd_moment(self.embed(c.to(torch.float32)))
@@ -108,13 +158,14 @@ class UnevenMappingNetwork(torch.nn.Module):
                     x = x.view(-1, self.z_dim, 1)
                     y = y.unsqueeze(1).repeat(1, self.z_dim, 1) # (N, z_dim, embed)
                     x = torch.cat([x, y], dim=-1) if x is not None else y # (N, z_dim, 1 + embed)
-                    x = x.view(-1, self.z_dim * (1 + self.embed_features), 1, 1)
+                    # x = x.view(-1, self.z_dim * (1 + self.embed_features), 1, 1)
+                    x = x.view(-1, self.z_dim, 1 + self.embed_features)
 
         # Main layers.
         grid_output = []
         for idx in range(self.num_layers):
             layer = getattr(self, f'fc{idx}')
-            x = layer(x) # (N * z_dim, m_w_dim) or (N, z_dim * m_w_dim, 1, 1)
+            x = layer(x) # (N * z_dim, m_w_dim) or (N, z_dim * m_w_dim, 1, 1) or (N, z_dim, m_w_dim)
             if idx + self.out_num_layers >= self.num_layers:
                 grid_output.append(x.view(-1, self.z_dim, 1, self.m_w_dim)) # list of (N, z_dim, 1, m_w_dim)
 
