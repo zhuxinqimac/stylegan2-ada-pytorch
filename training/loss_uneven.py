@@ -8,7 +8,7 @@
 
 # --- File Name: loss_uneven.py
 # --- Creation Date: 19-04-2021
-# --- Last Modified: Wed 21 Apr 2021 23:46:28 AEST
+# --- Last Modified: Wed 21 Apr 2021 23:49:21 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -56,9 +56,6 @@ class UnevenLoss(StyleGAN2Loss):
         return reg
 
     def accumulate_gradients(self, phase, real_img, real_c, gen_z, gen_c, sync, gain):
-        print('phase:', phase)
-        # if phase in ['Gmain', 'Greg', 'Gboth', 'Dmain', 'Dreg', 'Dboth']:
-            # super().accumulate_gradients(phase, real_img, real_c, gen_z, gen_c, sync, gain)
         assert phase in ['Gmain', 'Greg', 'Gboth', 'Dmain', 'Dreg', 'Dboth', 'Gw1reg', 'Dw1reg', 'Gplzreg', 'Dplzreg']
         do_Gmain = (phase in ['Gmain', 'Gboth'])
         do_Dmain = (phase in ['Dmain', 'Dboth'])
@@ -67,7 +64,6 @@ class UnevenLoss(StyleGAN2Loss):
 
         do_Gw1reg = (phase in ['Gw1reg', 'Gboth']) and (self.w1reg_lambda != 0)
         do_Gplz   = (phase in ['Gplzreg', 'Gboth']) and (self.plz_weight != 0)
-        print('plz_weight:', self.plz_weight)
 
         # Gmain: Maximize logits for generated images.
         if do_Gmain:
@@ -150,8 +146,6 @@ class UnevenLoss(StyleGAN2Loss):
                     plz_grads = torch.autograd.grad(outputs=[(gen_img * plz_noise).sum()], inputs=[gen_z_used], create_graph=True, only_inputs=True)[0]
                 gen_z_used.requires_grad = False
                 plz_lengths = plz_grads.square().sum(-1).sqrt()
-                # plz_lengths = plz_grads.square().sum(2).mean(1).sqrt()
-                print('plz_lengths.shape:', plz_lengths.shape)
                 plz_mean = self.plz_mean.lerp(plz_lengths.mean(), self.plz_decay)
                 self.plz_mean.copy_(plz_mean.detach())
                 plz_penalty = (plz_lengths - plz_mean).square()
@@ -165,7 +159,6 @@ class UnevenLoss(StyleGAN2Loss):
         if do_Gw1reg:
             with torch.autograd.profiler.record_function('Gw1reg_forward'):
                 w1 = getattr(self.G_mapping.module, f'fc{0}').weight  # (out, z_in)
-                # print('w1[0]:', w1[0])
                 cur_device = w1.device
                 reg = self.get_w1reg_scale(w1, cur_device)
                 w1_sq = torch.sum(w1 * w1, dim=0)  # (z_in)
