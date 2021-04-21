@@ -8,7 +8,7 @@
 
 # --- File Name: loss_uneven.py
 # --- Creation Date: 19-04-2021
-# --- Last Modified: Wed 21 Apr 2021 23:32:14 AEST
+# --- Last Modified: Wed 21 Apr 2021 23:36:48 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -56,6 +56,7 @@ class UnevenLoss(StyleGAN2Loss):
         return reg
 
     def accumulate_gradients(self, phase, real_img, real_c, gen_z, gen_c, sync, gain):
+        print('phase:', phase)
         if phase in ['Gmain', 'Greg', 'Gboth', 'Dmain', 'Dreg', 'Dboth']:
             super().accumulate_gradients(phase, real_img, real_c, gen_z, gen_c, sync, gain)
 

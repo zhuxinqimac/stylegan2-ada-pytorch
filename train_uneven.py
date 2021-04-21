@@ -8,7 +8,7 @@
 
 # --- File Name: train_uneven.py
 # --- Creation Date: 19-04-2021
-# --- Last Modified: Wed 21 Apr 2021 22:32:47 AEST
+# --- Last Modified: Wed 21 Apr 2021 23:33:59 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train an UnevenGAN using the techniques described in the paper
@@ -78,7 +78,7 @@ def setup_training_loop_kwargs(
     architecture = 'resnet', # Which architecture to use.
     use_grid_output = True, # If use grid_output in mapping net.
     no_pl_reg = True, # If use no pl regularization.
-    plz_weight = 0., # The PL weight on z.
+    plz_weight = None, # The PL weight on z.
     # plz_decay = None, # The PL decay on z.
 ):
     args = dnnlib.EasyDict()
