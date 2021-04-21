@@ -8,7 +8,7 @@
 
 # --- File Name: networks_uneven.py
 # --- Creation Date: 20-04-2021
-# --- Last Modified: Wed 21 Apr 2021 18:46:40 AEST
+# --- Last Modified: Wed 21 Apr 2021 19:59:44 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -47,7 +47,8 @@ class GroupFullyConnectedLayer(torch.nn.Module):
         self.per_group_out = out_features // groups
 
         # self.weight = torch.nn.Parameter(torch.randn([groups, self.per_group_out, self.per_group_in]) / lr_multiplier)
-        self.weight = torch.nn.Parameter(torch.randn([groups, self.per_group_in, self.per_group_out]) / (lr_multiplier / np.sqrt(self.per_group_in)))
+        # self.weight = torch.nn.Parameter(torch.randn([groups, self.per_group_in, self.per_group_out]) / (lr_multiplier / np.sqrt(self.per_group_in)))
+        self.weight = torch.nn.Parameter(torch.randn([groups, self.per_group_in, self.per_group_out]) / lr_multiplier)
         self.bias = torch.nn.Parameter(torch.full([out_features], np.float32(bias_init))) if bias else None
         self.weight_gain = lr_multiplier / np.sqrt(self.per_group_in)
         self.bias_gain = lr_multiplier
