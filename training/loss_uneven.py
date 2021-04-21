@@ -8,7 +8,7 @@
 
 # --- File Name: loss_uneven.py
 # --- Creation Date: 19-04-2021
-# --- Last Modified: Wed 21 Apr 2021 22:43:14 AEST
+# --- Last Modified: Wed 21 Apr 2021 22:47:07 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -72,7 +72,7 @@ class UnevenLoss(StyleGAN2Loss):
                 plz_noise = torch.randn_like(gen_img) / np.sqrt(gen_img.shape[2] * gen_img.shape[3])
                 with torch.autograd.profiler.record_function('plz_grads'), conv2d_gradfix.no_weight_gradients():
                     plz_grads = torch.autograd.grad(outputs=[(gen_img * plz_noise).sum()], inputs=[gen_z_used], create_graph=True, only_inputs=True)[0]
-                plz_lengths = plz_grads.square().sum(2).mean(1).sqrt()
+                plz_lengths = plz_grads.square().sum(-1).sqrt()
                 plz_mean = self.plz_mean.lerp(plz_lengths.mean(), self.plz_decay)
                 self.plz_mean.copy_(plz_mean.detach())
                 plz_penalty = (plz_lengths - plz_mean).square()
