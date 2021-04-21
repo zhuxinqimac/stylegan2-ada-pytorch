@@ -8,7 +8,7 @@
 
 # --- File Name: loss_uneven.py
 # --- Creation Date: 19-04-2021
-# --- Last Modified: Wed 21 Apr 2021 23:07:23 AEST
+# --- Last Modified: Wed 21 Apr 2021 23:18:58 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -69,10 +69,10 @@ class UnevenLoss(StyleGAN2Loss):
                 batch_size = gen_z.shape[0] // self.pl_batch_shrink
                 gen_z_used = gen_z[:batch_size]
                 gen_z_used.requires_grad = True
-                gen_img, _gen_ws = self.run_G(gen_z_used, gen_c[:batch_size], sync=sync)
+                gen_img, gen_ws = self.run_G(gen_z_used, gen_c[:batch_size], sync=sync)
                 plz_noise = torch.randn_like(gen_img) / np.sqrt(gen_img.shape[2] * gen_img.shape[3])
                 with torch.autograd.profiler.record_function('plz_grads'), conv2d_gradfix.no_weight_gradients():
-                    plz_grads = torch.autograd.grad(outputs=[(gen_img * plz_noise).sum()], inputs=[gen_z_used], create_graph=True, only_inputs=True)[0]
+                    plz_grads = torch.autograd.grad(outputs=[(gen_img * plz_noise).sum()], inputs=[gen_ws], create_graph=True, only_inputs=True)[0]
                 gen_z_used.requires_grad = False
                 plz_lengths = plz_grads.square().sum(-1).sqrt()
                 plz_mean = self.plz_mean.lerp(plz_lengths.mean(), self.plz_decay)
