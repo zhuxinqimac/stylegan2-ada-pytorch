@@ -8,7 +8,7 @@
 
 # --- File Name: networks_uneven.py
 # --- Creation Date: 20-04-2021
-# --- Last Modified: Tue 20 Apr 2021 21:13:52 AEST
+# --- Last Modified: Wed 21 Apr 2021 01:58:39 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -38,19 +38,25 @@ class UnevenMappingNetwork(torch.nn.Module):
         embed_features  = None,     # Label embedding dimensionality, None = same as w_dim.
         # layer_features  = None,     # Number of intermediate features in the mapping layers, None = same as w_dim.
         activation      = 'lrelu',  # Activation function: 'relu', 'lrelu', etc.
-        # lr_multiplier   = 0.01,     # Learning rate multiplier for the mapping layers.
-        lr_multiplier   = 1,     # Learning rate multiplier for the mapping layers.
+        lr_multiplier   = 0.01,     # Learning rate multiplier for the mapping layers.
+        # lr_multiplier   = 1,     # Learning rate multiplier for the mapping layers.
         w_avg_beta      = None,     # Decay for tracking the moving average of W during training, None = do not track.
         out_num_layers  = 8,        # Number of output num_layers. Should <= num_layers.
         share_zw        = True,     # If share w in mapping layers for each z_i.
+        use_grid_output = True,     # If use grid_output.
     ):
         super().__init__()
         assert z_dim == out_num_layers * num_ws
         self.z_dim = z_dim
         self.c_dim = c_dim
         self.w_dim = w_dim
-        assert w_dim % out_num_layers == 0
-        self.m_w_dim = w_dim // out_num_layers # Split w_dim into multiple mapping layers.
+        self.use_grid_output = use_grid_output
+        if use_grid_output:
+            assert w_dim % out_num_layers == 0
+            self.m_w_dim = w_dim // out_num_layers # Split w_dim into multiple mapping layers.
+        else:
+            assert w_dim % z_dim == 0
+            self.m_w_dim = self.w_dim // self.z_dim
         self.num_ws = num_ws
         self.num_layers = num_layers
         self.out_num_layers = out_num_layers
@@ -77,7 +83,8 @@ class UnevenMappingNetwork(torch.nn.Module):
             else:
                 in_features *= self.z_dim
                 out_features *= self.z_dim
-                layer = torch.nn.Sequential(torch.nn.Conv2d(in_features, out_features, 1, groups=self.z_dim), torch.nn.LeakyReLU(0.2))
+                # layer = torch.nn.Sequential(torch.nn.Conv2d(in_features, out_features, 1, groups=self.z_dim), torch.nn.LeakyReLU(0.2))
+                layer = torch.nn.Sequential(torch.nn.Conv2d(in_features, out_features, 1, groups=1), torch.nn.LeakyReLU(0.2))
             setattr(self, f'fc{idx}', layer)
 
     def forward(self, z, c, truncation_psi=1, truncation_cutoff=None, skip_w_avg_update=False):
@@ -111,15 +118,20 @@ class UnevenMappingNetwork(torch.nn.Module):
             if idx + self.out_num_layers >= self.num_layers:
                 grid_output.append(x.view(-1, self.z_dim, 1, self.m_w_dim)) # list of (N, z_dim, 1, m_w_dim)
 
-        # Construct input for SynthesisNetwork
-        grid_output = torch.cat(grid_output, dim=2) # (N, z_dim, out_num_layers, m_w_dim)
-        grid_output = grid_output.view(-1, self.num_ws, self.out_num_layers, self.out_num_layers, self.m_w_dim)
+        if self.use_grid_output:
+            # Construct input for SynthesisNetwork
+            grid_output = torch.cat(grid_output, dim=2) # (N, z_dim, out_num_layers, m_w_dim)
+            grid_output = grid_output.view(-1, self.num_ws, self.out_num_layers, self.out_num_layers, self.m_w_dim)
 
-        # Mask for grid masking.
-        mask = torch.eye(self.out_num_layers, dtype=grid_output.dtype).view(1, 1, self.out_num_layers, self.out_num_layers, 1).to(grid_output.device)
+            # Mask for grid masking.
+            mask = torch.eye(self.out_num_layers, dtype=grid_output.dtype).view(1, 1, self.out_num_layers, self.out_num_layers, 1).to(grid_output.device)
 
-        masked_grid_output = mask * grid_output
-        x = masked_grid_output.sum(dim=3).view(-1, self.num_ws, self.w_dim) # w_dim == out_num_layers * m_w_dim
+            masked_grid_output = mask * grid_output
+            x = masked_grid_output.sum(dim=3).view(-1, self.num_ws, self.w_dim) # w_dim == out_num_layers * m_w_dim
+        else:
+            x = grid_output[-1].view(-1, self.z_dim * self.m_w_dim)
+            with torch.autograd.profiler.record_function('broadcast'):
+                x = x.unsqueeze(1).repeat([1, self.num_ws, 1])
 
         return x
 
