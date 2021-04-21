@@ -8,7 +8,7 @@
 
 # --- File Name: train_uneven.py
 # --- Creation Date: 19-04-2021
-# --- Last Modified: Wed 21 Apr 2021 21:36:08 AEST
+# --- Last Modified: Wed 21 Apr 2021 22:32:47 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train an UnevenGAN using the techniques described in the paper
@@ -78,6 +78,8 @@ def setup_training_loop_kwargs(
     architecture = 'resnet', # Which architecture to use.
     use_grid_output = True, # If use grid_output in mapping net.
     no_pl_reg = True, # If use no pl regularization.
+    plz_weight = 0., # The PL weight on z.
+    # plz_decay = None, # The PL decay on z.
 ):
     args = dnnlib.EasyDict()
 
@@ -239,6 +241,7 @@ def setup_training_loop_kwargs(
     if cfg == '3dshapes':
         if no_pl_reg:
             args.loss_kwargs.pl_weight = 0 # disable path length regularization
+        args.loss_kwargs.plz_weight = plz_weight
         args.loss_kwargs.style_mixing_prob = 0 # disable style mixing
         args.G_kwargs.synthesis_kwargs.architecture = architecture
 
@@ -499,6 +502,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--architecture', help='Which architecture to use.', type=str)
 @click.option('--use_grid_output', help='If use grid_output in mapping net.', type=bool)
 @click.option('--no_pl_reg', help='If use no pl regularization.', type=bool)
+@click.option('--plz_weight', help='The PL weight on z in loss.', type=float)
 
 def main(ctx, outdir, dry_run, **config_kwargs):
     """Train a GAN using the techniques described in the paper

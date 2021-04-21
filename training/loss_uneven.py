@@ -8,7 +8,7 @@
 
 # --- File Name: loss_uneven.py
 # --- Creation Date: 19-04-2021
-# --- Last Modified: Tue 20 Apr 2021 03:41:38 AEST
+# --- Last Modified: Wed 21 Apr 2021 22:26:45 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -27,11 +27,14 @@ from training.loss import StyleGAN2Loss
 
 class UnevenLoss(StyleGAN2Loss):
     def __init__(self, device, G_mapping, G_synthesis, D, augment_pipe=None, style_mixing_prob=0.9, r1_gamma=10,
-                 pl_batch_shrink=2, pl_decay=0.01, pl_weight=2, w1reg_lambda=0., uneven_reg_maxval=1., reg_type='linear'):
+                 pl_batch_shrink=2, pl_decay=0.01, pl_weight=2, w1reg_lambda=0., uneven_reg_maxval=1., reg_type='linear',
+                 plz_weight=0., plz_decay=0.01):
         super().__init__(device, G_mapping, G_synthesis, D, augment_pipe, style_mixing_prob, r1_gamma, pl_batch_shrink, pl_decay, pl_weight)
         self.w1reg_lambda = w1reg_lambda
         self.uneven_reg_maxval = uneven_reg_maxval
         self.reg_type = reg_type
+        self.plz_weight = plz_weight
+        self.plz_decay = plz_decay
         # if self.reg_type == 'cumax_ada' or self.reg_type == 'monoconst_ada':
             # self.ada_logits = nn.Parameter(torch.ones(self.G_mapping.z_dim), requires_grad=True)
 
@@ -55,8 +58,28 @@ class UnevenLoss(StyleGAN2Loss):
         if phase in ['Gmain', 'Greg', 'Gboth', 'Dmain', 'Dreg', 'Dboth']:
             super().accumulate_gradients(phase, real_img, real_c, gen_z, gen_c, sync, gain)
 
-        assert phase in ['Gmain', 'Greg', 'Gboth', 'Dmain', 'Dreg', 'Dboth', 'Gw1reg', 'Dw1reg']
+        assert phase in ['Gmain', 'Greg', 'Gboth', 'Dmain', 'Dreg', 'Dboth', 'Gw1reg', 'Dw1reg', 'Gplzreg', 'Dplzreg']
         do_Gw1reg = (phase in ['Gw1reg', 'Gboth']) and (self.w1reg_lambda != 0)
+        do_Gplz   = (phase in ['Gplzreg', 'Gboth']) and (self.plz_weight != 0)
+
+        # Gplz: Apply path length regularization on z.
+        if do_Gplz:
+            with torch.autograd.profiler.record_function('Gplz_forward'):
+                batch_size = gen_z.shape[0] // self.pl_batch_shrink
+                gen_z_used = gen_z[:batch_size]
+                gen_img, _gen_ws = self.run_G(gen_z_used, gen_c[:batch_size], sync=sync)
+                plz_noise = torch.randn_like(gen_img) / np.sqrt(gen_img.shape[2] * gen_img.shape[3])
+                with torch.autograd.profiler.record_function('plz_grads'), conv2d_gradfix.no_weight_gradients():
+                    plz_grads = torch.autograd.grad(outputs=[(gen_img * plz_noise).sum()], inputs=[gen_z_used], create_graph=True, only_inputs=True)[0]
+                plz_lengths = plz_grads.square().sum(2).mean(1).sqrt()
+                plz_mean = self.plz_mean.lerp(plz_lengths.mean(), self.plz_decay)
+                self.plz_mean.copy_(plz_mean.detach())
+                plz_penalty = (plz_lengths - plz_mean).square()
+                training_stats.report('Loss/plz_penalty', plz_penalty)
+                loss_Gplz = plz_penalty * self.plz_weight
+                training_stats.report('Loss/G/plz_reg', loss_Gplz)
+            with torch.autograd.profiler.record_function('Gplz_backward'):
+                (gen_img[:, 0, 0, 0] * 0 + loss_Gplz).mean().mul(gain).backward()
 
         # Gw1reg: Constrain first-layer w by different latent dimensions.
         if do_Gw1reg:
