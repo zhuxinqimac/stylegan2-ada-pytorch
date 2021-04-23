@@ -8,7 +8,7 @@
 
 # --- File Name: train_uneven.py
 # --- Creation Date: 19-04-2021
-# --- Last Modified: Fri 23 Apr 2021 15:43:40 AEST
+# --- Last Modified: Fri 23 Apr 2021 15:50:35 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train an UnevenGAN using the techniques described in the paper
@@ -82,6 +82,7 @@ def setup_training_loop_kwargs(
     plz_weight = None, # The PL weight on z.
     # plz_decay = None, # The PL decay on z.
     plzsep_weight = None, # The separate PL weight on z dims.
+    use_uneven_net = None, # If use uneven network.
 ):
     args = dnnlib.EasyDict()
 
@@ -202,8 +203,10 @@ def setup_training_loop_kwargs(
 
     if z_dim is None:
         z_dim = 512
-    # args.G_kwargs = dnnlib.EasyDict(class_name='training.networks.Generator', z_dim=z_dim, w_dim=w_dim, mapping_kwargs=dnnlib.EasyDict(), synthesis_kwargs=dnnlib.EasyDict())
-    args.G_kwargs = dnnlib.EasyDict(class_name='training.networks_uneven.Generator', z_dim=z_dim, w_dim=w_dim, mapping_kwargs=dnnlib.EasyDict(), synthesis_kwargs=dnnlib.EasyDict())
+    if use_uneven_net:
+        args.G_kwargs = dnnlib.EasyDict(class_name='training.networks_uneven.Generator', z_dim=z_dim, w_dim=w_dim, mapping_kwargs=dnnlib.EasyDict(), synthesis_kwargs=dnnlib.EasyDict())
+    else:
+        args.G_kwargs = dnnlib.EasyDict(class_name='training.networks.Generator', z_dim=z_dim, w_dim=w_dim, mapping_kwargs=dnnlib.EasyDict(), synthesis_kwargs=dnnlib.EasyDict())
     args.D_kwargs = dnnlib.EasyDict(class_name='training.networks.Discriminator', block_kwargs=dnnlib.EasyDict(), mapping_kwargs=dnnlib.EasyDict(), epilogue_kwargs=dnnlib.EasyDict())
     args.G_kwargs.synthesis_kwargs.channel_base = args.D_kwargs.channel_base = int(spec.fmaps * 32768)
     args.G_kwargs.synthesis_kwargs.channel_max = args.D_kwargs.channel_max = 512
@@ -211,10 +214,11 @@ def setup_training_loop_kwargs(
         args.G_kwargs.mapping_kwargs.num_layers = spec.map
     else:
         args.G_kwargs.mapping_kwargs.num_layers = map_num_layers
-    args.G_kwargs.mapping_kwargs.out_num_layers = map_out_num_layers
-    args.G_kwargs.mapping_kwargs.share_zw = share_zw
-    args.G_kwargs.mapping_kwargs.use_grid_output = use_grid_output
-    args.G_kwargs.mapping_kwargs.w_dist = w_dist
+    if use_uneven_net:
+        args.G_kwargs.mapping_kwargs.out_num_layers = map_out_num_layers
+        args.G_kwargs.mapping_kwargs.share_zw = share_zw
+        args.G_kwargs.mapping_kwargs.use_grid_output = use_grid_output
+        args.G_kwargs.mapping_kwargs.w_dist = w_dist
 
     args.G_kwargs.synthesis_kwargs.num_fp16_res = args.D_kwargs.num_fp16_res = 4 # enable mixed-precision training
     args.G_kwargs.synthesis_kwargs.conv_clamp = args.D_kwargs.conv_clamp = 256 # clamp activations to avoid float16 overflow
@@ -513,6 +517,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--no_pl_reg', help='If use no pl regularization.', type=bool)
 @click.option('--plz_weight', help='The PL weight on z in loss.', type=float)
 @click.option('--plzsep_weight', help='The separate PL weight on z dim in loss.', type=float)
+@click.option('--use_uneven_net', help='If use uneven_network.', type=bool, default=True)
 
 def main(ctx, outdir, dry_run, **config_kwargs):
     """Train a GAN using the techniques described in the paper
