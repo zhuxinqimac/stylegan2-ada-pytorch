@@ -8,7 +8,7 @@
 
 # --- File Name: loss_uneven.py
 # --- Creation Date: 19-04-2021
-# --- Last Modified: Fri 23 Apr 2021 15:41:37 AEST
+# --- Last Modified: Fri 23 Apr 2021 15:57:14 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -39,7 +39,7 @@ class UnevenLoss(StyleGAN2Loss):
 
         self.plzsep_weight = plzsep_weight
         self.plzsep_decay = plzsep_decay
-        self.plzsep_mean = torch.zeros([G_mapping.z_dim], device=device)
+        self.plzsep_mean = torch.zeros([G_mapping.module.z_dim], device=device)
         # if self.reg_type == 'cumax_ada' or self.reg_type == 'monoconst_ada':
             # self.ada_logits = nn.Parameter(torch.ones(self.G_mapping.z_dim), requires_grad=True)
 
