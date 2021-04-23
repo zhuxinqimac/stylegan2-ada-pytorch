@@ -8,7 +8,7 @@
 
 # --- File Name: loss_uneven.py
 # --- Creation Date: 19-04-2021
-# --- Last Modified: Wed 21 Apr 2021 23:49:21 AEST
+# --- Last Modified: Fri 23 Apr 2021 15:41:37 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -28,7 +28,7 @@ from training.loss import StyleGAN2Loss
 class UnevenLoss(StyleGAN2Loss):
     def __init__(self, device, G_mapping, G_synthesis, D, augment_pipe=None, style_mixing_prob=0.9, r1_gamma=10,
                  pl_batch_shrink=2, pl_decay=0.01, pl_weight=2, w1reg_lambda=0., uneven_reg_maxval=1., reg_type='linear',
-                 plz_weight=0., plz_decay=0.01):
+                 plz_weight=0., plz_decay=0.01, plzsep_weight=0., plzsep_decay=0.01):
         super().__init__(device, G_mapping, G_synthesis, D, augment_pipe, style_mixing_prob, r1_gamma, pl_batch_shrink, pl_decay, pl_weight)
         self.w1reg_lambda = w1reg_lambda
         self.uneven_reg_maxval = uneven_reg_maxval
@@ -36,6 +36,10 @@ class UnevenLoss(StyleGAN2Loss):
         self.plz_weight = plz_weight
         self.plz_decay = plz_decay
         self.plz_mean = torch.zeros([], device=device)
+
+        self.plzsep_weight = plzsep_weight
+        self.plzsep_decay = plzsep_decay
+        self.plzsep_mean = torch.zeros([G_mapping.z_dim], device=device)
         # if self.reg_type == 'cumax_ada' or self.reg_type == 'monoconst_ada':
             # self.ada_logits = nn.Parameter(torch.ones(self.G_mapping.z_dim), requires_grad=True)
 
@@ -56,7 +60,8 @@ class UnevenLoss(StyleGAN2Loss):
         return reg
 
     def accumulate_gradients(self, phase, real_img, real_c, gen_z, gen_c, sync, gain):
-        assert phase in ['Gmain', 'Greg', 'Gboth', 'Dmain', 'Dreg', 'Dboth', 'Gw1reg', 'Dw1reg', 'Gplzreg', 'Dplzreg']
+        assert phase in ['Gmain', 'Greg', 'Gboth', 'Dmain', 'Dreg', 'Dboth', 'Gw1reg',
+                         'Dw1reg', 'Gplzreg', 'Dplzreg', 'Gplzsepreg', 'Dplzsepreg']
         do_Gmain = (phase in ['Gmain', 'Gboth'])
         do_Dmain = (phase in ['Dmain', 'Dboth'])
         do_Gpl   = (phase in ['Greg', 'Gboth']) and (self.pl_weight != 0)
@@ -64,6 +69,7 @@ class UnevenLoss(StyleGAN2Loss):
 
         do_Gw1reg = (phase in ['Gw1reg', 'Gboth']) and (self.w1reg_lambda != 0)
         do_Gplz   = (phase in ['Gplzreg', 'Gboth']) and (self.plz_weight != 0)
+        do_Gplzsep   = (phase in ['Gplzsepreg', 'Gboth']) and (self.plzsep_weight != 0)
 
         # Gmain: Maximize logits for generated images.
         if do_Gmain:
@@ -154,6 +160,29 @@ class UnevenLoss(StyleGAN2Loss):
                 training_stats.report('Loss/G/plz_reg', loss_Gplz)
             with torch.autograd.profiler.record_function('Gplz_backward'):
                 (gen_img[:, 0, 0, 0] * 0 + loss_Gplz).mean().mul(gain).backward()
+
+        # Gplzsep: Apply path length regularization on z each dimension.
+        if do_Gplzsep:
+            with torch.autograd.profiler.record_function('Gplzsep_forward'):
+                batch_size = gen_z.shape[0] // self.pl_batch_shrink
+                gen_z_used = gen_z[:batch_size]
+                gen_z_used.requires_grad = True
+                gen_img, gen_ws = self.run_G(gen_z_used, gen_c[:batch_size], sync=sync)
+                plzsep_noise = torch.randn_like(gen_img) / np.sqrt(gen_img.shape[2] * gen_img.shape[3])
+                with torch.autograd.profiler.record_function('plzsep_grads'), conv2d_gradfix.no_weight_gradients():
+                    plzsep_grads = torch.autograd.grad(outputs=[(gen_img * plzsep_noise).sum()], inputs=[gen_z_used],
+                                                       create_graph=True, only_inputs=True)[0]
+                gen_z_used.requires_grad = False
+                plzsep_lengths = plzsep_grads.square().sqrt()
+                plzsep_mean = self.plzsep_mean.lerp(plzsep_lengths.mean(dim=0), self.plzsep_decay)
+                self.plzsep_mean.copy_(plzsep_mean.detach())
+                plzsep_penalty = (plzsep_lengths - plzsep_mean).square().sum()
+                training_stats.report('Loss/plzsep_penalty', plzsep_penalty)
+                loss_Gplzsep = plzsep_penalty * self.plzsep_weight
+                training_stats.report('Loss/G/plzsep_reg', loss_Gplzsep)
+            with torch.autograd.profiler.record_function('Gplzsep_backward'):
+                (gen_img[:, 0, 0, 0] * 0 + loss_Gplzsep).mean().mul(gain).backward()
+
 
         # Gw1reg: Constrain first-layer w by different latent dimensions.
         if do_Gw1reg:

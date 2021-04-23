@@ -8,7 +8,7 @@
 
 # --- File Name: networks_uneven.py
 # --- Creation Date: 20-04-2021
-# --- Last Modified: Wed 21 Apr 2021 19:59:44 AEST
+# --- Last Modified: Fri 23 Apr 2021 15:20:56 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -93,6 +93,7 @@ class UnevenMappingNetwork(torch.nn.Module):
         out_num_layers  = 8,        # Number of output num_layers. Should <= num_layers.
         share_zw        = True,     # If share w in mapping layers for each z_i.
         use_grid_output = True,     # If use grid_output.
+        w_dist          = False,    # If use softmax to distribute w when not using grid.
     ):
         super().__init__()
         assert z_dim == out_num_layers * num_ws
@@ -121,6 +122,10 @@ class UnevenMappingNetwork(torch.nn.Module):
         # features_list = [z_dim + embed_features] + [layer_features] * (num_layers - 1) + [w_dim]
         features_list = [1 + embed_features] + [self.m_w_dim] * num_layers
         self.embed_features = embed_features
+        self.w_dist = w_dist
+        if w_dist:
+            self.w_dist_logits = torch.nn.Parameter(torch.randn([self.num_ws, self.z_dim]))
+            # self.register_buffer('avg_w_dist', torch.zeros([self.num_ws, self.z_dim]))
 
         if c_dim > 0:
             self.embed = FullyConnectedLayer(c_dim, embed_features)
@@ -181,9 +186,16 @@ class UnevenMappingNetwork(torch.nn.Module):
             masked_grid_output = mask * grid_output
             x = masked_grid_output.sum(dim=3).view(-1, self.num_ws, self.w_dim) # w_dim == out_num_layers * m_w_dim
         else:
-            x = grid_output[-1].view(-1, self.z_dim * self.m_w_dim)
-            with torch.autograd.profiler.record_function('broadcast'):
-                x = x.unsqueeze(1).repeat([1, self.num_ws, 1])
+            if self.w_dist:
+                # print('using w_dist')
+                # self.avg_w_dist = self.w_dist_logits.lerp(self.avg_w_dist, 0.995)
+                att = torch.nn.functional.softmax(self.w_dist_logits, dim=1).view(1, self.num_ws, self.z_dim, 1) # (1, num_ws, z_dim, 1)
+                x = grid_output[-1].view(-1, 1, self.z_dim, self.m_w_dim)
+                x = (att * x).view(-1, self.num_ws, self.z_dim * self.m_w_dim)
+            else:
+                x = grid_output[-1].view(-1, self.z_dim * self.m_w_dim)
+                with torch.autograd.profiler.record_function('broadcast'):
+                    x = x.unsqueeze(1).repeat([1, self.num_ws, 1])
 
         return x
 

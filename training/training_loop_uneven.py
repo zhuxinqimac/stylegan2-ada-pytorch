@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_uneven.py
 # --- Creation Date: 19-04-2021
-# --- Last Modified: Wed 21 Apr 2021 22:33:35 AEST
+# --- Last Modified: Fri 23 Apr 2021 15:42:14 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -178,6 +178,7 @@ def training_loop(
             phases += [dnnlib.EasyDict(name=name+'reg', module=module, opt=opt, interval=reg_interval)]
             phases += [dnnlib.EasyDict(name=name+'w1reg', module=module, opt=opt, interval=reg_interval)] # uneven loss
             phases += [dnnlib.EasyDict(name=name+'plzreg', module=module, opt=opt, interval=reg_interval)] # uneven loss
+            phases += [dnnlib.EasyDict(name=name+'plzsepreg', module=module, opt=opt, interval=reg_interval)] # uneven loss
     for phase in phases:
         phase.start_event = None
         phase.end_event = None
