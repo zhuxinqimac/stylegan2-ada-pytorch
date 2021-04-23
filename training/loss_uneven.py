@@ -8,7 +8,7 @@
 
 # --- File Name: loss_uneven.py
 # --- Creation Date: 19-04-2021
-# --- Last Modified: Fri 23 Apr 2021 15:57:14 AEST
+# --- Last Modified: Fri 23 Apr 2021 16:02:45 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -74,7 +74,7 @@ class UnevenLoss(StyleGAN2Loss):
         # Gmain: Maximize logits for generated images.
         if do_Gmain:
             with torch.autograd.profiler.record_function('Gmain_forward'):
-                gen_img, _gen_ws = self.run_G(gen_z, gen_c, sync=(sync and not do_Gpl and not do_Gplz)) # May get synced by Gpl.
+                gen_img, _gen_ws = self.run_G(gen_z, gen_c, sync=(sync and not do_Gpl and not do_Gplz and not do_Gplzsep)) # May get synced by Gpl.
                 gen_logits = self.run_D(gen_img, gen_c, sync=False)
                 training_stats.report('Loss/scores/fake', gen_logits)
                 training_stats.report('Loss/signs/fake', gen_logits.sign())
