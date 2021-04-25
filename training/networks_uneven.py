@@ -8,7 +8,7 @@
 
 # --- File Name: networks_uneven.py
 # --- Creation Date: 20-04-2021
-# --- Last Modified: Fri 23 Apr 2021 15:20:56 AEST
+# --- Last Modified: Mon 26 Apr 2021 02:56:38 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -96,7 +96,7 @@ class UnevenMappingNetwork(torch.nn.Module):
         w_dist          = False,    # If use softmax to distribute w when not using grid.
     ):
         super().__init__()
-        assert z_dim == out_num_layers * num_ws
+        # assert z_dim == out_num_layers * num_ws
         self.z_dim = z_dim
         self.c_dim = c_dim
         self.w_dim = w_dim
