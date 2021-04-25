@@ -8,7 +8,7 @@
 
 # --- File Name: train_uneven.py
 # --- Creation Date: 19-04-2021
-# --- Last Modified: Fri 23 Apr 2021 15:50:35 AEST
+# --- Last Modified: Mon 26 Apr 2021 02:49:14 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train an UnevenGAN using the techniques described in the paper
@@ -185,6 +185,7 @@ def setup_training_loop_kwargs(
         'paper1024': dict(ref_gpus=8,  kimg=25000,  mb=32, mbstd=4,  fmaps=1,   lrate=0.002,  gamma=2,    ema=10,  ramp=None, map=8),
         'cifar':     dict(ref_gpus=2,  kimg=100000, mb=64, mbstd=32, fmaps=1,   lrate=0.0025, gamma=0.01, ema=500, ramp=0.05, map=2),
         '3dshapes':  dict(ref_gpus=2,  kimg=25000,  mb=64, mbstd=32, fmaps=0.0625,   lrate=0.002, gamma=10,   ema=20,  ramp=None, map=2),
+        'celeba':    dict(ref_gpus=2,  kimg=25000,  mb=64, mbstd=32, fmaps=0.125,   lrate=0.002, gamma=10,   ema=20,  ramp=None, map=2),
     }
 
     assert cfg in cfg_specs
@@ -245,7 +246,7 @@ def setup_training_loop_kwargs(
     args.ema_kimg = spec.ema
     args.ema_rampup = spec.ramp
 
-    if cfg == '3dshapes':
+    if cfg == '3dshapes' or cfg == 'celeba':
         if no_pl_reg:
             args.loss_kwargs.pl_weight = 0 # disable path length regularization
         if plz_weight is None:
@@ -479,7 +480,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--mirror', help='Enable dataset x-flips [default: false]', type=bool, metavar='BOOL')
 
 # Base config.
-@click.option('--cfg', help='Base config [default: auto]', type=click.Choice(['auto', 'stylegan2', 'paper256', 'paper512', 'paper1024', 'cifar', '3dshapes']))
+@click.option('--cfg', help='Base config [default: auto]', type=click.Choice(['auto', 'stylegan2', 'paper256', 'paper512', 'paper1024', 'cifar', '3dshapes', 'celeba']))
 @click.option('--gamma', help='Override R1 gamma', type=float)
 @click.option('--kimg', help='Override training duration', type=int, metavar='INT')
 @click.option('--batch', help='Override batch size', type=int, metavar='INT')
