@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 28 Apr 2021 00:39:44 AEST
+# --- Last Modified: Wed 28 Apr 2021 23:25:01 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -75,6 +75,7 @@ def setup_training_loop_kwargs(
     nav_type = None, # Navigator type.
     num_layers = None, # Number of layers in Navigator.
     sensor_type = None, # The Sensor net type.
+    norm_on_depth = None, # If normalize diff vectors taking depth in to account.
     gan_network_pkl = None, # The pretrained GAN network pkl.
 ):
     args = dnnlib.EasyDict()
@@ -206,6 +207,7 @@ def setup_training_loop_kwargs(
 
     args.loss_kwargs = dnnlib.EasyDict(class_name='training.loss_discover.DiscoverLoss')
     args.loss_kwargs.S_L = 7 if args.sensor_type == 'squeeze' else 5
+    args.loss_kwargs.norm_on_depth = norm_on_depth
 
     args.total_kimg = spec.kimg
     args.batch_size = spec.mb
@@ -345,6 +347,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--gan_network_pkl', help='GAN network pickle', metavar='PKL')
 @click.option('--nav_type', help='The Navigator type', metavar='STR', default='ada')
 @click.option('--num_layers', help='Number of layers in Navigator', metavar='INT', default=2)
+@click.option('--norm_on_depth', help='If normalize diff vectors taking depth into account', metavar='BOOL', default=True)
 
 def main(ctx, outdir, dry_run, **config_kwargs):
     """Train a GAN using the techniques described in the paper

@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 28 Apr 2021 18:22:25 AEST
+# --- Last Modified: Wed 28 Apr 2021 23:26:30 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -26,7 +26,7 @@ from training.loss import Loss
 #----------------------------------------------------------------------------
 
 class DiscoverLoss(Loss):
-    def __init__(self, device, G_mapping, G_synthesis, M, S, S_L):
+    def __init__(self, device, G_mapping, G_synthesis, M, S, S_L, norm_on_depth):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -34,6 +34,7 @@ class DiscoverLoss(Loss):
         self.M = M
         self.S = S
         self.S_L = S_L
+        self.norm_on_depth = norm_on_depth
         self.cos_fn = nn.CosineSimilarity(dim=1)
 
     def run_G_mapping(self, z, c):
@@ -74,7 +75,7 @@ class DiscoverLoss(Loss):
         mask = (numerator / denominator).view(b_half, h, w)
         return mask
 
-    def extract_loss_L(self, feats_i):
+    def extract_diff_L(self, feats_i):
         # (2.5 * batch, c, h, w)
         batch_25 = feats_i.size(0)
         p1_s = feats_i[:batch_25//5]
@@ -85,12 +86,9 @@ class DiscoverLoss(Loss):
         diff_q = p1_e - p1_s # (0.5batch, c, h, w)
         diff_pos = p2_e_pos - p2_s
         diff_neg = p2_e_neg - p2_s
+        return diff_q, diff_pos, diff_neg
 
-        mask_q = self.get_norm_mask(diff_q) # (0.5batch, h, w)
-        mask_pos = self.get_norm_mask(diff_pos)
-        mask_neg = self.get_norm_mask(diff_neg)
-        assert mask_q.max() == 1
-        assert mask_q.min() == 0
+    def extract_loss_L_by_maskdiff(self, diff_q, diff_pos, diff_neg, mask_q, mask_pos, mask_neg):
         mask_pos_comb = mask_q * mask_pos
         mask_neg_comb = mask_q * mask_neg
 
@@ -103,11 +101,68 @@ class DiscoverLoss(Loss):
             loss_neg.sum(dim=[1,2]) / mask_neg_comb.sum(dim=[1,2]) # (0.5batch)
         return loss
 
-    def extract_diff_loss(self, outs):
+    def extract_loss_L(self, feats_i):
+        diff_q, diff_pos, diff_neg = self.extract_diff_L(feats_i)
+
+        mask_q = self.get_norm_mask(diff_q) # (0.5batch, h, w)
+        mask_pos = self.get_norm_mask(diff_pos)
+        mask_neg = self.get_norm_mask(diff_neg)
+        assert mask_q.max() == 1
+        assert mask_q.min() == 0
+
+        loss = self.extract_loss_L_by_maskdiff(diff_q, diff_pos, diff_neg, mask_q, mask_pos, mask_neg)
+        return loss
+
+    def extract_norm_mask_wdepth(self, diff_ls):
+        norm_mask_ls, norm_ls, max_ls, min_ls = [], [], [], []
+        for i, diff in enumerate(diff_ls):
+            # diff: (0.5batch, ci, hi, wi)
+            norm = torch.norm(diff, dim=1)
+            b_half, h, w = norm.size()
+            norm_viewed = norm.view(b_half, h * w)
+            norm_max = norm_viewed.max(dim=1, keepdim=True)[0] # (b_half, 1)
+            norm_min = norm_viewed.min(dim=1, keepdim=True)[0]
+            norm_ls.append(norm) # (b_half, hi, wi)
+            max_ls.append(norm_max)
+            min_ls.append(norm_min)
+        real_max = torch.cat(max_ls, dim=1).max(dim=1)[0] # (b_half)
+        real_min = torch.cat(min_ls, dim=1).min(dim=1)[0]
+
+        for i, norm in enumerate(norm_ls):
+            numerator = norm - real_min.view(b_half, 1, 1)
+            denominator = (real_max - real_min).view(b_half, 1, 1)
+            mask = (numerator / denominator) # (b_half, hi, wi)
+            norm_mask_ls.append(mask)
+        return norm_mask_ls
+
+    def extract_depth_loss(self, diff_q_ls, diff_pos_ls, diff_neg_ls, mask_q_ls, mask_pos_ls, mask_neg_ls):
         loss = 0
+        for i, diff_q_i in enumerate(diff_q_ls):
+            loss_i = self.extract_loss_L_by_maskdiff(diff_q_i, diff_pos_ls[i], diff_neg_ls[i],
+                                                     mask_q_ls[i], mask_pos_ls[i], mask_neg_ls[i])
+            loss += loss_i
+        return loss
+
+    def extract_diff_loss(self, outs):
+        if not self.norm_on_depth:
+            loss = 0
+        else:
+            diff_q_ls, diff_pos_ls, diff_neg_ls = [], [], []
         for kk in range(self.S_L):
-            loss_kk = self.extract_loss_L(outs[kk])
-            loss += loss_kk
+            if not self.norm_on_depth:
+                loss_kk = self.extract_loss_L(outs[kk])
+                loss += loss_kk
+            else:
+                diff_q_kk, diff_pos_kk, diff_neg_kk = self.extract_diff_L(outs[kk])
+                diff_q_ls.append(diff_q_kk)
+                diff_pos_ls.append(diff_pos_kk)
+                diff_neg_ls.append(diff_neg_kk)
+        if self.norm_on_depth:
+            mask_q_ls = self.extract_norm_mask_wdepth(diff_q_ls)
+            mask_pos_ls = self.extract_norm_mask_wdepth(diff_pos_ls)
+            mask_neg_ls = self.extract_norm_mask_wdepth(diff_neg_ls)
+            loss = self.extract_depth_loss(diff_q_ls, diff_pos_ls, diff_neg_ls,
+                                           mask_q_ls, mask_pos_ls, mask_neg_ls)
         return loss
 
     def accumulate_gradients(self, phase, gen_z, gen_c, sync, gain):
@@ -135,6 +190,13 @@ class DiscoverLoss(Loss):
                 imgs_all = self.run_G_synthesis(ws_all)
                 outs_all = self.run_S(imgs_all)
                 loss_Mmain = self.extract_diff_loss(outs_all)
+
+                # # Weight regularization.
+                # for i in range(self.M.num_layers):
+                    # w_i = getattr(self.M, f'fc{i}').weight
+                    # print(f'w_{i}.max:', w_i.max().data)
+                    # print(f'w_{i}.min:', w_i.min().data)
+            with torch.autograd.profiler.record_function('Mmain_backward'):
                 loss_Mmain.mean().mul(gain).backward()
 
 #----------------------------------------------------------------------------

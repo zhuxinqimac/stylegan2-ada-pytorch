@@ -186,6 +186,7 @@ def check_ddp_consistency(module, ignore_regex=None):
             continue
         tensor = tensor.detach()
         other = tensor.clone()
+        print('before broadcast:', tensor == other)
         torch.distributed.broadcast(tensor=other, src=0)
         print('tensor.shape:', tensor.shape)
         print('other.shape:', other.shape)
