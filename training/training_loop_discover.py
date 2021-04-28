@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 28 Apr 2021 21:52:53 AEST
+# --- Last Modified: Thu 29 Apr 2021 00:12:17 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -55,14 +55,14 @@ def get_walk(w_origin, M, n_samples_per):
         for j in range(n_samples_per // 2):
             delta = run_M(M, w) # (1, M.z_dim, w_dim)
             w += delta[:, i]
-            row_ls.append(w)
+            row_ls.append(w.clone())
 
         w = w_origin.clone()
         # Backward:
         for j in range(n_samples_per - n_samples_per // 2 - 1):
             delta = -run_M(M, w) # (1, M.z_dim, w_dim)
             w += delta[:, i]
-            row_ls = [w] + row_ls
+            row_ls = [w.clone()] + row_ls
         row_tensor = torch.cat(row_ls, dim=0)
         walk_ls.append(row_tensor)
     walk_tensor = torch.cat(walk_ls, dim=0) # (z_dim * n_samples_per, w_dim)
