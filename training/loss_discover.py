@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 28 Apr 2021 15:53:34 AEST
+# --- Last Modified: Wed 28 Apr 2021 18:22:25 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -63,7 +63,8 @@ class DiscoverLoss(Loss):
         return z_dim_perm[:, :2]
 
     def get_norm_mask(self, diff):
-        norm = torch.linalg.norm(diff, dim=1) # (0.5batch, h, w)
+        # norm = torch.linalg.norm(diff, dim=1) # (0.5batch, h, w)
+        norm = torch.norm(diff, dim=1) # (0.5batch, h, w)
         b_half, h, w = norm.size()
         norm_viewed = norm.view(b_half, h * w)
         numerator = norm_viewed - norm_viewed.min(dim=1, keepdim=True)[0]
