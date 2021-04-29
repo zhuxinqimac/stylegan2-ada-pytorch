@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Thu 29 Apr 2021 23:14:32 AEST
+# --- Last Modified: Fri 30 Apr 2021 00:32:36 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -67,7 +67,7 @@ class Navigator(torch.nn.Module):
 
     def sample_var_scale(self, x):
         if self.training:
-            return torch.absolute(torch.randn(self.z_dim, device=x.device) * 0.02).view(1, self.z_dim, 1)
+            return torch.abs(torch.randn(self.z_dim, device=x.device) * 0.02).view(1, self.z_dim, 1)
         return (0.02 * torch.ones(self.z_dim, device=x.device)).view(1, self.z_dim, 1)
 
     def forward(self, x_in):

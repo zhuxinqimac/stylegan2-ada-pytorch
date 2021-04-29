@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 30 Apr 2021 00:22:30 AEST
+# --- Last Modified: Fri 30 Apr 2021 00:32:41 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -198,7 +198,7 @@ class DiscoverLoss(Loss):
                 delta_pos = torch.gather(delta[batch//2:], 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(1, 1, self.M.w_dim)).squeeze()
                 delta_neg = torch.gather(delta[batch//2:], 1, pos_neg_idx[:, 1].view(batch//2, 1, 1).repeat(1, 1, self.M.w_dim)).squeeze() # (b//2, w_dim)
 
-                scale = torch.absolute(torch.randn(batch//2, device=delta.device) * self.var_sample_scale).view(batch//2, 1)
+                scale = torch.abs(torch.randn(batch//2, device=delta.device) * self.var_sample_scale).view(batch//2, 1)
 
                 ws_q = ws[:batch//2] + delta_q * scale
                 ws_pos = ws[batch//2:] + delta_pos * scale
