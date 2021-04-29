@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 30 Apr 2021 00:00:56 AEST
+# --- Last Modified: Fri 30 Apr 2021 00:22:30 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -26,7 +26,7 @@ from training.loss import Loss
 #----------------------------------------------------------------------------
 
 class DiscoverLoss(Loss):
-    def __init__(self, device, G_mapping, G_synthesis, M, S, S_L, norm_on_depth, div_lambda=0):
+    def __init__(self, device, G_mapping, G_synthesis, M, S, S_L, norm_on_depth, div_lambda=0., var_sample_scale=1.):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -36,6 +36,7 @@ class DiscoverLoss(Loss):
         self.S_L = S_L
         self.norm_on_depth = norm_on_depth
         self.div_lambda = div_lambda
+        self.var_sample_scale = var_sample_scale
         self.cos_fn = nn.CosineSimilarity(dim=1)
         self.cos_fn_diversity = nn.CosineSimilarity(dim=3)
 
@@ -196,9 +197,12 @@ class DiscoverLoss(Loss):
                 delta_q = torch.gather(delta[:batch//2], 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(1, 1, self.M.w_dim)).squeeze()
                 delta_pos = torch.gather(delta[batch//2:], 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(1, 1, self.M.w_dim)).squeeze()
                 delta_neg = torch.gather(delta[batch//2:], 1, pos_neg_idx[:, 1].view(batch//2, 1, 1).repeat(1, 1, self.M.w_dim)).squeeze() # (b//2, w_dim)
-                ws_q = ws[:batch//2] + delta_q
-                ws_pos = ws[batch//2:] + delta_pos
-                ws_neg = ws[batch//2:] + delta_neg
+
+                scale = torch.absolute(torch.randn(batch//2, device=delta.device) * self.var_sample_scale).view(batch//2, 1)
+
+                ws_q = ws[:batch//2] + delta_q * scale
+                ws_pos = ws[batch//2:] + delta_pos * scale
+                ws_neg = ws[batch//2:] + delta_neg * scale
                 ws_all = torch.cat([ws, ws_q, ws_pos, ws_neg],
                                    dim=0).unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) # (2.5 * batch, num_ws, w_dim)
                 imgs_all = self.run_G_synthesis(ws_all)
