@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Thu 29 Apr 2021 23:35:13 AEST
+# --- Last Modified: Fri 30 Apr 2021 00:00:56 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -26,7 +26,7 @@ from training.loss import Loss
 #----------------------------------------------------------------------------
 
 class DiscoverLoss(Loss):
-    def __init__(self, device, G_mapping, G_synthesis, M, S, S_L, norm_on_depth):
+    def __init__(self, device, G_mapping, G_synthesis, M, S, S_L, norm_on_depth, div_lambda=0):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -35,6 +35,7 @@ class DiscoverLoss(Loss):
         self.S = S
         self.S_L = S_L
         self.norm_on_depth = norm_on_depth
+        self.div_lambda = div_lambda
         self.cos_fn = nn.CosineSimilarity(dim=1)
         self.cos_fn_diversity = nn.CosineSimilarity(dim=3)
 
@@ -203,7 +204,7 @@ class DiscoverLoss(Loss):
                 imgs_all = self.run_G_synthesis(ws_all)
                 outs_all = self.run_S(imgs_all)
                 loss_Mmain = self.extract_diff_loss(outs_all)
-                loss_Mmain += loss_diversity
+                loss_Mmain += self.div_lambda * loss_diversity
 
                 # # Weight regularization.
                 # for i in range(self.M.num_layers):
