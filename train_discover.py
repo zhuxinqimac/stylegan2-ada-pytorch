@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 30 Apr 2021 00:03:38 AEST
+# --- Last Modified: Fri 30 Apr 2021 00:11:59 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -346,11 +346,11 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--n_samples_per', help='The number of steps in traversals.', type=int, metavar='INT', default=10)
 @click.option('--m_z_dim', help='The z_dim in M.', type=int, default=10)
 @click.option('--sensor_type', help='The type of sensor network.', type=str, default='alex')
-@click.option('--gan_network_pkl', help='GAN network pickle', metavar='PKL', type=str)
-@click.option('--nav_type', help='The Navigator type', metavar='STR', default='ada', dtype=str)
-@click.option('--num_layers', help='Number of layers in Navigator', metavar='INT', type=int, default=2)
-@click.option('--norm_on_depth', help='If normalize diff vectors taking depth into account', metavar='BOOL', type=bool, default=True)
-@click.option('--div_lambda', help='The W-space diversity lambda', metavar='FLOAT', type=float, default=0)
+@click.option('--gan_network_pkl', help='GAN network pickle', metavar='PKL')
+@click.option('--nav_type', help='The Navigator type', metavar='STR', default='ada')
+@click.option('--num_layers', help='Number of layers in Navigator', metavar='INT', default=2)
+@click.option('--norm_on_depth', help='If normalize diff vectors taking depth into account', metavar='BOOL', default=True)
+@click.option('--div_lambda', help='The W-space div_lambda', metavar='FLOAT', default=0.)
 
 def main(ctx, outdir, dry_run, **config_kwargs):
     """Train a GAN using the techniques described in the paper
