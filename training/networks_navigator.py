@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 28 Apr 2021 03:20:26 AEST
+# --- Last Modified: Thu 29 Apr 2021 23:14:32 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -63,6 +63,13 @@ class Navigator(torch.nn.Module):
         else:
             raise ValueError('Unknown nav_type:', self.nav_type)
 
+        # self.epsilon_dir = torch.nn.Parameter(torch.randn([self.z_dim]) * 0.02)
+
+    def sample_var_scale(self, x):
+        if self.training:
+            return torch.absolute(torch.randn(self.z_dim, device=x.device) * 0.02).view(1, self.z_dim, 1)
+        return (0.02 * torch.ones(self.z_dim, device=x.device)).view(1, self.z_dim, 1)
+
     def forward(self, x_in):
         # x_in: (b, w_dim)
         # To output delta per z_dim in W space.
@@ -76,5 +83,7 @@ class Navigator(torch.nn.Module):
             x = torch.ones(1, self.z_dim, 1).to(x_in.device) # (1, z_dim, 1)
             layer = getattr(self, f'fc0')
             x = layer(x)
-        x = normalize_2nd_moment(x, dim=-1) * 0.02
+        # x = normalize_2nd_moment(x, dim=-1) * 0.02
+        # x = normalize_2nd_moment(x, dim=-1) * self.sample_var_scale(x)
+        x = normalize_2nd_moment(x, dim=-1)
         return x

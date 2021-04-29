@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 28 Apr 2021 23:26:30 AEST
+# --- Last Modified: Thu 29 Apr 2021 23:35:13 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -36,6 +36,7 @@ class DiscoverLoss(Loss):
         self.S_L = S_L
         self.norm_on_depth = norm_on_depth
         self.cos_fn = nn.CosineSimilarity(dim=1)
+        self.cos_fn_diversity = nn.CosineSimilarity(dim=3)
 
     def run_G_mapping(self, z, c):
         # with misc.ddp_sync(self.G_mapping, sync):
@@ -165,6 +166,17 @@ class DiscoverLoss(Loss):
                                            mask_q_ls, mask_pos_ls, mask_neg_ls)
         return loss
 
+    def calc_loss_diversity(self, delta):
+        '''
+        delta: (b/1, z_dim, w_dim)
+        '''
+        delta1 = delta[:, np.newaxis, ...] # (b/1, 1, z_dim, w_dim)
+        delta2 = delta[:, :, np.newaxis, ...] # (b/1, z_dim, 1, w_dim)
+        cos_div = self.cos_fn_diversity(delta1, delta2) # (b/1, z_dim, z_dim)
+        div_mask = 1. - torch.eye(self.M.z_dim, device=delta.device).view(1, self.M.z_dim, self.M.z_dim)
+        loss = (cos_div * div_mask)**2
+        return loss.sum(dim=[1,2]).mean()
+
     def accumulate_gradients(self, phase, gen_z, gen_c, sync, gain):
         assert phase in ['Mboth']
         do_Mmain = (phase in ['Mboth'])
@@ -176,6 +188,7 @@ class DiscoverLoss(Loss):
                 ws = self.run_G_mapping(gen_z, gen_c)
                 ws = ws[:, 0] # remove broadcast
                 delta = self.run_M(ws, sync)
+                loss_diversity = self.calc_loss_diversity(delta) # (b/1)
                 if delta.size(0) == 1:
                     delta = delta.repeat(batch, 1, 1) # (b, M.z_dim, w_dim)
                 pos_neg_idx = self.sample_batch_pos_neg_dirs(batch // 2, self.M.z_dim).to(delta.device) # (b//2, 2)
@@ -190,12 +203,15 @@ class DiscoverLoss(Loss):
                 imgs_all = self.run_G_synthesis(ws_all)
                 outs_all = self.run_S(imgs_all)
                 loss_Mmain = self.extract_diff_loss(outs_all)
+                loss_Mmain += loss_diversity
 
                 # # Weight regularization.
                 # for i in range(self.M.num_layers):
                     # w_i = getattr(self.M, f'fc{i}').weight
                     # print(f'w_{i}.max:', w_i.max().data)
                     # print(f'w_{i}.min:', w_i.min().data)
+                # print('epsilon_dir:', self.M.epsilon_dir.data)
+                # loss_Mmain += 0.1 * (self.M.epsilon_dir**2).sum()
             with torch.autograd.profiler.record_function('Mmain_backward'):
                 loss_Mmain.mean().mul(gain).backward()
 
