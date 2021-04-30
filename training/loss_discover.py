@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 30 Apr 2021 17:34:57 AEST
+# --- Last Modified: Fri 30 Apr 2021 17:51:39 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -117,7 +117,8 @@ class DiscoverLoss(Loss):
 
         loss_diff = self.extract_loss_L_by_maskdiff(diff_q, diff_pos, diff_neg, mask_q, mask_pos, mask_neg, idx)
         training_stats.report('Loss/M/loss_diff_f{idx}', loss_diff)
-        loss_norm = sum([(norm**2).sum(dim=[1,2]) for norm in [norm_q, norm_pos, norm_neg]])
+        loss_norm = sum([(norm**2).sum(dim=[1,2]) / mask.sum(dim=[1,2]) \
+                         for norm, mask in [(norm_q, mask_q), (norm_pos, mask_pos), (norm_neg, mask_neg)]])
         training_stats.report('Loss/M/loss_norm_f{idx}', loss_norm)
         return loss_diff + self.norm_lambda * loss_norm
 
@@ -151,10 +152,11 @@ class DiscoverLoss(Loss):
             loss += loss_i
         return loss
 
-    def extract_depth_norm_loss(self, norm_q_ls, norm_pos_ls, norm_neg_ls):
+    def extract_depth_norm_loss(self, norm_q_ls, norm_pos_ls, norm_neg_ls, mask_q_ls, mask_pos_ls, mask_neg_ls):
         loss = 0
         for i, norm_q in enumerate(norm_q_ls):
-            loss_norm = sum([(norm**2).sum(dim=[1,2]) for norm in [norm_q, norm_pos_ls[i], norm_neg_ls[i]]])
+            loss_norm = sum([(norm**2).sum(dim=[1,2])/mask.sum(dim=[1,2]) for norm, mask in \
+                             [(norm_q, mask_q_ls[i]), (norm_pos_ls[i], mask_pos_ls[i]), (norm_neg_ls[i], mask_neg_ls[i])]])
             loss += loss_norm
         return loss
 
@@ -179,7 +181,7 @@ class DiscoverLoss(Loss):
             loss_diff = self.extract_depth_diff_loss(diff_q_ls, diff_pos_ls, diff_neg_ls,
                                                 mask_q_ls, mask_pos_ls, mask_neg_ls)
             training_stats.report('Loss/M/loss_diff', loss_diff)
-            loss_norm = self.extract_depth_norm_loss(norm_q_ls, norm_pos_ls, norm_neg_ls)
+            loss_norm = self.extract_depth_norm_loss(norm_q_ls, norm_pos_ls, norm_neg_ls, mask_q_ls, mask_pos_ls, mask_neg_ls)
             training_stats.report('Loss/M/loss_norm', loss_norm)
             loss = loss_diff + self.norm_lambda * loss_norm
         return loss
