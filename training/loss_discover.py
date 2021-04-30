@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 30 Apr 2021 00:32:41 AEST
+# --- Last Modified: Fri 30 Apr 2021 17:24:39 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -26,7 +26,7 @@ from training.loss import Loss
 #----------------------------------------------------------------------------
 
 class DiscoverLoss(Loss):
-    def __init__(self, device, G_mapping, G_synthesis, M, S, S_L, norm_on_depth, div_lambda=0., var_sample_scale=1.):
+    def __init__(self, device, G_mapping, G_synthesis, M, S, S_L, norm_on_depth, div_lambda=0., norm_lambda=0., var_sample_scale=1.):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -36,6 +36,7 @@ class DiscoverLoss(Loss):
         self.S_L = S_L
         self.norm_on_depth = norm_on_depth
         self.div_lambda = div_lambda
+        self.norm_lambda = norm_lambda
         self.var_sample_scale = var_sample_scale
         self.cos_fn = nn.CosineSimilarity(dim=1)
         self.cos_fn_diversity = nn.CosineSimilarity(dim=3)
@@ -76,7 +77,7 @@ class DiscoverLoss(Loss):
         # print('numerator.shape:', numerator.shape)
         # print('denominator.shape:', denominator.shape)
         mask = (numerator / denominator).view(b_half, h, w)
-        return mask
+        return norm, mask
 
     def extract_diff_L(self, feats_i):
         # (2.5 * batch, c, h, w)
@@ -91,30 +92,34 @@ class DiscoverLoss(Loss):
         diff_neg = p2_e_neg - p2_s
         return diff_q, diff_pos, diff_neg
 
-    def extract_loss_L_by_maskdiff(self, diff_q, diff_pos, diff_neg, mask_q, mask_pos, mask_neg):
+    def extract_loss_L_by_maskdiff(self, diff_q, diff_pos, diff_neg, mask_q, mask_pos, mask_neg, idx):
         mask_pos_comb = mask_q * mask_pos
         mask_neg_comb = mask_q * mask_neg
 
         cos_sim_pos = self.cos_fn(diff_q, diff_pos) * mask_pos_comb
         cos_sim_neg = self.cos_fn(diff_q, diff_neg) * mask_neg_comb
 
-        loss_pos = -cos_sim_pos**2 # (0.5batch, h, w)
-        loss_neg = cos_sim_neg**2
-        loss = loss_pos.sum(dim=[1,2]) / mask_pos_comb.sum(dim=[1,2]) + \
-            loss_neg.sum(dim=[1,2]) / mask_neg_comb.sum(dim=[1,2]) # (0.5batch)
+        loss_pos = (-cos_sim_pos**2).sum(dim=[1,2]) / mask_pos_comb # (0.5batch)
+        loss_neg = (cos_sim_neg**2).sum(dim=[1,2]) / mask_neg_comb
+        training_stats.report('Loss/M/loss_diff_pos_f{idx}', loss_pos)
+        training_stats.report('Loss/M/loss_diff_neg_f{idx}', loss_neg)
+        loss = loss_pos + loss_neg # (0.5batch)
         return loss
 
-    def extract_loss_L(self, feats_i):
+    def extract_loss_L(self, feats_i, idx):
         diff_q, diff_pos, diff_neg = self.extract_diff_L(feats_i)
 
-        mask_q = self.get_norm_mask(diff_q) # (0.5batch, h, w)
-        mask_pos = self.get_norm_mask(diff_pos)
-        mask_neg = self.get_norm_mask(diff_neg)
+        norm_q, mask_q = self.get_norm_mask(diff_q) # (0.5batch, h, w), (0.5batch, h, w)
+        norm_pos, mask_pos = self.get_norm_mask(diff_pos)
+        norm_neg, mask_neg = self.get_norm_mask(diff_neg)
         assert mask_q.max() == 1
         assert mask_q.min() == 0
 
-        loss = self.extract_loss_L_by_maskdiff(diff_q, diff_pos, diff_neg, mask_q, mask_pos, mask_neg)
-        return loss
+        loss_diff = self.extract_loss_L_by_maskdiff(diff_q, diff_pos, diff_neg, mask_q, mask_pos, mask_neg, idx)
+        training_stats.report('Loss/M/loss_diff_f{idx}', loss_diff)
+        loss_norm = sum([(norm**2).sum(dim=[1,2]) for norm in [norm_q, norm_pos, norm_neg]])
+        training_stats.report('Loss/M/loss_norm_f{idx}', loss_norm)
+        return loss_diff + self.norm_lambda * loss_norm
 
     def extract_norm_mask_wdepth(self, diff_ls):
         norm_mask_ls, norm_ls, max_ls, min_ls = [], [], [], []
@@ -136,14 +141,21 @@ class DiscoverLoss(Loss):
             denominator = (real_max - real_min).view(b_half, 1, 1)
             mask = (numerator / denominator) # (b_half, hi, wi)
             norm_mask_ls.append(mask)
-        return norm_mask_ls
+        return norm_ls, norm_mask_ls
 
-    def extract_depth_loss(self, diff_q_ls, diff_pos_ls, diff_neg_ls, mask_q_ls, mask_pos_ls, mask_neg_ls):
+    def extract_depth_diff_loss(self, diff_q_ls, diff_pos_ls, diff_neg_ls, mask_q_ls, mask_pos_ls, mask_neg_ls):
         loss = 0
         for i, diff_q_i in enumerate(diff_q_ls):
             loss_i = self.extract_loss_L_by_maskdiff(diff_q_i, diff_pos_ls[i], diff_neg_ls[i],
-                                                     mask_q_ls[i], mask_pos_ls[i], mask_neg_ls[i])
+                                                     mask_q_ls[i], mask_pos_ls[i], mask_neg_ls[i], i)
             loss += loss_i
+        return loss
+
+    def extract_depth_norm_loss(self, norm_q_ls, norm_pos_ls, norm_neg_ls):
+        loss = 0
+        for i, norm_q in enumerate(norm_q_ls):
+            loss_norm = sum([(norm**2).sum(dim=[1,2]) for norm in [norm_q, norm_pos_ls[i], norm_neg_ls[i]]])
+            loss += loss_norm
         return loss
 
     def extract_diff_loss(self, outs):
@@ -153,7 +165,7 @@ class DiscoverLoss(Loss):
             diff_q_ls, diff_pos_ls, diff_neg_ls = [], [], []
         for kk in range(self.S_L):
             if not self.norm_on_depth:
-                loss_kk = self.extract_loss_L(outs[kk])
+                loss_kk = self.extract_loss_L(outs[kk], kk)
                 loss += loss_kk
             else:
                 diff_q_kk, diff_pos_kk, diff_neg_kk = self.extract_diff_L(outs[kk])
@@ -161,11 +173,15 @@ class DiscoverLoss(Loss):
                 diff_pos_ls.append(diff_pos_kk)
                 diff_neg_ls.append(diff_neg_kk)
         if self.norm_on_depth:
-            mask_q_ls = self.extract_norm_mask_wdepth(diff_q_ls)
-            mask_pos_ls = self.extract_norm_mask_wdepth(diff_pos_ls)
-            mask_neg_ls = self.extract_norm_mask_wdepth(diff_neg_ls)
-            loss = self.extract_depth_loss(diff_q_ls, diff_pos_ls, diff_neg_ls,
-                                           mask_q_ls, mask_pos_ls, mask_neg_ls)
+            norm_q_ls, mask_q_ls = self.extract_norm_mask_wdepth(diff_q_ls)
+            norm_pos_ls, mask_pos_ls = self.extract_norm_mask_wdepth(diff_pos_ls)
+            norm_neg_ls, mask_neg_ls = self.extract_norm_mask_wdepth(diff_neg_ls)
+            loss_diff = self.extract_depth_diff_loss(diff_q_ls, diff_pos_ls, diff_neg_ls,
+                                                mask_q_ls, mask_pos_ls, mask_neg_ls)
+            training_stats.report('Loss/M/loss_diff', loss_diff)
+            loss_norm = self.extract_depth_norm_loss(norm_q_ls, norm_pos_ls, norm_neg_ls)
+            training_stats.report('Loss/M/loss_norm', loss_norm)
+            loss = loss_diff + self.norm_lambda * loss_norm
         return loss
 
     def calc_loss_diversity(self, delta):
@@ -208,7 +224,9 @@ class DiscoverLoss(Loss):
                 imgs_all = self.run_G_synthesis(ws_all)
                 outs_all = self.run_S(imgs_all)
                 loss_Mmain = self.extract_diff_loss(outs_all)
+                training_stats.report('Loss/M/loss_diversity', loss_diversity)
                 loss_Mmain += self.div_lambda * loss_diversity
+                training_stats.report('Loss/M/loss_all', loss_Mmain)
 
                 # # Weight regularization.
                 # for i in range(self.M.num_layers):
