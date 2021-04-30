@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 30 Apr 2021 17:00:04 AEST
+# --- Last Modified: Fri 30 Apr 2021 23:01:35 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -80,6 +80,7 @@ def setup_training_loop_kwargs(
     div_lambda = None, # The W-space cos_fn lambda.
     norm_lambda = None, # The norm lambda of diff features.
     var_sample_scale = None, # The sampling scale for variation.
+    lr_multiplier = None, # The lr_multiplier in M net.
 ):
     args = dnnlib.EasyDict()
 
@@ -198,6 +199,7 @@ def setup_training_loop_kwargs(
     args.M_kwargs.z_dim = m_z_dim
     args.M_kwargs.nav_type = nav_type
     args.M_kwargs.num_layers = num_layers
+    args.M_kwargs.lr_multiplier = lr_multiplier
     # activation      = 'lrelu',  # Activation function: 'relu', 'lrelu', etc.
     # lr_multiplier   = 0.01,        # Learning rate multiplier.
     # nav_type        = 'ada',    # Navigator type: 'ada', 'fixed'.
@@ -357,6 +359,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--div_lambda', help='The W-space div_lambda', metavar='FLOAT', default=0.)
 @click.option('--norm_lambda', help='The norm lambda in diff features', metavar='FLOAT', default=0.)
 @click.option('--var_sample_scale', help='The sampling scale for variation', metavar='FLOAT', default=1.)
+@click.option('--lr_multiplier', help='The lr_multiplier in M net', metavar='FLOAT', default=1.)
 
 def main(ctx, outdir, dry_run, **config_kwargs):
     """Train a GAN using the techniques described in the paper
