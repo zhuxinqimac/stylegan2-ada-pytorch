@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 30 Apr 2021 17:24:39 AEST
+# --- Last Modified: Fri 30 Apr 2021 17:34:57 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -99,8 +99,8 @@ class DiscoverLoss(Loss):
         cos_sim_pos = self.cos_fn(diff_q, diff_pos) * mask_pos_comb
         cos_sim_neg = self.cos_fn(diff_q, diff_neg) * mask_neg_comb
 
-        loss_pos = (-cos_sim_pos**2).sum(dim=[1,2]) / mask_pos_comb # (0.5batch)
-        loss_neg = (cos_sim_neg**2).sum(dim=[1,2]) / mask_neg_comb
+        loss_pos = (-cos_sim_pos**2).sum(dim=[1,2]) / mask_pos_comb.sum(dim=[1,2]) # (0.5batch)
+        loss_neg = (cos_sim_neg**2).sum(dim=[1,2]) / mask_neg_comb.sum(dim=[1,2])
         training_stats.report('Loss/M/loss_diff_pos_f{idx}', loss_pos)
         training_stats.report('Loss/M/loss_diff_neg_f{idx}', loss_neg)
         loss = loss_pos + loss_neg # (0.5batch)
