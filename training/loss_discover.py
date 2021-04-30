@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 30 Apr 2021 17:51:39 AEST
+# --- Last Modified: Fri 30 Apr 2021 18:03:56 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -101,8 +101,8 @@ class DiscoverLoss(Loss):
 
         loss_pos = (-cos_sim_pos**2).sum(dim=[1,2]) / mask_pos_comb.sum(dim=[1,2]) # (0.5batch)
         loss_neg = (cos_sim_neg**2).sum(dim=[1,2]) / mask_neg_comb.sum(dim=[1,2])
-        training_stats.report('Loss/M/loss_diff_pos_f{idx}', loss_pos)
-        training_stats.report('Loss/M/loss_diff_neg_f{idx}', loss_neg)
+        training_stats.report('Loss/M/loss_diff_pos_{}'.format(idx), loss_pos)
+        training_stats.report('Loss/M/loss_diff_neg_{}'.format(idx), loss_neg)
         loss = loss_pos + loss_neg # (0.5batch)
         return loss
 
@@ -116,10 +116,10 @@ class DiscoverLoss(Loss):
         assert mask_q.min() == 0
 
         loss_diff = self.extract_loss_L_by_maskdiff(diff_q, diff_pos, diff_neg, mask_q, mask_pos, mask_neg, idx)
-        training_stats.report('Loss/M/loss_diff_f{idx}', loss_diff)
+        training_stats.report('Loss/M/loss_diff_{}'.format(idx), loss_diff)
         loss_norm = sum([(norm**2).sum(dim=[1,2]) / mask.sum(dim=[1,2]) \
                          for norm, mask in [(norm_q, mask_q), (norm_pos, mask_pos), (norm_neg, mask_neg)]])
-        training_stats.report('Loss/M/loss_norm_f{idx}', loss_norm)
+        training_stats.report('Loss/M/loss_norm_{}'.format(idx), loss_norm)
         return loss_diff + self.norm_lambda * loss_norm
 
     def extract_norm_mask_wdepth(self, diff_ls):
