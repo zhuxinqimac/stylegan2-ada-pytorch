@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 04 May 2021 17:20:15 AEST
+# --- Last Modified: Tue 04 May 2021 20:35:15 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -181,7 +181,7 @@ class DiscoverLoss(Loss):
             norm_pos_ls, mask_pos_ls = self.extract_norm_mask_wdepth(diff_pos_ls)
             norm_neg_ls, mask_neg_ls = self.extract_norm_mask_wdepth(diff_neg_ls)
             loss_diff = self.extract_depth_diff_loss(diff_q_ls, diff_pos_ls, diff_neg_ls,
-                                                mask_q_ls, mask_pos_ls, mask_neg_ls)
+                                                     mask_q_ls, mask_pos_ls, mask_neg_ls)
             training_stats.report('Loss/M/loss_diff', loss_diff)
             loss_norm = self.extract_depth_norm_loss(norm_q_ls, norm_pos_ls, norm_neg_ls, mask_q_ls, mask_pos_ls, mask_neg_ls)
             training_stats.report('Loss/M/loss_norm', loss_norm)

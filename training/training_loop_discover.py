@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 04 May 2021 19:18:17 AEST
+# --- Last Modified: Tue 04 May 2021 21:59:05 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -80,6 +80,30 @@ def get_walk(w_origin_ws, M, n_samples_per):
         walk_ls.append(row_tensor)
     walk_tensor = torch.cat(walk_ls, dim=0) # (z_dim * n_samples_per, num_ws, w_dim)
     return walk_tensor
+
+def get_diff_masks(images, gw, gh, S, save_size):
+    # masks = get_diff_masks(images, n_samples_per, M.z_dim, S)
+    # images: (gh*gw, c, h, w)
+    b, c, h, w = images.size()
+    images = images.view(gh, gw, c, h, w)
+    img_ls = []
+    for i in range(gh):
+        img_ls.append(images[i, gw//2].view(1, c, h, w))
+        img_ls.append(images[i, gw//2+1].view(1, c, h, w))
+    img_tensor = torch.cat(img_ls, dim=0) # (gh*2, c, h, w)
+    outs = S.forward(img_tensor) # list of (gh*2, ci, hi, wi)
+    diff_ls = []
+    for feat_L in outs:
+        feat_L_scaled = F.interpolate(feat_L, (save_size, save_size), mode='bilinear')
+        diff = feat_L_scaled[::2] - feat_L_scaled[1::2] # (gh, ci, h, w)
+        diff_norm = torch.norm(diff, dim=1) # (gh, h, w)
+        diff_norm_viewed = diff_norm.view(gh, save_size * save_size)
+        diff_norm_max = diff_norm_viewed.max(dim=1, keepdim=True)[0]
+        diff_norm_min = diff_norm_viewed.min(dim=1, keepdim=True)[0]
+        diff_mask = (diff_norm_viewed - diff_norm_min) / (diff_norm_max - diff_norm_min)
+        diff_ls.append(diff_mask.view(gh, 1, save_size, save_size))
+    diff_out = torch.cat(diff_ls, dim=1).view(gh*len(outs), 1, save_size, save_size)
+    return diff_out
 
 #----------------------------------------------------------------------------
 
@@ -204,13 +228,15 @@ def training_loop(
         c_origin = torch.randn([1, G.c_dim], device=device)
         w_origin = G.mapping(z_origin, c_origin) # (1, num_ws, w_dim)
         w_walk = get_walk(w_origin, M, n_samples_per).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
-        images = torch.cat([G.synthesis(w, noise_mode='const').cpu() for w in w_walk])
+        images = torch.cat([G.synthesis(w, noise_mode='const') for w in w_walk]) # (gh * gw, c, h, w)
+        masks = get_diff_masks(images, n_samples_per, M.z_dim, S, save_size).cpu().numpy()
         if save_size < images.size(-1):
-            images = F.adaptive_avg_pool2d(images, (save_size, save_size)).numpy()
+            images = F.adaptive_avg_pool2d(images, (save_size, save_size)).cpu().numpy()
         else:
-            images = images.numpy()
+            images = images.cpu().numpy()
         print('images.shape:', images.shape)
         save_image_grid(images, os.path.join(run_dir, 'trav_init.png'), drange=[-1,1], grid_size=walk_grid_size)
+        save_image_grid(masks, os.path.join(run_dir, 'diff_init.png'), drange=[0,1], grid_size=(loss_kwargs.S_L, M.z_dim))
 
     # Initialize logs.
     if rank == 0:
@@ -319,12 +345,14 @@ def training_loop(
             c_origin = torch.randn([1, G.c_dim], device=device)
             w_origin = G.mapping(z_origin, c_origin) # (1, num_ws, w_dim)
             w_walk = get_walk(w_origin, M, n_samples_per).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
-            images = torch.cat([G.synthesis(w, noise_mode='const').cpu() for w in w_walk])
+            images = torch.cat([G.synthesis(w, noise_mode='const') for w in w_walk])
+            masks = get_diff_masks(images, n_samples_per, M.z_dim, S, save_size).cpu().numpy()
             if save_size < images.size(-1):
-                images = F.adaptive_avg_pool2d(images, (save_size, save_size)).numpy()
+                images = F.adaptive_avg_pool2d(images, (save_size, save_size)).cpu().numpy()
             else:
-                images = images.numpy()
+                images = images.cpu().numpy()
             save_image_grid(images, os.path.join(run_dir, f'trav_{cur_nimg//1000:06d}.png'), drange=[-1,1], grid_size=walk_grid_size)
+            save_image_grid(masks, os.path.join(run_dir, f'diff_{cur_nimg//1000:06d}.png'), drange=[0,1], grid_size=(loss_kwargs.S_L, M.z_dim))
 
         # Save network snapshot.
         snapshot_pkl = None
