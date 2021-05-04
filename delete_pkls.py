@@ -8,7 +8,7 @@
 
 # --- File Name: delete_pkls.py
 # --- Creation Date: 15-11-2020
-# --- Last Modified: Tue 04 May 2021 17:57:24 AEST
+# --- Last Modified: Tue 04 May 2021 18:02:27 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -67,7 +67,7 @@ def main():
                     print('Removed ' + item)
             if args.additional_prefix is not None:
                 items = glob.glob(os.path.join(subdir, args.additional_prefix+'[0-9]*.png'))
-                items_idxes = [int(x[:-4].split('-')[-1]) for x in items]
+                items_idxes = [int(x[:-4].split('_')[-1]) for x in items]
                 len_items = len(items)
                 if len_items <= args.n_to_ignore:
                     continue
