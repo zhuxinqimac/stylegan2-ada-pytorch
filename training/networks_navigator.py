@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 04 May 2021 16:39:23 AEST
+# --- Last Modified: Tue 04 May 2021 23:16:11 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -50,11 +50,16 @@ class Navigator(torch.nn.Module):
         self.lr_multiplier = lr_multiplier
         self.nav_type = nav_type
         self.num_layers = num_layers
+        self.use_layer_heat = use_layer_heat
         if self.nav_type == 'ada':
             for idx in range(self.num_layers):
                 act = 'linear' if idx == num_layers-1 else activation
                 in_features = w_dim * self.z_dim
-                layer = GroupFullyConnectedLayer(in_features, w_dim * self.z_dim, activation=act,
+                if self.use_layer_heat and idx == num_layers-1:
+                    out_features = (w_dim+self.num_ws) * self.z_dim
+                else:
+                    out_features = w_dim * self.z_dim
+                layer = GroupFullyConnectedLayer(in_features, out_features, activation=act,
                                                  lr_multiplier=lr_multiplier, groups=self.z_dim)
                 setattr(self, f'fc{idx}', layer)
         elif self.nav_type == 'fixed':
@@ -64,7 +69,6 @@ class Navigator(torch.nn.Module):
         else:
             raise ValueError('Unknown nav_type:', self.nav_type)
 
-        self.use_layer_heat = use_layer_heat
         self.heat_logits = torch.nn.Parameter(torch.randn([1, self.z_dim, self.num_ws])) # (1, z_dim, num_ws)
         # self.epsilon_dir = torch.nn.Parameter(torch.randn([self.z_dim]) * 0.02)
 
@@ -88,5 +92,10 @@ class Navigator(torch.nn.Module):
             x = layer(x)
         # x = normalize_2nd_moment(x, dim=-1) * 0.02
         # x = normalize_2nd_moment(x, dim=-1) * self.sample_var_scale(x)
-        x = normalize_2nd_moment(x, dim=-1)
+        if self.use_layer_heat:
+            dir_x = normalize_2nd_moment(x[:, :, :self.w_dim], dim=-1)
+            heat_x = x[:, :, self.w_dim:]
+            x = torch.cat([dir_x, heat_x], dim=-1)
+        else:
+            x = normalize_2nd_moment(x, dim=-1)
         return x

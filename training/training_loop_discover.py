@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 04 May 2021 21:59:05 AEST
+# --- Last Modified: Wed 05 May 2021 03:26:43 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -51,18 +51,26 @@ def get_walk(w_origin_ws, M, n_samples_per):
         row_ls = []
         row_ls.append(w_origin_ws)
 
-        if M.use_layer_heat:
-            heat_logits = M.heat_logits # (1, M.z_dim, num_ws)
-            layer_heat = F.softmax(M.heat_logits[:, i], dim=-1).unsqueeze(2) # (1, num_ws, 1)
-        else:
-            layer_heat = torch.ones(1, M.num_ws, 1).to(w_origin.device)
+        # if M.use_layer_heat:
+            # heat_logits = M.heat_logits # (1, M.z_dim, num_ws)
+            # layer_heat = F.softmax(M.heat_logits[:, i], dim=-1).unsqueeze(2) # (1, num_ws, 1)
+        # else:
+            # layer_heat = torch.ones(1, M.num_ws, 1).to(w_origin.device)
 
+        # print('M.use_layer_heat:', M.use_layer_heat)
         w = w_origin.clone()
         w_save = w_origin_ws.clone()
         # Forward:
         for j in range(n_samples_per // 2):
             for k in range(5): # Record every 10 steps
-                delta = run_M(M, w) * 0.03 # (1, M.z_dim, w_dim)
+                out_M = run_M(M, w) * 0.03 # (1, M.z_dim, w_dim+num_ws)
+                # delta = run_M(M, w) * 0.03 # (1, M.z_dim, w_dim)
+                delta = out_M[:, :, :M.w_dim] # (1, M.z_dim, w_dim)
+                if M.use_layer_heat:
+                    # layer_heat = F.softmax(F.softmax(out_M[:, i, M.w_dim:], dim=-1), dim=-1).unsqueeze(2) # (1, num_ws, 1)
+                    layer_heat = F.softmax(out_M[:, i, M.w_dim:], dim=-1).unsqueeze(2) # (1, num_ws, 1)
+                else:
+                    layer_heat = torch.ones(1, M.num_ws, 1).to(w_origin.device)/M.num_ws
                 w_save = w_save + delta[:, i:i+1] * layer_heat # (1, num_ws, w_dim)
                 w = w_save.mean(dim=1)
             row_ls.append(w_save.clone())
@@ -72,7 +80,14 @@ def get_walk(w_origin_ws, M, n_samples_per):
         # Backward:
         for j in range(n_samples_per - n_samples_per // 2 - 1):
             for k in range(5): # Record every 10 steps
-                delta = -run_M(M, w) * 0.03 # (1, M.z_dim, w_dim)
+                out_M = run_M(M, w) * 0.03 # (1, M.z_dim, w_dim+num_ws)
+                # delta = -run_M(M, w) * 0.03 # (1, M.z_dim, w_dim)
+                delta = -out_M[:, :, :M.w_dim] # (1, M.z_dim, w_dim)
+                if M.use_layer_heat:
+                    # layer_heat = F.softmax(F.softmax(out_M[:, i, M.w_dim:], dim=-1), dim=-1).unsqueeze(2) # (1, num_ws, 1)
+                    layer_heat = F.softmax(out_M[:, i, M.w_dim:], dim=-1).unsqueeze(2) # (1, num_ws, 1)
+                else:
+                    layer_heat = torch.ones(1, M.num_ws, 1).to(w_origin.device)/M.num_ws
                 w_save = w_save + delta[:, i:i+1] * layer_heat # (1, num_ws, w_dim)
                 w = w_save.mean(dim=1)
             row_ls = [w_save.clone()] + row_ls
@@ -224,7 +239,7 @@ def training_loop(
     if rank == 0:
         print('Exporting sample images...')
         walk_grid_size = (n_samples_per, M.z_dim) # (gw, gh)
-        z_origin = torch.randn([1, G.z_dim], device=device)*0.5
+        z_origin = torch.randn([1, G.z_dim], device=device)
         c_origin = torch.randn([1, G.c_dim], device=device)
         w_origin = G.mapping(z_origin, c_origin) # (1, num_ws, w_dim)
         w_walk = get_walk(w_origin, M, n_samples_per).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
@@ -341,7 +356,7 @@ def training_loop(
 
         # Save image snapshot.
         if (rank == 0) and (image_snapshot_ticks is not None) and (done or cur_tick % image_snapshot_ticks == 0):
-            z_origin = torch.randn([1, G.z_dim], device=device)*0.5
+            z_origin = torch.randn([1, G.z_dim], device=device)
             c_origin = torch.randn([1, G.c_dim], device=device)
             w_origin = G.mapping(z_origin, c_origin) # (1, num_ws, w_dim)
             w_walk = get_walk(w_origin, M, n_samples_per).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
