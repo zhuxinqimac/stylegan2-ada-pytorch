@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 30 Apr 2021 18:03:56 AEST
+# --- Last Modified: Tue 04 May 2021 17:20:15 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -17,6 +17,7 @@ Loss for Discover Network. Code borrowed from Nvidia StyleGAN2-ada-pytorch.
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch import nn
 from torch_utils import training_stats
 from torch_utils import misc
@@ -26,7 +27,8 @@ from training.loss import Loss
 #----------------------------------------------------------------------------
 
 class DiscoverLoss(Loss):
-    def __init__(self, device, G_mapping, G_synthesis, M, S, S_L, norm_on_depth, div_lambda=0., norm_lambda=0., var_sample_scale=1.):
+    def __init__(self, device, G_mapping, G_synthesis, M, S, S_L, norm_on_depth,
+                 div_lambda=0., norm_lambda=0., var_sample_scale=1.):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -205,8 +207,8 @@ class DiscoverLoss(Loss):
         if do_Mmain:
             with torch.autograd.profiler.record_function('Mmain_forward'):
                 batch = gen_z.size(0)
-                ws = self.run_G_mapping(gen_z, gen_c)
-                ws = ws[:, 0] # remove broadcast
+                ws_orig = self.run_G_mapping(gen_z, gen_c)
+                ws = ws_orig[:, 0] # remove broadcast
                 delta = self.run_M(ws, sync)
                 loss_diversity = self.calc_loss_diversity(delta) # (b/1)
                 if delta.size(0) == 1:
@@ -216,13 +218,23 @@ class DiscoverLoss(Loss):
                 delta_pos = torch.gather(delta[batch//2:], 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(1, 1, self.M.w_dim)).squeeze()
                 delta_neg = torch.gather(delta[batch//2:], 1, pos_neg_idx[:, 1].view(batch//2, 1, 1).repeat(1, 1, self.M.w_dim)).squeeze() # (b//2, w_dim)
 
+                if self.M.use_layer_heat:
+                    heat_logits = self.M.heat_logits.repeat(batch//2, 1, 1) # (b//2, M.z_dim, num_ws)
+                    layer_heat_q = F.softmax(torch.gather(heat_logits, 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(1, 1, self.G_mapping.num_ws)).squeeze(),
+                                             dim=-1).unsqueeze(2)
+                    layer_heat_pos = layer_heat_q
+                    layer_heat_neg = F.softmax(torch.gather(heat_logits, 1, pos_neg_idx[:, 1].view(batch//2, 1, 1).repeat(1, 1, self.G_mapping.num_ws)).squeeze(),
+                                               dim=-1).unsqueeze(2) # (b//2, num_ws, 1)
+                else:
+                    layer_heat_q = layer_heat_pos = layer_heat_neg = 1.
+
                 scale = torch.abs(torch.randn(batch//2, device=delta.device) * self.var_sample_scale).view(batch//2, 1)
 
-                ws_q = ws[:batch//2] + delta_q * scale
-                ws_pos = ws[batch//2:] + delta_pos * scale
-                ws_neg = ws[batch//2:] + delta_neg * scale
-                ws_all = torch.cat([ws, ws_q, ws_pos, ws_neg],
-                                   dim=0).unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) # (2.5 * batch, num_ws, w_dim)
+                ws_q = ws[:batch//2].unsqueeze(1) + (delta_q * scale).unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) * layer_heat_q
+                ws_pos = ws[batch//2:].unsqueeze(1) + (delta_pos * scale).unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) * layer_heat_pos
+                ws_neg = ws[batch//2:].unsqueeze(1) + (delta_neg * scale).unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) * layer_heat_neg
+
+                ws_all = torch.cat([ws_orig, ws_q, ws_pos, ws_neg], dim=0) # (2.5 * batch, num_ws, w_dim)
                 imgs_all = self.run_G_synthesis(ws_all)
                 outs_all = self.run_S(imgs_all)
                 loss_Mmain = self.extract_diff_loss(outs_all)

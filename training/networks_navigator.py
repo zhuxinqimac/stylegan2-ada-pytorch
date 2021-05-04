@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 30 Apr 2021 00:32:36 AEST
+# --- Last Modified: Tue 04 May 2021 16:39:23 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -39,6 +39,7 @@ class Navigator(torch.nn.Module):
         lr_multiplier   = 1,        # Learning rate multiplier.
         nav_type        = 'ada',    # Navigator type: 'ada', 'fixed'.
         num_layers      = 1,        # Number of layers.
+        use_layer_heat  = False,    # If use layer_heat in discover loss.
     ):
         super().__init__()
         self.z_dim = z_dim
@@ -63,6 +64,8 @@ class Navigator(torch.nn.Module):
         else:
             raise ValueError('Unknown nav_type:', self.nav_type)
 
+        self.use_layer_heat = use_layer_heat
+        self.heat_logits = torch.nn.Parameter(torch.randn([1, self.z_dim, self.num_ws])) # (1, z_dim, num_ws)
         # self.epsilon_dir = torch.nn.Parameter(torch.randn([self.z_dim]) * 0.02)
 
     def sample_var_scale(self, x):

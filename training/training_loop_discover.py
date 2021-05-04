@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 30 Apr 2021 23:14:24 AEST
+# --- Last Modified: Tue 04 May 2021 17:36:01 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -27,6 +27,7 @@ import numpy as np
 import torch
 import lpips
 import dnnlib
+import torch.nn.functional as F
 from torch_utils import misc
 from torch_utils import training_stats
 from torch_utils.ops import conv2d_gradfix
@@ -41,34 +42,44 @@ def run_M(M, w):
     delta = M(w)
     return delta
 
-def get_walk(w_origin, M, n_samples_per):
+def get_walk(w_origin_ws, M, n_samples_per):
     # gh, gw = M.z_dim, n_samples_per
     # return: (gh * gw, num_ws, w_dim)
     walk_ls = []
-    w_origin = w_origin[:, 0] # remove broadcast.
+    w_origin = w_origin_ws[:, 0] # remove broadcast.
     for i in range(M.z_dim):
         row_ls = []
-        row_ls.append(w_origin)
+        row_ls.append(w_origin_ws)
+
+        if M.use_layer_heat:
+            heat_logits = M.heat_logits # (1, M.z_dim, num_ws)
+            layer_heat = F.softmax(M.heat_logits[:, i], dim=-1).unsqueeze(2) # (1, num_ws, 1)
+        else:
+            layer_heat = torch.ones(1, M.num_ws, 1)
 
         w = w_origin.clone()
+        w_save = w_origin_ws.clone()
         # Forward:
         for j in range(n_samples_per // 2):
-            for k in range(10): # Record every 10 steps
-                delta = run_M(M, w) * 0.003 # (1, M.z_dim, w_dim)
-                w += delta[:, i]
-            row_ls.append(w.clone())
+            for k in range(5): # Record every 10 steps
+                delta = run_M(M, w) * 0.03 # (1, M.z_dim, w_dim)
+                w_save = w_save + delta[:, i:i+1] * layer_heat # (1, num_ws, w_dim)
+                w = w_save.mean(dim=1)
+            row_ls.append(w_save.clone())
 
         w = w_origin.clone()
+        w_save = w_origin_ws.clone()
         # Backward:
         for j in range(n_samples_per - n_samples_per // 2 - 1):
-            for k in range(10): # Record every 10 steps
-                delta = -run_M(M, w) * 0.003 # (1, M.z_dim, w_dim)
-                w += delta[:, i]
-            row_ls = [w.clone()] + row_ls
+            for k in range(5): # Record every 10 steps
+                delta = -run_M(M, w) * 0.03 # (1, M.z_dim, w_dim)
+                w_save = w_save + delta[:, i:i+1] * layer_heat # (1, num_ws, w_dim)
+                w = w_save.mean(dim=1)
+            row_ls = [w_save.clone()] + row_ls
         row_tensor = torch.cat(row_ls, dim=0)
         walk_ls.append(row_tensor)
-    walk_tensor = torch.cat(walk_ls, dim=0) # (z_dim * n_samples_per, w_dim)
-    return walk_tensor.unsqueeze(1).repeat(1, M.num_ws, 1)
+    walk_tensor = torch.cat(walk_ls, dim=0) # (z_dim * n_samples_per, num_ws, w_dim)
+    return walk_tensor
 
 #----------------------------------------------------------------------------
 
