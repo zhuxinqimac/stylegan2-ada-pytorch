@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 04 May 2021 17:36:01 AEST
+# --- Last Modified: Tue 04 May 2021 17:49:47 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -205,7 +205,7 @@ def training_loop(
         w_walk = get_walk(w_origin, M, n_samples_per).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
         images = torch.cat([G.synthesis(w, noise_mode='const').cpu() for w in w_walk]).numpy()
         print('images.shape:', images.shape)
-        save_image_grid(images, os.path.join(run_dir, 'tranv_init.png'), drange=[-1,1], grid_size=walk_grid_size)
+        save_image_grid(images, os.path.join(run_dir, 'trav_init.png'), drange=[-1,1], grid_size=walk_grid_size)
 
     # Initialize logs.
     if rank == 0:
@@ -315,7 +315,7 @@ def training_loop(
             w_origin = G.mapping(z_origin, c_origin) # (1, num_ws, w_dim)
             w_walk = get_walk(w_origin, M, n_samples_per).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
             images = torch.cat([G.synthesis(w, noise_mode='const').cpu() for w in w_walk]).numpy()
-            save_image_grid(images, os.path.join(run_dir, f'tranv_{cur_nimg//1000:06d}.png'), drange=[-1,1], grid_size=walk_grid_size)
+            save_image_grid(images, os.path.join(run_dir, f'trav_{cur_nimg//1000:06d}.png'), drange=[-1,1], grid_size=walk_grid_size)
 
         # Save network snapshot.
         snapshot_pkl = None
