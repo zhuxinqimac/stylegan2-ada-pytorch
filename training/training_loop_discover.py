@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 04 May 2021 18:58:54 AEST
+# --- Last Modified: Tue 04 May 2021 19:18:17 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -108,6 +108,7 @@ def training_loop(
     n_samples_per           = 10,       # The number of steps in traversals.
     sensor_type             = 'alex',   # The sensor network type.
     gan_network_pkl         = None,     # The Generator network pkl.
+    save_size               = 128,      # Image size to save per image in traversal.
 ):
     # Initialize.
     start_time = time.time()
@@ -203,7 +204,11 @@ def training_loop(
         c_origin = torch.randn([1, G.c_dim], device=device)
         w_origin = G.mapping(z_origin, c_origin) # (1, num_ws, w_dim)
         w_walk = get_walk(w_origin, M, n_samples_per).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
-        images = torch.cat([G.synthesis(w, noise_mode='const').cpu() for w in w_walk]).numpy()
+        images = torch.cat([G.synthesis(w, noise_mode='const').cpu() for w in w_walk])
+        if save_size < images.size(-1):
+            images = F.adaptive_avg_pool2d(images, (save_size, save_size)).numpy()
+        else:
+            images = images.numpy()
         print('images.shape:', images.shape)
         save_image_grid(images, os.path.join(run_dir, 'trav_init.png'), drange=[-1,1], grid_size=walk_grid_size)
 
@@ -314,7 +319,11 @@ def training_loop(
             c_origin = torch.randn([1, G.c_dim], device=device)
             w_origin = G.mapping(z_origin, c_origin) # (1, num_ws, w_dim)
             w_walk = get_walk(w_origin, M, n_samples_per).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
-            images = torch.cat([G.synthesis(w, noise_mode='const').cpu() for w in w_walk]).numpy()
+            images = torch.cat([G.synthesis(w, noise_mode='const').cpu() for w in w_walk])
+            if save_size < images.size(-1):
+                images = F.adaptive_avg_pool2d(images, (save_size, save_size)).numpy()
+            else:
+                images = images.numpy()
             save_image_grid(images, os.path.join(run_dir, f'trav_{cur_nimg//1000:06d}.png'), drange=[-1,1], grid_size=walk_grid_size)
 
         # Save network snapshot.

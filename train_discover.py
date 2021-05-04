@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 04 May 2021 16:42:27 AEST
+# --- Last Modified: Tue 04 May 2021 19:17:05 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -82,6 +82,7 @@ def setup_training_loop_kwargs(
     var_sample_scale = None, # The sampling scale for variation.
     lr_multiplier = None, # The lr_multiplier in M net.
     use_layer_heat = None, # If use layer_heat in discover loss.
+    save_size = None, # The size to save per image in traversal.
 ):
     args = dnnlib.EasyDict()
 
@@ -222,6 +223,7 @@ def setup_training_loop_kwargs(
     args.total_kimg = spec.kimg
     args.batch_size = spec.mb
     args.batch_gpu = spec.mb // spec.ref_gpus
+    args.save_size = save_size
 
     if kimg is not None:
         assert isinstance(kimg, int)
@@ -363,6 +365,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--var_sample_scale', help='The sampling scale for variation', metavar='FLOAT', default=1.)
 @click.option('--lr_multiplier', help='The lr_multiplier in M net', metavar='FLOAT', default=1.)
 @click.option('--use_layer_heat', help='If use layer_heat in discover loss', metavar='BOOL', default=False)
+@click.option('--save_size', help='The size to save per image in traversal', metavar='INT', default=128)
 
 def main(ctx, outdir, dry_run, **config_kwargs):
     """Train a GAN using the techniques described in the paper
