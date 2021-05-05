@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 05 May 2021 03:27:01 AEST
+# --- Last Modified: Wed 05 May 2021 18:14:46 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -219,8 +219,16 @@ class DiscoverLoss(Loss):
                 delta_pos = torch.gather(delta[batch//2:], 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(1, 1, self.M.w_dim)).squeeze()
                 delta_neg = torch.gather(delta[batch//2:], 1, pos_neg_idx[:, 1].view(batch//2, 1, 1).repeat(1, 1, self.M.w_dim)).squeeze() # (b//2, w_dim)
 
-                if self.M.use_layer_heat:
-                    # heat_logits = self.M.heat_logits.repeat(batch//2, 1, 1) # (b//2, M.z_dim, num_ws)
+                if self.M.use_global_layer_heat:
+                    heat_logits = self.M.heat_logits.repeat(batch//2, 1, 1) # (b//2, M.z_dim, num_ws)
+                    layer_heat_q = F.softmax(torch.gather(heat_logits, 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(
+                        1, 1, self.G_mapping.num_ws)).squeeze(), dim=-1).unsqueeze(2)
+                    # layer_heat_pos = layer_heat_q
+                    layer_heat_pos = F.softmax(torch.gather(heat_logits, 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(
+                        1, 1, self.G_mapping.num_ws)).squeeze(), dim=-1).unsqueeze(2)
+                    layer_heat_neg = F.softmax(torch.gather(heat_logits, 1, pos_neg_idx[:, 1].view(batch//2, 1, 1).repeat(
+                        1, 1, self.G_mapping.num_ws)).squeeze(), dim=-1).unsqueeze(2) # (b//2, num_ws, 1)
+                elif self.M.use_local_layer_heat:
                     heat_logits = out_M[:, :, self.M.w_dim:] # (b, M.z_dim, num_ws)
                     layer_heat_q = F.softmax(torch.gather(heat_logits[:batch//2], 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(
                         1, 1, self.G_mapping.num_ws)).squeeze(), dim=-1).unsqueeze(2)
@@ -230,7 +238,7 @@ class DiscoverLoss(Loss):
                     layer_heat_neg = F.softmax(torch.gather(heat_logits[batch//2:], 1, pos_neg_idx[:, 1].view(batch//2, 1, 1).repeat(
                         1, 1, self.G_mapping.num_ws)).squeeze(), dim=-1).unsqueeze(2) # (b//2, num_ws, 1)
                 else:
-                    layer_heat_q = layer_heat_pos = layer_heat_neg = 1.
+                    layer_heat_q = layer_heat_pos = layer_heat_neg = 1./self.num_ws
 
                 scale = torch.abs(torch.randn(batch//2, device=delta.device) * self.var_sample_scale).view(batch//2, 1)
 

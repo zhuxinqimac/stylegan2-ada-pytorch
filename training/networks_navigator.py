@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 04 May 2021 23:16:11 AEST
+# --- Last Modified: Wed 05 May 2021 18:01:51 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -39,7 +39,8 @@ class Navigator(torch.nn.Module):
         lr_multiplier   = 1,        # Learning rate multiplier.
         nav_type        = 'ada',    # Navigator type: 'ada', 'fixed'.
         num_layers      = 1,        # Number of layers.
-        use_layer_heat  = False,    # If use layer_heat in discover loss.
+        use_global_layer_heat  = False,    # If use layer_heat in discover loss.
+        use_local_layer_heat  = False,    # If use layer_heat in discover loss.
     ):
         super().__init__()
         self.z_dim = z_dim
@@ -50,12 +51,13 @@ class Navigator(torch.nn.Module):
         self.lr_multiplier = lr_multiplier
         self.nav_type = nav_type
         self.num_layers = num_layers
-        self.use_layer_heat = use_layer_heat
+        self.use_global_layer_heat = use_global_layer_heat
+        self.use_local_layer_heat = use_local_layer_heat
         if self.nav_type == 'ada':
             for idx in range(self.num_layers):
                 act = 'linear' if idx == num_layers-1 else activation
                 in_features = w_dim * self.z_dim
-                if self.use_layer_heat and idx == num_layers-1:
+                if self.use_local_layer_heat and idx == num_layers-1:
                     out_features = (w_dim+self.num_ws) * self.z_dim
                 else:
                     out_features = w_dim * self.z_dim
@@ -69,7 +71,8 @@ class Navigator(torch.nn.Module):
         else:
             raise ValueError('Unknown nav_type:', self.nav_type)
 
-        self.heat_logits = torch.nn.Parameter(torch.randn([1, self.z_dim, self.num_ws])) # (1, z_dim, num_ws)
+        if self.use_global_layer_heat:
+            self.heat_logits = torch.nn.Parameter(torch.randn([1, self.z_dim, self.num_ws])) # (1, z_dim, num_ws)
         # self.epsilon_dir = torch.nn.Parameter(torch.randn([self.z_dim]) * 0.02)
 
     def sample_var_scale(self, x):
@@ -92,7 +95,7 @@ class Navigator(torch.nn.Module):
             x = layer(x)
         # x = normalize_2nd_moment(x, dim=-1) * 0.02
         # x = normalize_2nd_moment(x, dim=-1) * self.sample_var_scale(x)
-        if self.use_layer_heat:
+        if self.use_local_layer_heat:
             dir_x = normalize_2nd_moment(x[:, :, :self.w_dim], dim=-1)
             heat_x = x[:, :, self.w_dim:]
             x = torch.cat([dir_x, heat_x], dim=-1)

@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 05 May 2021 03:26:43 AEST
+# --- Last Modified: Wed 05 May 2021 18:16:19 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -51,12 +51,6 @@ def get_walk(w_origin_ws, M, n_samples_per):
         row_ls = []
         row_ls.append(w_origin_ws)
 
-        # if M.use_layer_heat:
-            # heat_logits = M.heat_logits # (1, M.z_dim, num_ws)
-            # layer_heat = F.softmax(M.heat_logits[:, i], dim=-1).unsqueeze(2) # (1, num_ws, 1)
-        # else:
-            # layer_heat = torch.ones(1, M.num_ws, 1).to(w_origin.device)
-
         # print('M.use_layer_heat:', M.use_layer_heat)
         w = w_origin.clone()
         w_save = w_origin_ws.clone()
@@ -64,11 +58,14 @@ def get_walk(w_origin_ws, M, n_samples_per):
         for j in range(n_samples_per // 2):
             for k in range(5): # Record every 10 steps
                 out_M = run_M(M, w) * 0.03 # (1, M.z_dim, w_dim+num_ws)
-                # delta = run_M(M, w) * 0.03 # (1, M.z_dim, w_dim)
                 delta = out_M[:, :, :M.w_dim] # (1, M.z_dim, w_dim)
-                if M.use_layer_heat:
+                if M.use_local_layer_heat:
                     # layer_heat = F.softmax(F.softmax(out_M[:, i, M.w_dim:], dim=-1), dim=-1).unsqueeze(2) # (1, num_ws, 1)
                     layer_heat = F.softmax(out_M[:, i, M.w_dim:], dim=-1).unsqueeze(2) # (1, num_ws, 1)
+                elif M.use_global_layer_heat:
+                    layer_heat = F.softmax(M.heat_logits[:, i], dim=-1).unsqueeze(2) # (1, num_ws, 1)
+                    # if j == 0 and k == 0:
+                        # print('layer_heat_forward:', layer_heat)
                 else:
                     layer_heat = torch.ones(1, M.num_ws, 1).to(w_origin.device)/M.num_ws
                 w_save = w_save + delta[:, i:i+1] * layer_heat # (1, num_ws, w_dim)
@@ -81,16 +78,20 @@ def get_walk(w_origin_ws, M, n_samples_per):
         for j in range(n_samples_per - n_samples_per // 2 - 1):
             for k in range(5): # Record every 10 steps
                 out_M = run_M(M, w) * 0.03 # (1, M.z_dim, w_dim+num_ws)
-                # delta = -run_M(M, w) * 0.03 # (1, M.z_dim, w_dim)
                 delta = -out_M[:, :, :M.w_dim] # (1, M.z_dim, w_dim)
-                if M.use_layer_heat:
+                if M.use_local_layer_heat:
                     # layer_heat = F.softmax(F.softmax(out_M[:, i, M.w_dim:], dim=-1), dim=-1).unsqueeze(2) # (1, num_ws, 1)
                     layer_heat = F.softmax(out_M[:, i, M.w_dim:], dim=-1).unsqueeze(2) # (1, num_ws, 1)
+                elif M.use_global_layer_heat:
+                    layer_heat = F.softmax(M.heat_logits[:, i], dim=-1).unsqueeze(2) # (1, num_ws, 1)
+                    # if j == 0 and k == 0:
+                        # print('layer_heat_backward:', layer_heat)
                 else:
                     layer_heat = torch.ones(1, M.num_ws, 1).to(w_origin.device)/M.num_ws
                 w_save = w_save + delta[:, i:i+1] * layer_heat # (1, num_ws, w_dim)
                 w = w_save.mean(dim=1)
             row_ls = [w_save.clone()] + row_ls
+
         row_tensor = torch.cat(row_ls, dim=0)
         walk_ls.append(row_tensor)
     walk_tensor = torch.cat(walk_ls, dim=0) # (z_dim * n_samples_per, num_ws, w_dim)

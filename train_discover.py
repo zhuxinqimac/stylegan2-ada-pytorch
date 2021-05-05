@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 04 May 2021 19:17:05 AEST
+# --- Last Modified: Wed 05 May 2021 18:09:26 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -81,7 +81,8 @@ def setup_training_loop_kwargs(
     norm_lambda = None, # The norm lambda of diff features.
     var_sample_scale = None, # The sampling scale for variation.
     lr_multiplier = None, # The lr_multiplier in M net.
-    use_layer_heat = None, # If use layer_heat in discover loss.
+    use_local_layer_heat = None, # If use local layer_heat in discover loss.
+    use_global_layer_heat = None, # If use global layer_heat in discover loss.
     save_size = None, # The size to save per image in traversal.
 ):
     args = dnnlib.EasyDict()
@@ -202,7 +203,8 @@ def setup_training_loop_kwargs(
     args.M_kwargs.nav_type = nav_type
     args.M_kwargs.num_layers = num_layers
     args.M_kwargs.lr_multiplier = lr_multiplier
-    args.M_kwargs.use_layer_heat = use_layer_heat
+    args.M_kwargs.use_local_layer_heat = use_local_layer_heat
+    args.M_kwargs.use_global_layer_heat = use_global_layer_heat
     # activation      = 'lrelu',  # Activation function: 'relu', 'lrelu', etc.
     # lr_multiplier   = 0.01,        # Learning rate multiplier.
     # nav_type        = 'ada',    # Navigator type: 'ada', 'fixed'.
@@ -364,7 +366,8 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--norm_lambda', help='The norm lambda in diff features', metavar='FLOAT', default=0.)
 @click.option('--var_sample_scale', help='The sampling scale for variation', metavar='FLOAT', default=1.)
 @click.option('--lr_multiplier', help='The lr_multiplier in M net', metavar='FLOAT', default=1.)
-@click.option('--use_layer_heat', help='If use layer_heat in discover loss', metavar='BOOL', default=False)
+@click.option('--use_local_layer_heat', help='If use local layer_heat in discover loss', metavar='BOOL', default=False)
+@click.option('--use_global_layer_heat', help='If use global layer_heat in discover loss', metavar='BOOL', default=False)
 @click.option('--save_size', help='The size to save per image in traversal', metavar='INT', default=128)
 
 def main(ctx, outdir, dry_run, **config_kwargs):
