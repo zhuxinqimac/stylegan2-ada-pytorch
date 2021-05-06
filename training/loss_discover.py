@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 05 May 2021 18:14:46 AEST
+# --- Last Modified: Thu 06 May 2021 03:05:04 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -28,7 +28,7 @@ from training.loss import Loss
 
 class DiscoverLoss(Loss):
     def __init__(self, device, G_mapping, G_synthesis, M, S, S_L, norm_on_depth,
-                 div_lambda=0., norm_lambda=0., var_sample_scale=1.):
+                 div_lambda=0., norm_lambda=0., var_sample_scale=1., var_sample_mean=0.):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -40,6 +40,7 @@ class DiscoverLoss(Loss):
         self.div_lambda = div_lambda
         self.norm_lambda = norm_lambda
         self.var_sample_scale = var_sample_scale
+        self.var_sample_mean = var_sample_mean
         self.cos_fn = nn.CosineSimilarity(dim=1)
         self.cos_fn_diversity = nn.CosineSimilarity(dim=3)
 
@@ -240,7 +241,7 @@ class DiscoverLoss(Loss):
                 else:
                     layer_heat_q = layer_heat_pos = layer_heat_neg = 1./self.num_ws
 
-                scale = torch.abs(torch.randn(batch//2, device=delta.device) * self.var_sample_scale).view(batch//2, 1)
+                scale = torch.abs(torch.randn(batch//2, device=delta.device) * self.var_sample_scale + self.var_sample_mean).view(batch//2, 1)
 
                 ws_q = ws[:batch//2].unsqueeze(1) + (delta_q * scale).unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) * layer_heat_q
                 ws_pos = ws[batch//2:].unsqueeze(1) + (delta_pos * scale).unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) * layer_heat_pos

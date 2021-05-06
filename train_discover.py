@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 05 May 2021 18:09:26 AEST
+# --- Last Modified: Thu 06 May 2021 03:05:38 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -80,6 +80,7 @@ def setup_training_loop_kwargs(
     div_lambda = None, # The W-space cos_fn lambda.
     norm_lambda = None, # The norm lambda of diff features.
     var_sample_scale = None, # The sampling scale for variation.
+    var_sample_mean = None, # The sampling mean for variation.
     lr_multiplier = None, # The lr_multiplier in M net.
     use_local_layer_heat = None, # If use local layer_heat in discover loss.
     use_global_layer_heat = None, # If use global layer_heat in discover loss.
@@ -221,6 +222,7 @@ def setup_training_loop_kwargs(
     args.loss_kwargs.div_lambda = div_lambda
     args.loss_kwargs.norm_lambda = norm_lambda
     args.loss_kwargs.var_sample_scale = var_sample_scale
+    args.loss_kwargs.var_sample_mean = var_sample_mean
 
     args.total_kimg = spec.kimg
     args.batch_size = spec.mb
@@ -365,6 +367,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--div_lambda', help='The W-space div_lambda', metavar='FLOAT', default=0.)
 @click.option('--norm_lambda', help='The norm lambda in diff features', metavar='FLOAT', default=0.)
 @click.option('--var_sample_scale', help='The sampling scale for variation', metavar='FLOAT', default=1.)
+@click.option('--var_sample_mean', help='The sampling mean for variation', metavar='FLOAT', default=1.)
 @click.option('--lr_multiplier', help='The lr_multiplier in M net', metavar='FLOAT', default=1.)
 @click.option('--use_local_layer_heat', help='If use local layer_heat in discover loss', metavar='BOOL', default=False)
 @click.option('--use_global_layer_heat', help='If use global layer_heat in discover loss', metavar='BOOL', default=False)
