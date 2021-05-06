@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Thu 06 May 2021 03:05:04 AEST
+# --- Last Modified: Thu 06 May 2021 21:40:38 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -28,7 +28,7 @@ from training.loss import Loss
 
 class DiscoverLoss(Loss):
     def __init__(self, device, G_mapping, G_synthesis, M, S, S_L, norm_on_depth,
-                 div_lambda=0., norm_lambda=0., var_sample_scale=1., var_sample_mean=0.):
+                 div_lambda=0., div_heat_lambda=0., norm_lambda=0., var_sample_scale=1., var_sample_mean=0.):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -38,6 +38,7 @@ class DiscoverLoss(Loss):
         self.S_L = S_L
         self.norm_on_depth = norm_on_depth
         self.div_lambda = div_lambda
+        self.div_heat_lambda = div_heat_lambda
         self.norm_lambda = norm_lambda
         self.var_sample_scale = var_sample_scale
         self.var_sample_mean = var_sample_mean
@@ -229,6 +230,7 @@ class DiscoverLoss(Loss):
                         1, 1, self.G_mapping.num_ws)).squeeze(), dim=-1).unsqueeze(2)
                     layer_heat_neg = F.softmax(torch.gather(heat_logits, 1, pos_neg_idx[:, 1].view(batch//2, 1, 1).repeat(
                         1, 1, self.G_mapping.num_ws)).squeeze(), dim=-1).unsqueeze(2) # (b//2, num_ws, 1)
+                    loss_heat_diversity = self.calc_loss_diversity(heat_logits)
                 elif self.M.use_local_layer_heat:
                     heat_logits = out_M[:, :, self.M.w_dim:] # (b, M.z_dim, num_ws)
                     layer_heat_q = F.softmax(torch.gather(heat_logits[:batch//2], 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(
@@ -238,6 +240,7 @@ class DiscoverLoss(Loss):
                         1, 1, self.G_mapping.num_ws)).squeeze(), dim=-1).unsqueeze(2)
                     layer_heat_neg = F.softmax(torch.gather(heat_logits[batch//2:], 1, pos_neg_idx[:, 1].view(batch//2, 1, 1).repeat(
                         1, 1, self.G_mapping.num_ws)).squeeze(), dim=-1).unsqueeze(2) # (b//2, num_ws, 1)
+                    loss_heat_diversity = self.calc_loss_diversity(heat_logits)
                 else:
                     layer_heat_q = layer_heat_pos = layer_heat_neg = 1./self.num_ws
 
@@ -253,6 +256,11 @@ class DiscoverLoss(Loss):
                 loss_Mmain = self.extract_diff_loss(outs_all)
                 training_stats.report('Loss/M/loss_diversity', loss_diversity)
                 loss_Mmain += self.div_lambda * loss_diversity
+
+                if self.M.use_local_layer_heat or self.M.use_global_layer_heat:
+                    loss_Mmain += self.div_heat_lambda * loss_heat_diversity
+                    training_stats.report('Loss/M/loss_heat_diversity', loss_heat_diversity)
+
                 training_stats.report('Loss/M/loss_all', loss_Mmain)
 
                 # # Weight regularization.

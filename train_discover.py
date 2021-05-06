@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Thu 06 May 2021 03:05:38 AEST
+# --- Last Modified: Thu 06 May 2021 21:38:38 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -78,6 +78,7 @@ def setup_training_loop_kwargs(
     norm_on_depth = None, # If normalize diff vectors taking depth in to account.
     gan_network_pkl = None, # The pretrained GAN network pkl.
     div_lambda = None, # The W-space cos_fn lambda.
+    div_heat_lambda = None, # The heat cos_fn lambda.
     norm_lambda = None, # The norm lambda of diff features.
     var_sample_scale = None, # The sampling scale for variation.
     var_sample_mean = None, # The sampling mean for variation.
@@ -220,6 +221,7 @@ def setup_training_loop_kwargs(
     args.loss_kwargs.S_L = 7 if args.sensor_type == 'squeeze' else 5
     args.loss_kwargs.norm_on_depth = norm_on_depth
     args.loss_kwargs.div_lambda = div_lambda
+    args.loss_kwargs.div_heat_lambda = div_heat_lambda
     args.loss_kwargs.norm_lambda = norm_lambda
     args.loss_kwargs.var_sample_scale = var_sample_scale
     args.loss_kwargs.var_sample_mean = var_sample_mean
@@ -365,6 +367,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--num_layers', help='Number of layers in Navigator', metavar='INT', default=2)
 @click.option('--norm_on_depth', help='If normalize diff vectors taking depth into account', metavar='BOOL', default=True)
 @click.option('--div_lambda', help='The W-space div_lambda', metavar='FLOAT', default=0.)
+@click.option('--div_heat_lambda', help='The div_heat_lambda', metavar='FLOAT', default=0.)
 @click.option('--norm_lambda', help='The norm lambda in diff features', metavar='FLOAT', default=0.)
 @click.option('--var_sample_scale', help='The sampling scale for variation', metavar='FLOAT', default=1.)
 @click.option('--var_sample_mean', help='The sampling mean for variation', metavar='FLOAT', default=1.)

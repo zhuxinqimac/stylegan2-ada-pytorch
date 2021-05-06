@@ -8,7 +8,7 @@
 
 # --- File Name: calibrate_discover.py
 # --- Creation Date: 01-05-2021
-# --- Last Modified: Tue 04 May 2021 00:19:13 AEST
+# --- Last Modified: Thu 06 May 2021 14:18:18 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Calibrate the discovered directions into a scale of approximate -2.5 to 2.5"""
@@ -67,7 +67,7 @@ def if_stop_explore(real_score_ls, feats_ls, max_steps, real_thresh, std_thresh)
         return True
     if len(real_score_ls) >= max_steps:
         return True
-    feats = torch.cat(feats_ls[-5:], dim=0) # (3, c, h, w)
+    feats = torch.cat(feats_ls[-10:], dim=0) # (3, c, h, w)
     # feats = torch.cat(feats_ls[-2:], dim=0) # (2, c, h, w)
     # feats = feats_ls[-1] - feats_ls[-2] # (c, h, w)
     # print(f'feats.shape:', feats.shape)

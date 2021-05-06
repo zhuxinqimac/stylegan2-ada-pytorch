@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 05 May 2021 18:16:19 AEST
+# --- Last Modified: Thu 06 May 2021 21:41:15 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -63,9 +63,8 @@ def get_walk(w_origin_ws, M, n_samples_per):
                     # layer_heat = F.softmax(F.softmax(out_M[:, i, M.w_dim:], dim=-1), dim=-1).unsqueeze(2) # (1, num_ws, 1)
                     layer_heat = F.softmax(out_M[:, i, M.w_dim:], dim=-1).unsqueeze(2) # (1, num_ws, 1)
                 elif M.use_global_layer_heat:
+                    # layer_heat = F.softmax(F.softmax(M.heat_logits[:, i], dim=-1), dim=-1).unsqueeze(2) # (1, num_ws, 1)
                     layer_heat = F.softmax(M.heat_logits[:, i], dim=-1).unsqueeze(2) # (1, num_ws, 1)
-                    # if j == 0 and k == 0:
-                        # print('layer_heat_forward:', layer_heat)
                 else:
                     layer_heat = torch.ones(1, M.num_ws, 1).to(w_origin.device)/M.num_ws
                 w_save = w_save + delta[:, i:i+1] * layer_heat # (1, num_ws, w_dim)
@@ -83,9 +82,8 @@ def get_walk(w_origin_ws, M, n_samples_per):
                     # layer_heat = F.softmax(F.softmax(out_M[:, i, M.w_dim:], dim=-1), dim=-1).unsqueeze(2) # (1, num_ws, 1)
                     layer_heat = F.softmax(out_M[:, i, M.w_dim:], dim=-1).unsqueeze(2) # (1, num_ws, 1)
                 elif M.use_global_layer_heat:
+                    # layer_heat = F.softmax(F.softmax(M.heat_logits[:, i], dim=-1), dim=-1).unsqueeze(2) # (1, num_ws, 1)
                     layer_heat = F.softmax(M.heat_logits[:, i], dim=-1).unsqueeze(2) # (1, num_ws, 1)
-                    # if j == 0 and k == 0:
-                        # print('layer_heat_backward:', layer_heat)
                 else:
                     layer_heat = torch.ones(1, M.num_ws, 1).to(w_origin.device)/M.num_ws
                 w_save = w_save + delta[:, i:i+1] * layer_heat # (1, num_ws, w_dim)
