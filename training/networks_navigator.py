@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 05 May 2021 18:01:51 AEST
+# --- Last Modified: Fri 07 May 2021 15:08:18 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -17,6 +17,7 @@ Navigator Networks. Code borrowed from stylegan2-ada-pytorch network from Nvidia
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch_utils import misc
 from torch_utils import persistence
 from torch_utils.ops import conv2d_resample
@@ -27,6 +28,14 @@ from training.networks import SynthesisNetwork, FullyConnectedLayer, normalize_2
 from training.networks_uneven import GroupFullyConnectedLayer
 
 #----------------------------------------------------------------------------
+def softmax_last_dim_fn(x):
+    return F.softmax(x, dim=-1)
+
+def double_softmax_last_dim_fn(x):
+    return F.softmax(F.softmax(x, dim=-1), dim=-1)
+
+def sigmoid_fn(x):
+    return torch.sigmoid(x)
 
 @persistence.persistent_class
 class Navigator(torch.nn.Module):
@@ -41,6 +50,7 @@ class Navigator(torch.nn.Module):
         num_layers      = 1,        # Number of layers.
         use_global_layer_heat  = False,    # If use layer_heat in discover loss.
         use_local_layer_heat  = False,    # If use layer_heat in discover loss.
+        heat_fn         = 'softmax' # If use layer_heat, the heat function.
     ):
         super().__init__()
         self.z_dim = z_dim
@@ -53,6 +63,7 @@ class Navigator(torch.nn.Module):
         self.num_layers = num_layers
         self.use_global_layer_heat = use_global_layer_heat
         self.use_local_layer_heat = use_local_layer_heat
+        self.heat_fn = self.get_heat_fn(heat_fn)
         if self.nav_type == 'ada':
             for idx in range(self.num_layers):
                 act = 'linear' if idx == num_layers-1 else activation
@@ -74,6 +85,17 @@ class Navigator(torch.nn.Module):
         if self.use_global_layer_heat:
             self.heat_logits = torch.nn.Parameter(torch.randn([1, self.z_dim, self.num_ws])) # (1, z_dim, num_ws)
         # self.epsilon_dir = torch.nn.Parameter(torch.randn([self.z_dim]) * 0.02)
+
+    def get_heat_fn(self, heat_fn_name):
+        if heat_fn_name == 'softmax':
+            heat_fn = softmax_last_dim_fn
+        elif heat_fn_name == 'sigmoid':
+            heat_fn = sigmoid_fn
+        elif heat_fn_name == 'double_softmax':
+            heat_fn = double_softmax_last_dim_fn
+        else:
+            raise ValueError('Unknown M.heat_fn:', heat_fn_name)
+        return heat_fn
 
     def sample_var_scale(self, x):
         if self.training:

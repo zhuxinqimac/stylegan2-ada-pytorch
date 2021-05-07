@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Thu 06 May 2021 21:38:38 AEST
+# --- Last Modified: Fri 07 May 2021 14:59:35 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -85,6 +85,7 @@ def setup_training_loop_kwargs(
     lr_multiplier = None, # The lr_multiplier in M net.
     use_local_layer_heat = None, # If use local layer_heat in discover loss.
     use_global_layer_heat = None, # If use global layer_heat in discover loss.
+    heat_fn = None, # If use layer_heat, the heat_fn .
     save_size = None, # The size to save per image in traversal.
 ):
     args = dnnlib.EasyDict()
@@ -207,6 +208,7 @@ def setup_training_loop_kwargs(
     args.M_kwargs.lr_multiplier = lr_multiplier
     args.M_kwargs.use_local_layer_heat = use_local_layer_heat
     args.M_kwargs.use_global_layer_heat = use_global_layer_heat
+    args.M_kwargs.heat_fn = heat_fn
     # activation      = 'lrelu',  # Activation function: 'relu', 'lrelu', etc.
     # lr_multiplier   = 0.01,        # Learning rate multiplier.
     # nav_type        = 'ada',    # Navigator type: 'ada', 'fixed'.
@@ -374,6 +376,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--lr_multiplier', help='The lr_multiplier in M net', metavar='FLOAT', default=1.)
 @click.option('--use_local_layer_heat', help='If use local layer_heat in discover loss', metavar='BOOL', default=False)
 @click.option('--use_global_layer_heat', help='If use global layer_heat in discover loss', metavar='BOOL', default=False)
+@click.option('--heat_fn', help='If use layer_heat, the heat_fn', metavar='STR', default='softmax')
 @click.option('--save_size', help='The size to save per image in traversal', metavar='INT', default=128)
 
 def main(ctx, outdir, dry_run, **config_kwargs):

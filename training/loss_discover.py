@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Thu 06 May 2021 21:40:38 AEST
+# --- Last Modified: Fri 07 May 2021 15:08:20 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -17,7 +17,6 @@ Loss for Discover Network. Code borrowed from Nvidia StyleGAN2-ada-pytorch.
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 from torch import nn
 from torch_utils import training_stats
 from torch_utils import misc
@@ -25,10 +24,10 @@ from torch_utils.ops import conv2d_gradfix
 from training.loss import Loss
 
 #----------------------------------------------------------------------------
-
 class DiscoverLoss(Loss):
     def __init__(self, device, G_mapping, G_synthesis, M, S, S_L, norm_on_depth,
-                 div_lambda=0., div_heat_lambda=0., norm_lambda=0., var_sample_scale=1., var_sample_mean=0.):
+                 div_lambda=0., div_heat_lambda=0., norm_lambda=0., var_sample_scale=1.,
+                 var_sample_mean=0.):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -223,23 +222,23 @@ class DiscoverLoss(Loss):
 
                 if self.M.use_global_layer_heat:
                     heat_logits = self.M.heat_logits.repeat(batch//2, 1, 1) # (b//2, M.z_dim, num_ws)
-                    layer_heat_q = F.softmax(torch.gather(heat_logits, 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(
-                        1, 1, self.G_mapping.num_ws)).squeeze(), dim=-1).unsqueeze(2)
+                    layer_heat_q = self.M.heat_fn(torch.gather(heat_logits, 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(
+                        1, 1, self.G_mapping.num_ws)).squeeze()).unsqueeze(2)
                     # layer_heat_pos = layer_heat_q
-                    layer_heat_pos = F.softmax(torch.gather(heat_logits, 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(
-                        1, 1, self.G_mapping.num_ws)).squeeze(), dim=-1).unsqueeze(2)
-                    layer_heat_neg = F.softmax(torch.gather(heat_logits, 1, pos_neg_idx[:, 1].view(batch//2, 1, 1).repeat(
-                        1, 1, self.G_mapping.num_ws)).squeeze(), dim=-1).unsqueeze(2) # (b//2, num_ws, 1)
+                    layer_heat_pos = self.M.heat_fn(torch.gather(heat_logits, 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(
+                        1, 1, self.G_mapping.num_ws)).squeeze()).unsqueeze(2)
+                    layer_heat_neg = self.M.heat_fn(torch.gather(heat_logits, 1, pos_neg_idx[:, 1].view(batch//2, 1, 1).repeat(
+                        1, 1, self.G_mapping.num_ws)).squeeze()).unsqueeze(2) # (b//2, num_ws, 1)
                     loss_heat_diversity = self.calc_loss_diversity(heat_logits)
                 elif self.M.use_local_layer_heat:
                     heat_logits = out_M[:, :, self.M.w_dim:] # (b, M.z_dim, num_ws)
-                    layer_heat_q = F.softmax(torch.gather(heat_logits[:batch//2], 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(
-                        1, 1, self.G_mapping.num_ws)).squeeze(), dim=-1).unsqueeze(2)
+                    layer_heat_q = self.M.heat_fn(torch.gather(heat_logits[:batch//2], 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(
+                        1, 1, self.G_mapping.num_ws)).squeeze()).unsqueeze(2)
                     # layer_heat_pos = layer_heat_q
-                    layer_heat_pos = F.softmax(torch.gather(heat_logits[batch//2:], 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(
-                        1, 1, self.G_mapping.num_ws)).squeeze(), dim=-1).unsqueeze(2)
-                    layer_heat_neg = F.softmax(torch.gather(heat_logits[batch//2:], 1, pos_neg_idx[:, 1].view(batch//2, 1, 1).repeat(
-                        1, 1, self.G_mapping.num_ws)).squeeze(), dim=-1).unsqueeze(2) # (b//2, num_ws, 1)
+                    layer_heat_pos = self.M.heat_fn(torch.gather(heat_logits[batch//2:], 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(
+                        1, 1, self.G_mapping.num_ws)).squeeze()).unsqueeze(2)
+                    layer_heat_neg = self.M.heat_fn(torch.gather(heat_logits[batch//2:], 1, pos_neg_idx[:, 1].view(batch//2, 1, 1).repeat(
+                        1, 1, self.G_mapping.num_ws)).squeeze()).unsqueeze(2) # (b//2, num_ws, 1)
                     loss_heat_diversity = self.calc_loss_diversity(heat_logits)
                 else:
                     layer_heat_q = layer_heat_pos = layer_heat_neg = 1./self.num_ws

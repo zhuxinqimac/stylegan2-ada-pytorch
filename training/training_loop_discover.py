@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Thu 06 May 2021 21:41:15 AEST
+# --- Last Modified: Fri 07 May 2021 15:06:54 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -60,11 +60,9 @@ def get_walk(w_origin_ws, M, n_samples_per):
                 out_M = run_M(M, w) * 0.03 # (1, M.z_dim, w_dim+num_ws)
                 delta = out_M[:, :, :M.w_dim] # (1, M.z_dim, w_dim)
                 if M.use_local_layer_heat:
-                    # layer_heat = F.softmax(F.softmax(out_M[:, i, M.w_dim:], dim=-1), dim=-1).unsqueeze(2) # (1, num_ws, 1)
-                    layer_heat = F.softmax(out_M[:, i, M.w_dim:], dim=-1).unsqueeze(2) # (1, num_ws, 1)
+                    layer_heat = M.heat_fn(out_M[:, i, M.w_dim:]).unsqueeze(2) # (1, num_ws, 1)
                 elif M.use_global_layer_heat:
-                    # layer_heat = F.softmax(F.softmax(M.heat_logits[:, i], dim=-1), dim=-1).unsqueeze(2) # (1, num_ws, 1)
-                    layer_heat = F.softmax(M.heat_logits[:, i], dim=-1).unsqueeze(2) # (1, num_ws, 1)
+                    layer_heat = M.heat_fn(M.heat_logits[:, i]).unsqueeze(2) # (1, num_ws, 1)
                 else:
                     layer_heat = torch.ones(1, M.num_ws, 1).to(w_origin.device)/M.num_ws
                 w_save = w_save + delta[:, i:i+1] * layer_heat # (1, num_ws, w_dim)
@@ -79,11 +77,9 @@ def get_walk(w_origin_ws, M, n_samples_per):
                 out_M = run_M(M, w) * 0.03 # (1, M.z_dim, w_dim+num_ws)
                 delta = -out_M[:, :, :M.w_dim] # (1, M.z_dim, w_dim)
                 if M.use_local_layer_heat:
-                    # layer_heat = F.softmax(F.softmax(out_M[:, i, M.w_dim:], dim=-1), dim=-1).unsqueeze(2) # (1, num_ws, 1)
-                    layer_heat = F.softmax(out_M[:, i, M.w_dim:], dim=-1).unsqueeze(2) # (1, num_ws, 1)
+                    layer_heat = M.heat_fn(out_M[:, i, M.w_dim:]).unsqueeze(2) # (1, num_ws, 1)
                 elif M.use_global_layer_heat:
-                    # layer_heat = F.softmax(F.softmax(M.heat_logits[:, i], dim=-1), dim=-1).unsqueeze(2) # (1, num_ws, 1)
-                    layer_heat = F.softmax(M.heat_logits[:, i], dim=-1).unsqueeze(2) # (1, num_ws, 1)
+                    layer_heat = M.heat_fn(M.heat_logits[:, i]).unsqueeze(2) # (1, num_ws, 1)
                 else:
                     layer_heat = torch.ones(1, M.num_ws, 1).to(w_origin.device)/M.num_ws
                 w_save = w_save + delta[:, i:i+1] * layer_heat # (1, num_ws, w_dim)
