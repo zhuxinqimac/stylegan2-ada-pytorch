@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 07 May 2021 15:08:20 AEST
+# --- Last Modified: Sat 08 May 2021 22:28:27 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -241,7 +241,7 @@ class DiscoverLoss(Loss):
                         1, 1, self.G_mapping.num_ws)).squeeze()).unsqueeze(2) # (b//2, num_ws, 1)
                     loss_heat_diversity = self.calc_loss_diversity(heat_logits)
                 else:
-                    layer_heat_q = layer_heat_pos = layer_heat_neg = 1./self.num_ws
+                    layer_heat_q = layer_heat_pos = layer_heat_neg = 1./self.M.num_ws
 
                 scale = torch.abs(torch.randn(batch//2, device=delta.device) * self.var_sample_scale + self.var_sample_mean).view(batch//2, 1)
 
