@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 08 May 2021 22:17:34 AEST
+# --- Last Modified: Sat 08 May 2021 22:20:13 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -60,10 +60,13 @@ def get_walk(w_origin_ws, M, n_samples_per):
                 out_M = run_M(M, w) * 0.03 # (1, M.z_dim, w_dim+num_ws)
                 delta = out_M[:, :, :M.w_dim] # (1, M.z_dim, w_dim)
                 if M.use_local_layer_heat:
+                    print('using local')
                     layer_heat = M.heat_fn(out_M[:, i, M.w_dim:]).unsqueeze(2) # (1, num_ws, 1)
                 elif M.use_global_layer_heat:
+                    print('using global')
                     layer_heat = M.heat_fn(M.heat_logits[:, i]).unsqueeze(2) # (1, num_ws, 1)
                 else:
+                    print('using nothing')
                     layer_heat = torch.ones(1, M.num_ws, 1).to(w_origin.device)/M.num_ws
                 print('M.heat_logits.shape:', M.heat_logits.shape)
                 print('M.heat_fn(M.heat_logits[:, i]).shape:', M.heat_fn(M.heat_logits[:, i]).shape)
