@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 07 May 2021 15:08:18 AEST
+# --- Last Modified: Sat 08 May 2021 22:04:19 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -112,7 +112,7 @@ class Navigator(torch.nn.Module):
                 x = layer(x)
         elif self.nav_type == 'fixed':
             # x_in not used.
-            x = torch.ones(1, self.z_dim, 1).to(x_in.device) # (1, z_dim, 1)
+            x = torch.ones(x_in.size(0), self.z_dim, 1).to(x_in.device) # (1, z_dim, 1)
             layer = getattr(self, f'fc0')
             x = layer(x)
         # x = normalize_2nd_moment(x, dim=-1) * 0.02
