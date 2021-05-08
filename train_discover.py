@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 07 May 2021 14:59:35 AEST
+# --- Last Modified: Sat 08 May 2021 22:25:12 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -367,15 +367,15 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--gan_network_pkl', help='GAN network pickle', metavar='PKL')
 @click.option('--nav_type', help='The Navigator type', metavar='STR', default='ada')
 @click.option('--num_layers', help='Number of layers in Navigator', metavar='INT', default=2)
-@click.option('--norm_on_depth', help='If normalize diff vectors taking depth into account', metavar='BOOL', default=True)
+@click.option('--norm_on_depth', help='If normalize diff vectors taking depth into account', default=True, type=bool)
 @click.option('--div_lambda', help='The W-space div_lambda', metavar='FLOAT', default=0.)
 @click.option('--div_heat_lambda', help='The div_heat_lambda', metavar='FLOAT', default=0.)
 @click.option('--norm_lambda', help='The norm lambda in diff features', metavar='FLOAT', default=0.)
 @click.option('--var_sample_scale', help='The sampling scale for variation', metavar='FLOAT', default=1.)
 @click.option('--var_sample_mean', help='The sampling mean for variation', metavar='FLOAT', default=1.)
 @click.option('--lr_multiplier', help='The lr_multiplier in M net', metavar='FLOAT', default=1.)
-@click.option('--use_local_layer_heat', help='If use local layer_heat in discover loss', metavar='BOOL', default=False)
-@click.option('--use_global_layer_heat', help='If use global layer_heat in discover loss', metavar='BOOL', default=False)
+@click.option('--use_local_layer_heat', help='If use local layer_heat in discover loss', default=False, type=bool)
+@click.option('--use_global_layer_heat', help='If use global layer_heat in discover loss', default=False, type=bool)
 @click.option('--heat_fn', help='If use layer_heat, the heat_fn', metavar='STR', default='softmax')
 @click.option('--save_size', help='The size to save per image in traversal', metavar='INT', default=128)
 
