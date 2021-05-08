@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 08 May 2021 22:20:13 AEST
+# --- Last Modified: Sat 08 May 2021 22:22:23 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -59,6 +59,8 @@ def get_walk(w_origin_ws, M, n_samples_per):
             for k in range(5): # Record every 10 steps
                 out_M = run_M(M, w) * 0.03 # (1, M.z_dim, w_dim+num_ws)
                 delta = out_M[:, :, :M.w_dim] # (1, M.z_dim, w_dim)
+                print('M.use_local_layer_heat:', M.use_local_layer_heat)
+                print('M.use_global_layer_heat:', M.use_global_layer_heat)
                 if M.use_local_layer_heat:
                     print('using local')
                     layer_heat = M.heat_fn(out_M[:, i, M.w_dim:]).unsqueeze(2) # (1, num_ws, 1)
