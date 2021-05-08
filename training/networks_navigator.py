@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 08 May 2021 22:04:19 AEST
+# --- Last Modified: Sat 08 May 2021 22:09:08 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -115,6 +115,7 @@ class Navigator(torch.nn.Module):
             x = torch.ones(x_in.size(0), self.z_dim, 1).to(x_in.device) # (1, z_dim, 1)
             layer = getattr(self, f'fc0')
             x = layer(x)
+        print('x.shape:', x.shape)
         # x = normalize_2nd_moment(x, dim=-1) * 0.02
         # x = normalize_2nd_moment(x, dim=-1) * self.sample_var_scale(x)
         if self.use_local_layer_heat:
