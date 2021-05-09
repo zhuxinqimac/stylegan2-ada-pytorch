@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 10 May 2021 04:10:52 AEST
+# --- Last Modified: Mon 10 May 2021 04:18:45 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -441,7 +441,7 @@ def training_loop(
             # w_walk = get_walk(w_origin, M, n_samples_per).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
             # images = torch.cat([G.synthesis(w, noise_mode='const') for w in w_walk])
             if not M.apply_M_on_z:
-                # w_origin = G.mapping(z_origin, c_origin) # (1, num_ws, w_dim)
+                w_origin = G.mapping(z_origin, c_origin) # (1, num_ws, w_dim)
                 # w_walk = get_walk(w_origin, M, n_samples_per).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
                 w_var = run_M(M, w_origin[:, 0]) # (1, M.z_dim, w_dim+num_ws)
                 w_walk = get_walk_wfixed(w_origin, w_var, M, n_samples_per).split(batch_gpu)
