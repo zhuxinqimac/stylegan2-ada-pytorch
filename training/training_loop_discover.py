@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 10 May 2021 03:43:59 AEST
+# --- Last Modified: Mon 10 May 2021 04:06:56 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -89,8 +89,8 @@ def get_walk(w_origin_ws, M, n_samples_per):
         # Forward:
         for j in range(n_samples_per // 2):
             for k in range(15): # Record every 10 steps
-                out_M = run_M(M, w) * 0.01 # (1, M.z_dim, w_dim+num_ws)
-                delta = out_M[:, :, :M.w_dim] # (1, M.z_dim, w_dim)
+                out_M = run_M(M, w) # (1, M.z_dim, w_dim+num_ws)
+                delta = out_M[:, :, :M.w_dim] * 0.01 # (1, M.z_dim, w_dim)
                 if M.use_local_layer_heat:
                     layer_heat = M.heat_fn(out_M[:, i, M.w_dim:]).unsqueeze(2) # (1, num_ws, 1)
                 elif M.use_global_layer_heat:
@@ -106,8 +106,8 @@ def get_walk(w_origin_ws, M, n_samples_per):
         # Backward:
         for j in range(n_samples_per - n_samples_per // 2 - 1):
             for k in range(15): # Record every 10 steps
-                out_M = run_M(M, w) * 0.01 # (1, M.z_dim, w_dim+num_ws)
-                delta = -out_M[:, :, :M.w_dim] # (1, M.z_dim, w_dim)
+                out_M = run_M(M, w) # (1, M.z_dim, w_dim+num_ws)
+                delta = -out_M[:, :, :M.w_dim] * 0.01 # (1, M.z_dim, w_dim)
                 if M.use_local_layer_heat:
                     layer_heat = M.heat_fn(out_M[:, i, M.w_dim:]).unsqueeze(2) # (1, num_ws, 1)
                 elif M.use_global_layer_heat:
