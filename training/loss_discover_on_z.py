@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover_on_z.py
 # --- Creation Date: 09-05-2021
-# --- Last Modified: Sun 09 May 2021 23:36:54 AEST
+# --- Last Modified: Mon 10 May 2021 03:07:07 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -87,7 +87,11 @@ class DiscoverOnZLoss(DiscoverLoss):
                 else:
                     layer_heat_q = layer_heat_pos = layer_heat_neg = 1.
 
-                ws_all = torch.cat([ws_orig, ws_qpn], dim=0) # (2.5 * batch, num_ws, w_dim)
+                ws_q_bar = (ws_qpn[:batch//2] - ws_orig[:batch//2]) * layer_heat_q + ws_orig[:batch//2]
+                ws_pos_bar = (ws_qpn[batch//2:batch] - ws_orig[batch//2:]) * layer_heat_pos + ws_orig[batch//2:]
+                ws_neg_bar = (ws_qpn[batch:] - ws_orig[batch//2:]) * layer_heat_neg + ws_orig[batch//2:]
+
+                ws_all = torch.cat([ws_orig, ws_q_bar, ws_pos_bar, ws_neg_bar], dim=0) # (2.5 * batch, num_ws, w_dim)
                 imgs_all = self.run_G_synthesis(ws_all)
                 outs_all = self.run_S(imgs_all)
                 loss_Mmain = self.extract_diff_loss(outs_all)

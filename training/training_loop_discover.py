@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 10 May 2021 00:00:30 AEST
+# --- Last Modified: Mon 10 May 2021 03:43:59 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -41,6 +41,38 @@ from metrics import metric_main
 def run_M(M, w):
     delta = M(w)
     return delta
+
+def get_walk_wfixed(w_origin, w_var, M, n_samples_per):
+    # gh, gw = M.z_dim, n_samples_per
+    # return: (gh * gw, num_ws, w_dim)
+    # w_origin: (1, num_ws, w_dim)
+    # w_var: (1, M.z_dim, w_dim+num_ws)
+    walk_ls = []
+    for i in range(M.z_dim):
+        row_ls = []
+        row_ls.append(w_origin)
+        if M.use_local_layer_heat:
+            layer_heat = M.heat_fn(w_var[:, i, M.w_dim:]).unsqueeze(2) # (1, num_ws, 1)
+        elif M.use_global_layer_heat:
+            layer_heat = M.heat_fn(M.heat_logits[:, i]).unsqueeze(2) # (1, num_ws, 1)
+        else:
+            layer_heat = torch.ones(1, M.num_ws, 1).to(w_origin.device) * 0.2
+
+        # Forward:
+        w_save = w_origin.clone()
+        for j in range(n_samples_per // 2):
+            w_save = w_save + 0.1 * w_var[:, i:i+1] * layer_heat # (1, num_ws, w_dim)
+            row_ls.append(w_save.clone())
+        # Backward:
+        w_save = w_origin.clone()
+        for j in range(n_samples_per - n_samples_per // 2 - 1):
+            w_save = w_save - 0.1 * w_var[:, i:i+1] * layer_heat # (1, num_ws, w_dim)
+            row_ls = [w_save.clone()] + row_ls
+
+        row_tensor = torch.cat(row_ls, dim=0)
+        walk_ls.append(row_tensor)
+    walk_tensor = torch.cat(walk_ls, dim=0) # (z_dim * n_samples_per, num_ws, w_dim)
+    return walk_tensor
 
 def get_walk(w_origin_ws, M, n_samples_per):
     # gh, gw = M.z_dim, n_samples_per
@@ -103,7 +135,7 @@ def get_walk_on_z(z_origin, M, n_samples_per):
         z = z_origin.clone()
         # Forward:
         for j in range(n_samples_per // 2):
-            for k in range(5): # Record every 10 steps
+            for k in range(15): # Record every 10 steps
                 out_M = run_M(M, z) * 0.001 # (1, M.z_dim, g_z_dim+num_ws)
                 delta = out_M[:, :, :M.g_z_dim] # (1, M.z_dim, g_z_dim)
                 if M.use_local_layer_heat:
@@ -118,7 +150,7 @@ def get_walk_on_z(z_origin, M, n_samples_per):
         z = z_origin.clone()
         # Backward:
         for j in range(n_samples_per - n_samples_per // 2 - 1):
-            for k in range(5): # Record every 10 steps
+            for k in range(15): # Record every 10 steps
                 out_M = run_M(M, z) * 0.001 # (1, M.z_dim, g_z_dim+num_ws)
                 delta = -out_M[:, :, :M.g_z_dim] # (1, M.z_dim, g_z_dim)
                 if M.use_local_layer_heat:
@@ -284,7 +316,9 @@ def training_loop(
         c_origin = torch.randn([1, G.c_dim], device=device)
         if not M.apply_M_on_z:
             w_origin = G.mapping(z_origin, c_origin) # (1, num_ws, w_dim)
-            w_walk = get_walk(w_origin, M, n_samples_per).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
+            # w_walk = get_walk(w_origin, M, n_samples_per).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
+            w_var = run_M(M, w_origin[:, 0]) # (1, M.z_dim, w_dim+num_ws)
+            w_walk = get_walk_wfixed(w_origin, w_var, M, n_samples_per).split(batch_gpu)
             images = torch.cat([G.synthesis(w, noise_mode='const') for w in w_walk]) # (gh * gw, c, h, w)
         else:
             z_walk = get_walk_on_z(z_origin, M, n_samples_per).split(batch_gpu)
@@ -407,8 +441,10 @@ def training_loop(
             # w_walk = get_walk(w_origin, M, n_samples_per).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
             # images = torch.cat([G.synthesis(w, noise_mode='const') for w in w_walk])
             if not M.apply_M_on_z:
-                w_origin = G.mapping(z_origin, c_origin) # (1, num_ws, w_dim)
-                w_walk = get_walk(w_origin, M, n_samples_per).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
+                # w_origin = G.mapping(z_origin, c_origin) # (1, num_ws, w_dim)
+                # w_walk = get_walk(w_origin, M, n_samples_per).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
+                w_var = run_M(M, w_origin[:, 0]) # (1, M.z_dim, w_dim+num_ws)
+                w_walk = get_walk_wfixed(w_origin, w_var, M, n_samples_per).split(batch_gpu)
                 images = torch.cat([G.synthesis(w, noise_mode='const') for w in w_walk]) # (gh * gw, c, h, w)
             else:
                 z_walk = get_walk_on_z(z_origin, M, n_samples_per).split(batch_gpu)
