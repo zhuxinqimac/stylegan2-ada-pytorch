@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sun 09 May 2021 18:00:23 AEST
+# --- Last Modified: Sun 09 May 2021 18:32:47 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -35,7 +35,7 @@ def double_softmax_last_dim_fn(x):
     return F.softmax(F.softmax(x, dim=-1), dim=-1)
 
 def sigmoid_fn(x):
-    return torch.sigmoid(x)
+    return torch.sigmoid(x) * 0.2 # rescale to balance with softmax
 
 @persistence.persistent_class
 class Navigator(torch.nn.Module):

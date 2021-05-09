@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sun 09 May 2021 18:26:01 AEST
+# --- Last Modified: Sun 09 May 2021 18:31:12 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -56,8 +56,8 @@ def get_walk(w_origin_ws, M, n_samples_per):
         w_save = w_origin_ws.clone()
         # Forward:
         for j in range(n_samples_per // 2):
-            for k in range(5): # Record every 10 steps
-                out_M = run_M(M, w) * 0.03 # (1, M.z_dim, w_dim+num_ws)
+            for k in range(10): # Record every 10 steps
+                out_M = run_M(M, w) * 0.01 # (1, M.z_dim, w_dim+num_ws)
                 delta = out_M[:, :, :M.w_dim] # (1, M.z_dim, w_dim)
                 if M.use_local_layer_heat:
                     layer_heat = M.heat_fn(out_M[:, i, M.w_dim:]).unsqueeze(2) # (1, num_ws, 1)
@@ -73,15 +73,15 @@ def get_walk(w_origin_ws, M, n_samples_per):
         w_save = w_origin_ws.clone()
         # Backward:
         for j in range(n_samples_per - n_samples_per // 2 - 1):
-            for k in range(5): # Record every 10 steps
-                out_M = run_M(M, w) * 0.03 # (1, M.z_dim, w_dim+num_ws)
+            for k in range(10): # Record every 10 steps
+                out_M = run_M(M, w) * 0.01 # (1, M.z_dim, w_dim+num_ws)
                 delta = -out_M[:, :, :M.w_dim] # (1, M.z_dim, w_dim)
                 if M.use_local_layer_heat:
                     layer_heat = M.heat_fn(out_M[:, i, M.w_dim:]).unsqueeze(2) # (1, num_ws, 1)
                 elif M.use_global_layer_heat:
                     layer_heat = M.heat_fn(M.heat_logits[:, i]).unsqueeze(2) # (1, num_ws, 1)
                 else:
-                    layer_heat = torch.ones(1, M.num_ws, 1).to(w_origin.device)
+                    layer_heat = torch.ones(1, M.num_ws, 1).to(w_origin.device) * 0.2
                 w_save = w_save + delta[:, i:i+1] * layer_heat # (1, num_ws, w_dim)
                 w = w_save.mean(dim=1)
             row_ls = [w_save.clone()] + row_ls
