@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 08 May 2021 22:27:26 AEST
+# --- Last Modified: Sun 09 May 2021 18:00:23 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -50,7 +50,10 @@ class Navigator(torch.nn.Module):
         num_layers      = 1,        # Number of layers.
         use_global_layer_heat  = False,    # If use layer_heat in discover loss.
         use_local_layer_heat  = False,    # If use layer_heat in discover loss.
-        heat_fn         = 'softmax' # If use layer_heat, the heat function.
+        heat_fn         = 'softmax',# If use layer_heat, the heat function.
+        wvae_lambda     = 0.,       # The vae lambda for w space.
+        kl_lambda       = 1.,       # The KL lambda in wvae loss.
+        wvae_noise      =0 ,        # The number of noise dims in wvae.
     ):
         super().__init__()
         self.z_dim = z_dim
@@ -64,6 +67,27 @@ class Navigator(torch.nn.Module):
         self.use_global_layer_heat = use_global_layer_heat
         self.use_local_layer_heat = use_local_layer_heat
         self.heat_fn = self.get_heat_fn(heat_fn)
+
+        # WVAE model parameters.
+        self.wvae_lambda = wvae_lambda
+        self.kl_lambda = kl_lambda
+        self.wvae_noise = wvae_noise
+        if self.wvae_lambda != 0:
+            self.vae_enc = torch.nn.Sequential(
+                FullyConnectedLayer(self.w_dim, 512, activation=activation),
+                FullyConnectedLayer(512, 512, activation=activation),
+                FullyConnectedLayer(512, 256, activation=activation),
+                FullyConnectedLayer(256, 256, activation=activation),
+                FullyConnectedLayer(256, (self.z_dim+self.wvae_noise)*2, activation='linear'),
+            )
+            self.vae_dec = torch.nn.Sequential(
+                FullyConnectedLayer(self.z_dim+self.wvae_noise, 256, activation=activation),
+                FullyConnectedLayer(256, 256, activation=activation),
+                FullyConnectedLayer(256, 512, activation=activation),
+                FullyConnectedLayer(512, 512, activation=activation),
+                FullyConnectedLayer(512, self.w_dim, activation='linear'),
+            )
+
         if self.nav_type == 'ada':
             for idx in range(self.num_layers):
                 act = 'linear' if idx == num_layers-1 else activation

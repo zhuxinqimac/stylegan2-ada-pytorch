@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 08 May 2021 22:28:27 AEST
+# --- Last Modified: Sun 09 May 2021 18:05:58 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -22,6 +22,22 @@ from torch_utils import training_stats
 from torch_utils import misc
 from torch_utils.ops import conv2d_gradfix
 from training.loss import Loss
+
+
+def fuse_hat(x_orig, x, avg_x, onehot_mask):
+    x_orig_hat = onehot_mask * x_orig + (1 - onehot_mask) * avg_x
+    x_hat = onehot_mask * x + (1 - onehot_mask) * avg_x
+    return x_orig_hat, x_hat
+
+def reparametrise_gaussian(mu, lv):
+    std = torch.exp(0.5 * lv)
+    eps = torch.randn_like(std)
+    return mu + std * eps
+
+def gaussian_kl(mu, logvar):
+    kld = -0.5*(1 + logvar - mu.pow(2) - logvar.exp())
+    kld_mean = kld.sum(dim=-1).mean()
+    return kld_mean
 
 #----------------------------------------------------------------------------
 class DiscoverLoss(Loss):
@@ -200,6 +216,51 @@ class DiscoverLoss(Loss):
         loss = (cos_div * div_mask)**2
         return loss.sum(dim=[1,2]).mean()
 
+    def get_wvae_loss(self, ws, ws_q, ws_pos, pos_neg_idx):
+        '''
+        ws: (b, w_dim)
+        ws_q, ws_pos: (b//2, w_dim)
+        pos_neg_idx: (b//2, 2)
+        '''
+        w_all = torch.cat([ws, ws_q, ws_pos], dim=0) # (2b, w_dim)
+        mu_all, logvar_all = torch.split(self.M.vae_enc(w_all), 2, dim=1) # (2b, z_dim+noise)
+        mu_noise, logvar_noise = mu_all[:, self.M.z_dim:], logvar_all[:, self.M.z_dim:] # (2b, noise)
+        mu_q_orig, mu_pos_orig, mu_q, mu_pos = torch.split(mu_all[:, :self.M.z_dim], 4, dim=0) # (b//2, z_dim)
+        logvar_q_orig, logvar_pos_orig, logvar_q, logvar_pos = torch.split(logvar_all[:, :self.M.z_dim], 4, dim=0) # (b//2, z_dim)
+
+        # Get mean of z
+        avg_mu_q, avg_mu_pos = (mu_q_orig + mu_q) / 2., (mu_pos_orig + mu_pos) / 2.
+        avg_logvar_q, avg_logvar_pos = (logvar_q_orig + logvar_q) / 2., (logvar_pos_orig + logvar_pos) / 2.
+
+        # Get varied onehot mask
+        pos_idx = pos_neg_idx[:, 0] # (b//2)
+        onehot_mask = F.one_hot(pos_idx, self.M.z_dim).float() # (b//2, z_dim)
+
+        # Fuse varied and avg dimensions
+        mu_q_orig_hat, mu_q_hat = fuse_hat(mu_q_orig, mu_q, avg_mu_q, onehot_mask) # (b//2, z_dim)
+        mu_pos_orig_hat, mu_pos_hat = fuse_hat(mu_pos_orig, mu_pos, avg_mu_pos, onehot_mask)
+        logvar_q_orig_hat, logvar_q_hat = fuse_hat(logvar_q_orig, logvar_q, avg_logvar_q, onehot_mask)
+        logvar_pos_orig_hat, logvar_pos_hat = fuse_hat(logvar_pos_orig, logvar_pos, avg_logvar_pos, onehot_mask)
+
+        mu_hat_z = torch.cat([mu_q_orig_hat, mu_pos_orig_hat, mu_q_hat, mu_pos_hat], dim=0)
+        logvar_hat_z = torch.cat([logvar_q_orig_hat, logvar_pos_orig_hat, logvar_q_hat, logvar_pos_hat], dim=0)
+        mu_hat = torch.cat([mu_hat_z, mu_noise], dim=1) # (2b, z_dim+noise)
+        logvar_hat = torch.cat([logvar_hat_z, logvar_noise], dim=1)
+
+        loss_kl = gaussian_kl(mu_hat, logvar_hat)
+        training_stats.report('Loss/M/loss_kl', loss_kl)
+        mu_sample = reparametrise_gaussian(mu_hat, logvar_hat) # (2b, z_dim+noise)
+
+        w_hat = self.M.vae_dec(mu_sample) # (2b, w_dim)
+        loss_mse = (w_all - w_hat).pow(2).sum() / w_all.size(0)
+        training_stats.report('Loss/M/loss_mse', loss_mse)
+
+        loss_wvae = loss_mse + self.M.kl_lambda * loss_kl
+        training_stats.report('Loss/M/loss_wvae', loss_wvae)
+
+        return loss_wvae
+
+
     def accumulate_gradients(self, phase, gen_z, gen_c, sync, gain):
         assert phase in ['Mboth']
         do_Mmain = (phase in ['Mboth'])
@@ -241,13 +302,24 @@ class DiscoverLoss(Loss):
                         1, 1, self.G_mapping.num_ws)).squeeze()).unsqueeze(2) # (b//2, num_ws, 1)
                     loss_heat_diversity = self.calc_loss_diversity(heat_logits)
                 else:
-                    layer_heat_q = layer_heat_pos = layer_heat_neg = 1./self.M.num_ws
+                    layer_heat_q = layer_heat_pos = layer_heat_neg = 1.
 
                 scale = torch.abs(torch.randn(batch//2, device=delta.device) * self.var_sample_scale + self.var_sample_mean).view(batch//2, 1)
 
-                ws_q = ws[:batch//2].unsqueeze(1) + (delta_q * scale).unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) * layer_heat_q
-                ws_pos = ws[batch//2:].unsqueeze(1) + (delta_pos * scale).unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) * layer_heat_pos
-                ws_neg = ws[batch//2:].unsqueeze(1) + (delta_neg * scale).unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) * layer_heat_neg
+                if (not self.M.use_local_layer_heat) and (not self.M.use_global_layer_heat):
+                    ws_q = ws[:batch//2] + (delta_q * scale) # (batch//2, w_dim)
+                    ws_pos = ws[batch//2:] + (delta_pos * scale)
+                    ws_neg = ws[batch//2:] + (delta_neg * scale)
+                    if self.M.wvae_lambda != 0:
+                        loss_wvae = self.get_wvae_loss(ws, ws_q, ws_pos, pos_neg_idx)
+                        training_stats.report('Loss/M/loss_wvae', loss_wvae)
+                    ws_q = ws_q.unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) * layer_heat_q
+                    ws_pos = ws_pos.unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) * layer_heat_pos
+                    ws_neg = ws_neg.unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) * layer_heat_neg
+                else:
+                    ws_q = ws[:batch//2].unsqueeze(1) + (delta_q * scale).unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) * layer_heat_q
+                    ws_pos = ws[batch//2:].unsqueeze(1) + (delta_pos * scale).unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) * layer_heat_pos
+                    ws_neg = ws[batch//2:].unsqueeze(1) + (delta_neg * scale).unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) * layer_heat_neg
 
                 ws_all = torch.cat([ws_orig, ws_q, ws_pos, ws_neg], dim=0) # (2.5 * batch, num_ws, w_dim)
                 imgs_all = self.run_G_synthesis(ws_all)
@@ -259,6 +331,9 @@ class DiscoverLoss(Loss):
                 if self.M.use_local_layer_heat or self.M.use_global_layer_heat:
                     loss_Mmain += self.div_heat_lambda * loss_heat_diversity
                     training_stats.report('Loss/M/loss_heat_diversity', loss_heat_diversity)
+
+                if (not self.M.use_local_layer_heat) and (not self.M.use_global_layer_heat) and (self.M.wvae_lambda != 0):
+                    loss_Mmain += self.M.wvae_lambda * loss_wvae
 
                 training_stats.report('Loss/M/loss_all', loss_Mmain)
 
