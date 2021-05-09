@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sun 09 May 2021 18:05:35 AEST
+# --- Last Modified: Sun 09 May 2021 18:20:05 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -178,8 +178,10 @@ def training_loop(
     # Resume from existing pickle.
     if (resume_pkl is not None) and (rank == 0):
         print(f'Resuming from "{resume_pkl}"')
-        with dnnlib.util.open_url(resume_pkl) as f:
-            resume_data = legacy.load_network_pkl(f)
+        # with dnnlib.util.open_url(resume_pkl) as f:
+            # resume_data = legacy.load_network_pkl(f)
+        with open(resume_pkl, 'rb') as f:
+            resume_data = pickle.load(f)
         for name, module in [('M', M)]:
             misc.copy_params_and_buffers(resume_data[name], module, require_all=False)
 
