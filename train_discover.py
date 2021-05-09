@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 08 May 2021 22:25:12 AEST
+# --- Last Modified: Sun 09 May 2021 23:35:26 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -86,6 +86,10 @@ def setup_training_loop_kwargs(
     use_local_layer_heat = None, # If use local layer_heat in discover loss.
     use_global_layer_heat = None, # If use global layer_heat in discover loss.
     heat_fn = None, # If use layer_heat, the heat_fn .
+    wvae_lambda = None, # The wvae lambda in M.
+    kl_lambda = None, # The kl lambda in M wvae.
+    wvae_noise = None, # The noise dim in wvae.
+    apply_m_on_z = None, # If apply M on z of G.
     save_size = None, # The size to save per image in traversal.
 ):
     args = dnnlib.EasyDict()
@@ -209,17 +213,17 @@ def setup_training_loop_kwargs(
     args.M_kwargs.use_local_layer_heat = use_local_layer_heat
     args.M_kwargs.use_global_layer_heat = use_global_layer_heat
     args.M_kwargs.heat_fn = heat_fn
-    # activation      = 'lrelu',  # Activation function: 'relu', 'lrelu', etc.
-    # lr_multiplier   = 0.01,        # Learning rate multiplier.
-    # nav_type        = 'ada',    # Navigator type: 'ada', 'fixed'.
-    # num_layers      = 1,        # Number of layers.
+    args.M_kwargs.wvae_lambda = wvae_lambda
+    args.M_kwargs.kl_lambda = kl_lambda
+    args.M_kwargs.wvae_noise = wvae_noise
+    args.M_kwargs.apply_M_on_z = apply_m_on_z
 
     args.M_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', lr=spec.lrate, betas=[0,0.99], eps=1e-8)
     if sensor_type is None:
         sensor_type = 'alex'
     args.sensor_type = sensor_type
 
-    args.loss_kwargs = dnnlib.EasyDict(class_name='training.loss_discover.DiscoverLoss')
+    args.loss_kwargs = dnnlib.EasyDict(class_name='training.loss_discover.DiscoverLoss' if not apply_m_on_z else 'training.loss_discover_on_z.DiscoverOnZLoss')
     args.loss_kwargs.S_L = 7 if args.sensor_type == 'squeeze' else 5
     args.loss_kwargs.norm_on_depth = norm_on_depth
     args.loss_kwargs.div_lambda = div_lambda
@@ -377,6 +381,10 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--use_local_layer_heat', help='If use local layer_heat in discover loss', default=False, type=bool)
 @click.option('--use_global_layer_heat', help='If use global layer_heat in discover loss', default=False, type=bool)
 @click.option('--heat_fn', help='If use layer_heat, the heat_fn', metavar='STR', default='softmax')
+@click.option('--wvae_lambda', help='The wvae lambda in M', type=float, default=0)
+@click.option('--kl_lambda', help='The kl lambda in M wvae', type=float, default=1)
+@click.option('--wvae_noise', help='The number of noise dim in M wvae', type=int, default=0)
+@click.option('--apply_m_on_z', help='If apply M on z of G', type=bool, default=False)
 @click.option('--save_size', help='The size to save per image in traversal', metavar='INT', default=128)
 
 def main(ctx, outdir, dry_run, **config_kwargs):

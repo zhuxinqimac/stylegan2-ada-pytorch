@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sun 09 May 2021 18:05:58 AEST
+# --- Last Modified: Sun 09 May 2021 19:15:13 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -17,6 +17,7 @@ Loss for Discover Network. Code borrowed from Nvidia StyleGAN2-ada-pytorch.
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch import nn
 from torch_utils import training_stats
 from torch_utils import misc
@@ -222,11 +223,12 @@ class DiscoverLoss(Loss):
         ws_q, ws_pos: (b//2, w_dim)
         pos_neg_idx: (b//2, 2)
         '''
+        b_size = ws.size(0)
         w_all = torch.cat([ws, ws_q, ws_pos], dim=0) # (2b, w_dim)
-        mu_all, logvar_all = torch.split(self.M.vae_enc(w_all), 2, dim=1) # (2b, z_dim+noise)
+        mu_all, logvar_all = torch.split(self.M.vae_enc(w_all), self.M.z_dim+self.M.wvae_noise, dim=1) # (2b, z_dim+noise)
         mu_noise, logvar_noise = mu_all[:, self.M.z_dim:], logvar_all[:, self.M.z_dim:] # (2b, noise)
-        mu_q_orig, mu_pos_orig, mu_q, mu_pos = torch.split(mu_all[:, :self.M.z_dim], 4, dim=0) # (b//2, z_dim)
-        logvar_q_orig, logvar_pos_orig, logvar_q, logvar_pos = torch.split(logvar_all[:, :self.M.z_dim], 4, dim=0) # (b//2, z_dim)
+        mu_q_orig, mu_pos_orig, mu_q, mu_pos = torch.split(mu_all[:, :self.M.z_dim], b_size//2, dim=0) # (b//2, z_dim)
+        logvar_q_orig, logvar_pos_orig, logvar_q, logvar_pos = torch.split(logvar_all[:, :self.M.z_dim], b_size//2, dim=0) # (b//2, z_dim)
 
         # Get mean of z
         avg_mu_q, avg_mu_pos = (mu_q_orig + mu_q) / 2., (mu_pos_orig + mu_pos) / 2.

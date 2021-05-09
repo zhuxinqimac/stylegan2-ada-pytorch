@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sun 09 May 2021 18:32:47 AEST
+# --- Last Modified: Sun 09 May 2021 23:44:00 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -44,6 +44,7 @@ class Navigator(torch.nn.Module):
         c_dim,                      # Conditioning label (C) dimensionality, 0 = no label.
         w_dim,                      # Intermediate latent (W) dimensionality.
         num_ws,                     # Number of intermediate latents for synthesis net input.
+        g_z_dim         = 512,      # Number of z_dim in G.
         activation      = 'lrelu',  # Activation function: 'relu', 'lrelu', etc.
         lr_multiplier   = 1,        # Learning rate multiplier.
         nav_type        = 'ada',    # Navigator type: 'ada', 'fixed'.
@@ -53,12 +54,14 @@ class Navigator(torch.nn.Module):
         heat_fn         = 'softmax',# If use layer_heat, the heat function.
         wvae_lambda     = 0.,       # The vae lambda for w space.
         kl_lambda       = 1.,       # The KL lambda in wvae loss.
-        wvae_noise      =0 ,        # The number of noise dims in wvae.
+        wvae_noise      = 0,        # The number of noise dims in wvae.
+        apply_M_on_z    = False,     # If apply M network on z of G.
     ):
         super().__init__()
         self.z_dim = z_dim
         self.c_dim = c_dim
         self.w_dim = w_dim
+        self.g_z_dim = g_z_dim
         self.num_ws = num_ws
         self.activation = activation
         self.lr_multiplier = lr_multiplier
@@ -67,6 +70,7 @@ class Navigator(torch.nn.Module):
         self.use_global_layer_heat = use_global_layer_heat
         self.use_local_layer_heat = use_local_layer_heat
         self.heat_fn = self.get_heat_fn(heat_fn)
+        self.apply_M_on_z = apply_M_on_z
 
         # WVAE model parameters.
         self.wvae_lambda = wvae_lambda
