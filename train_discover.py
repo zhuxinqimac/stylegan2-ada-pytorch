@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 10 May 2021 13:31:22 AEST
+# --- Last Modified: Mon 10 May 2021 16:53:17 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -92,6 +92,7 @@ def setup_training_loop_kwargs(
     wvae_noise = None, # The noise dim in wvae.
     apply_m_on_z = None, # If apply M on z of G.
     save_size = None, # The size to save per image in traversal.
+    trav_walk_scale = 0.01, # The traversal walking scale.
 ):
     args = dnnlib.EasyDict()
 
@@ -223,6 +224,7 @@ def setup_training_loop_kwargs(
     if sensor_type is None:
         sensor_type = 'alex'
     args.sensor_type = sensor_type
+    args.trav_walk_scale = trav_walk_scale
 
     args.loss_kwargs = dnnlib.EasyDict(class_name='training.loss_discover.DiscoverLoss' if not apply_m_on_z else 'training.loss_discover_on_z.DiscoverOnZLoss')
     args.loss_kwargs.S_L = 7 if args.sensor_type == 'squeeze' else 5
@@ -383,12 +385,13 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--lr_multiplier', help='The lr_multiplier in M net', type=float, default=1.)
 @click.option('--use_local_layer_heat', help='If use local layer_heat in discover loss', default=False, type=bool)
 @click.option('--use_global_layer_heat', help='If use global layer_heat in discover loss', default=False, type=bool)
-@click.option('--heat_fn', help='If use layer_heat, the heat_fn', metavar='STR', default='softmax')
+@click.option('--heat_fn', help='If use layer_heat, the heat_fn', type=str, default='softmax')
 @click.option('--wvae_lambda', help='The wvae lambda in M', type=float, default=0)
 @click.option('--kl_lambda', help='The kl lambda in M wvae', type=float, default=1)
 @click.option('--wvae_noise', help='The number of noise dim in M wvae', type=int, default=0)
 @click.option('--apply_m_on_z', help='If apply M on z of G', type=bool, default=False)
-@click.option('--save_size', help='The size to save per image in traversal', metavar='INT', default=128)
+@click.option('--save_size', help='The size to save per image in traversal', type=int, default=128)
+@click.option('--trav_walk_scale', help='The walk scale in traversal', type=float, default=0.01)
 
 def main(ctx, outdir, dry_run, **config_kwargs):
     """Train a GAN using the techniques described in the paper

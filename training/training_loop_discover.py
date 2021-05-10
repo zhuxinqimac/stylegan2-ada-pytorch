@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 10 May 2021 04:33:07 AEST
+# --- Last Modified: Mon 10 May 2021 16:51:25 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -42,7 +42,7 @@ def run_M(M, w):
     delta = M(w)
     return delta
 
-def get_walk_wfixed(w_origin, w_var, M, n_samples_per):
+def get_walk_wfixed(w_origin, w_var, M, n_samples_per, trav_walk_scale=0.2):
     # gh, gw = M.z_dim, n_samples_per
     # return: (gh * gw, num_ws, w_dim)
     # w_origin: (1, num_ws, w_dim)
@@ -61,12 +61,12 @@ def get_walk_wfixed(w_origin, w_var, M, n_samples_per):
         # Forward:
         w_save = w_origin.clone()
         for j in range(n_samples_per // 2):
-            w_save = w_save + 0.2 * w_var[:, i:i+1, :M.w_dim] * layer_heat # (1, num_ws, w_dim)
+            w_save = w_save + trav_walk_scale * w_var[:, i:i+1, :M.w_dim] * layer_heat # (1, num_ws, w_dim)
             row_ls.append(w_save.clone())
         # Backward:
         w_save = w_origin.clone()
         for j in range(n_samples_per - n_samples_per // 2 - 1):
-            w_save = w_save - 0.2 * w_var[:, i:i+1, :M.w_dim] * layer_heat # (1, num_ws, w_dim)
+            w_save = w_save - trav_walk_scale * w_var[:, i:i+1, :M.w_dim] * layer_heat # (1, num_ws, w_dim)
             row_ls = [w_save.clone()] + row_ls
 
         row_tensor = torch.cat(row_ls, dim=0)
@@ -74,7 +74,7 @@ def get_walk_wfixed(w_origin, w_var, M, n_samples_per):
     walk_tensor = torch.cat(walk_ls, dim=0) # (z_dim * n_samples_per, num_ws, w_dim)
     return walk_tensor
 
-def get_walk(w_origin_ws, M, n_samples_per):
+def get_walk(w_origin_ws, M, n_samples_per, trav_walk_scale=0.01):
     # gh, gw = M.z_dim, n_samples_per
     # return: (gh * gw, num_ws, w_dim)
     walk_ls = []
@@ -90,7 +90,7 @@ def get_walk(w_origin_ws, M, n_samples_per):
         for j in range(n_samples_per // 2):
             for k in range(15): # Record every 10 steps
                 out_M = run_M(M, w) # (1, M.z_dim, w_dim+num_ws)
-                delta = out_M[:, :, :M.w_dim] * 0.01 # (1, M.z_dim, w_dim)
+                delta = out_M[:, :, :M.w_dim] * trav_walk_scale # (1, M.z_dim, w_dim)
                 if M.use_local_layer_heat:
                     layer_heat = M.heat_fn(out_M[:, i, M.w_dim:]).unsqueeze(2) # (1, num_ws, 1)
                 elif M.use_global_layer_heat:
@@ -107,7 +107,7 @@ def get_walk(w_origin_ws, M, n_samples_per):
         for j in range(n_samples_per - n_samples_per // 2 - 1):
             for k in range(15): # Record every 10 steps
                 out_M = run_M(M, w) # (1, M.z_dim, w_dim+num_ws)
-                delta = -out_M[:, :, :M.w_dim] * 0.01 # (1, M.z_dim, w_dim)
+                delta = -out_M[:, :, :M.w_dim] * trav_walk_scale # (1, M.z_dim, w_dim)
                 if M.use_local_layer_heat:
                     layer_heat = M.heat_fn(out_M[:, i, M.w_dim:]).unsqueeze(2) # (1, num_ws, 1)
                 elif M.use_global_layer_heat:
@@ -123,7 +123,7 @@ def get_walk(w_origin_ws, M, n_samples_per):
     walk_tensor = torch.cat(walk_ls, dim=0) # (z_dim * n_samples_per, num_ws, w_dim)
     return walk_tensor
 
-def get_walk_on_z(z_origin, M, n_samples_per):
+def get_walk_on_z(z_origin, M, n_samples_per, trav_walk_scale=0.001):
     # gh, gw = M.z_dim, n_samples_per
     # return: (gh * gw, num_ws, g_z_dim)
     walk_ls = []
@@ -136,8 +136,8 @@ def get_walk_on_z(z_origin, M, n_samples_per):
         # Forward:
         for j in range(n_samples_per // 2):
             for k in range(15): # Record every 10 steps
-                out_M = run_M(M, z) * 0.001 # (1, M.z_dim, g_z_dim+num_ws)
-                delta = out_M[:, :, :M.g_z_dim] # (1, M.z_dim, g_z_dim)
+                out_M = run_M(M, z) # (1, M.z_dim, g_z_dim+num_ws)
+                delta = out_M[:, :, :M.g_z_dim] * trav_walk_scale # (1, M.z_dim, g_z_dim)
                 if M.use_local_layer_heat:
                     layer_heat = M.heat_fn(out_M[:, i, M.g_z_dim:]).unsqueeze(2) # (1, num_ws, 1)
                 elif M.use_global_layer_heat:
@@ -151,8 +151,8 @@ def get_walk_on_z(z_origin, M, n_samples_per):
         # Backward:
         for j in range(n_samples_per - n_samples_per // 2 - 1):
             for k in range(15): # Record every 10 steps
-                out_M = run_M(M, z) * 0.001 # (1, M.z_dim, g_z_dim+num_ws)
-                delta = -out_M[:, :, :M.g_z_dim] # (1, M.z_dim, g_z_dim)
+                out_M = run_M(M, z) # (1, M.z_dim, g_z_dim+num_ws)
+                delta = -out_M[:, :, :M.g_z_dim] * trav_walk_scale # (1, M.z_dim, g_z_dim)
                 if M.use_local_layer_heat:
                     layer_heat = M.heat_fn(out_M[:, i, M.g_z_dim:]).unsqueeze(2) # (1, num_ws, 1)
                 elif M.use_global_layer_heat:
@@ -219,6 +219,7 @@ def training_loop(
     sensor_type             = 'alex',   # The sensor network type.
     gan_network_pkl         = None,     # The Generator network pkl.
     save_size               = 128,      # Image size to save per image in traversal.
+    trav_walk_scale         = 0.01,     # Traversal walking scale.
 ):
     # Initialize.
     start_time = time.time()
@@ -316,12 +317,12 @@ def training_loop(
         c_origin = torch.randn([1, G.c_dim], device=device)
         if not M.apply_M_on_z:
             w_origin = G.mapping(z_origin, c_origin) # (1, num_ws, w_dim)
-            # w_walk = get_walk(w_origin, M, n_samples_per).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
+            # w_walk = get_walk(w_origin, M, n_samples_per, trav_walk_scale).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
             w_var = run_M(M, w_origin[:, 0]) # (1, M.z_dim, w_dim+num_ws)
-            w_walk = get_walk_wfixed(w_origin, w_var, M, n_samples_per).split(batch_gpu)
+            w_walk = get_walk_wfixed(w_origin, w_var, M, n_samples_per, trav_walk_scale).split(batch_gpu)
             images = torch.cat([G.synthesis(w, noise_mode='const') for w in w_walk]) # (gh * gw, c, h, w)
         else:
-            z_walk = get_walk_on_z(z_origin, M, n_samples_per).split(batch_gpu)
+            z_walk = get_walk_on_z(z_origin, M, n_samples_per, trav_walk_scale).split(batch_gpu)
             images = torch.cat([G.synthesis(G.mapping(z, c_origin.repeat(z.size(0), 1)), noise_mode='const') for z in z_walk])
         masks = get_diff_masks(images, n_samples_per, M.z_dim, S, save_size).cpu().numpy()
         if save_size < images.size(-1):
@@ -437,17 +438,14 @@ def training_loop(
         if (rank == 0) and (image_snapshot_ticks is not None) and (done or cur_tick % image_snapshot_ticks == 0):
             z_origin = torch.randn([1, G.z_dim], device=device)
             c_origin = torch.randn([1, G.c_dim], device=device)
-            # w_origin = G.mapping(z_origin, c_origin) # (1, num_ws, w_dim)
-            # w_walk = get_walk(w_origin, M, n_samples_per).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
-            # images = torch.cat([G.synthesis(w, noise_mode='const') for w in w_walk])
             if not M.apply_M_on_z:
                 w_origin = G.mapping(z_origin, c_origin) # (1, num_ws, w_dim)
-                # w_walk = get_walk(w_origin, M, n_samples_per).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
+                # w_walk = get_walk(w_origin, M, n_samples_per, trav_walk_scale).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
                 w_var = run_M(M, w_origin[:, 0]) # (1, M.z_dim, w_dim+num_ws)
-                w_walk = get_walk_wfixed(w_origin, w_var, M, n_samples_per).split(batch_gpu)
+                w_walk = get_walk_wfixed(w_origin, w_var, M, n_samples_per, trav_walk_scale).split(batch_gpu)
                 images = torch.cat([G.synthesis(w, noise_mode='const') for w in w_walk]) # (gh * gw, c, h, w)
             else:
-                z_walk = get_walk_on_z(z_origin, M, n_samples_per).split(batch_gpu)
+                z_walk = get_walk_on_z(z_origin, M, n_samples_per, trav_walk_scale).split(batch_gpu)
                 images = torch.cat([G.synthesis(G.mapping(z, c_origin.repeat(z.size(0), 1)), noise_mode='const') for z in z_walk])
             masks = get_diff_masks(images, n_samples_per, M.z_dim, S, save_size).cpu().numpy()
             if save_size < images.size(-1):
