@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover_on_z.py
 # --- Creation Date: 09-05-2021
-# --- Last Modified: Mon 10 May 2021 03:07:07 AEST
+# --- Last Modified: Mon 10 May 2021 17:06:10 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -29,10 +29,10 @@ from training.loss_discover import DiscoverLoss
 class DiscoverOnZLoss(DiscoverLoss):
     def __init__(self, device, G_mapping, G_synthesis, M, S, S_L, norm_on_depth,
                  div_lambda=0., div_heat_lambda=0., norm_lambda=0., var_sample_scale=1.,
-                 var_sample_mean=0.):
+                 var_sample_mean=0., sensor_used_layers=5):
         super().__init__(device, G_mapping, G_synthesis, M, S, S_L, norm_on_depth,
                          div_lambda, div_heat_lambda, norm_lambda, var_sample_scale,
-                         var_sample_mean)
+                         var_sample_mean, sensor_used_layers)
 
     def accumulate_gradients(self, phase, gen_z, gen_c, sync, gain):
         assert phase in ['Mboth']
