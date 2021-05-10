@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sun 09 May 2021 23:35:26 AEST
+# --- Last Modified: Mon 10 May 2021 13:31:22 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -82,6 +82,7 @@ def setup_training_loop_kwargs(
     norm_lambda = None, # The norm lambda of diff features.
     var_sample_scale = None, # The sampling scale for variation.
     var_sample_mean = None, # The sampling mean for variation.
+    sensor_used_layers = None, # The number of used layers in S.
     lr_multiplier = None, # The lr_multiplier in M net.
     use_local_layer_heat = None, # If use local layer_heat in discover loss.
     use_global_layer_heat = None, # If use global layer_heat in discover loss.
@@ -231,6 +232,7 @@ def setup_training_loop_kwargs(
     args.loss_kwargs.norm_lambda = norm_lambda
     args.loss_kwargs.var_sample_scale = var_sample_scale
     args.loss_kwargs.var_sample_mean = var_sample_mean
+    args.loss_kwargs.sensor_used_layers = sensor_used_layers
 
     args.total_kimg = spec.kimg
     args.batch_size = spec.mb
@@ -369,15 +371,16 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--m_z_dim', help='The z_dim in M.', type=int, default=10)
 @click.option('--sensor_type', help='The type of sensor network.', type=str, default='alex')
 @click.option('--gan_network_pkl', help='GAN network pickle', metavar='PKL')
-@click.option('--nav_type', help='The Navigator type', metavar='STR', default='ada')
+@click.option('--nav_type', help='The Navigator type', type=str, default='ada')
 @click.option('--num_layers', help='Number of layers in Navigator', metavar='INT', default=2)
 @click.option('--norm_on_depth', help='If normalize diff vectors taking depth into account', default=True, type=bool)
-@click.option('--div_lambda', help='The W-space div_lambda', metavar='FLOAT', default=0.)
-@click.option('--div_heat_lambda', help='The div_heat_lambda', metavar='FLOAT', default=0.)
-@click.option('--norm_lambda', help='The norm lambda in diff features', metavar='FLOAT', default=0.)
-@click.option('--var_sample_scale', help='The sampling scale for variation', metavar='FLOAT', default=1.)
-@click.option('--var_sample_mean', help='The sampling mean for variation', metavar='FLOAT', default=1.)
-@click.option('--lr_multiplier', help='The lr_multiplier in M net', metavar='FLOAT', default=1.)
+@click.option('--div_lambda', help='The W-space div_lambda', type=float, default=0.)
+@click.option('--div_heat_lambda', help='The div_heat_lambda', type=float, default=0.)
+@click.option('--norm_lambda', help='The norm lambda in diff features', type=float, default=0.)
+@click.option('--var_sample_scale', help='The sampling scale for variation', type=float, default=1.)
+@click.option('--var_sample_mean', help='The sampling mean for variation', type=float, default=1.)
+@click.option('--sensor_used_layers', help='The number of used layers in sensor', type=int, default=5)
+@click.option('--lr_multiplier', help='The lr_multiplier in M net', type=float, default=1.)
 @click.option('--use_local_layer_heat', help='If use local layer_heat in discover loss', default=False, type=bool)
 @click.option('--use_global_layer_heat', help='If use global layer_heat in discover loss', default=False, type=bool)
 @click.option('--heat_fn', help='If use layer_heat, the heat_fn', metavar='STR', default='softmax')

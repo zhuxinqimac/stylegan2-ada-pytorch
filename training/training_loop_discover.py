@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 10 May 2021 04:18:45 AEST
+# --- Last Modified: Mon 10 May 2021 04:33:07 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -61,12 +61,12 @@ def get_walk_wfixed(w_origin, w_var, M, n_samples_per):
         # Forward:
         w_save = w_origin.clone()
         for j in range(n_samples_per // 2):
-            w_save = w_save + 0.1 * w_var[:, i:i+1, :M.w_dim] * layer_heat # (1, num_ws, w_dim)
+            w_save = w_save + 0.2 * w_var[:, i:i+1, :M.w_dim] * layer_heat # (1, num_ws, w_dim)
             row_ls.append(w_save.clone())
         # Backward:
         w_save = w_origin.clone()
         for j in range(n_samples_per - n_samples_per // 2 - 1):
-            w_save = w_save - 0.1 * w_var[:, i:i+1, :M.w_dim] * layer_heat # (1, num_ws, w_dim)
+            w_save = w_save - 0.2 * w_var[:, i:i+1, :M.w_dim] * layer_heat # (1, num_ws, w_dim)
             row_ls = [w_save.clone()] + row_ls
 
         row_tensor = torch.cat(row_ls, dim=0)
