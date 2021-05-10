@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 11 May 2021 01:57:02 AEST
+# --- Last Modified: Tue 11 May 2021 02:35:54 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -93,6 +93,7 @@ def setup_training_loop_kwargs(
     wvae_noise = None, # The noise dim in wvae.
     apply_m_on_z = None, # If apply M on z of G.
     save_size = None, # The size to save per image in traversal.
+    recursive_walk = None, # If recurse walk.
     trav_walk_scale = None, # The traversal walking scale.
     post_vae_lambda = None, # The post_vae lambda.
     post_vae_kl_lambda = None, # The KL lambda in post_vae.
@@ -248,6 +249,7 @@ def setup_training_loop_kwargs(
     args.batch_size = spec.mb
     args.batch_gpu = spec.mb // spec.ref_gpus
     args.save_size = save_size
+    args.recursive_walk = recursive_walk
 
     if kimg is not None:
         assert isinstance(kimg, int)
@@ -400,6 +402,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--wvae_noise', help='The number of noise dim in M wvae', type=int, default=0)
 @click.option('--apply_m_on_z', help='If apply M on z of G', type=bool, default=False)
 @click.option('--save_size', help='The size to save per image in traversal', type=int, default=128)
+@click.option('--recursive_walk', help='If recursive walk', type=bool, default=False)
 @click.option('--trav_walk_scale', help='The walk scale in traversal', type=float, default=0.01)
 @click.option('--post_vae_lambda', help='The post_vae lambda.', type=float, default=0.)
 @click.option('--post_vae_kl_lambda', help='The KL lambda in post_vae.', type=float, default=1.)

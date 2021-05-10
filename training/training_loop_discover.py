@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 11 May 2021 02:10:23 AEST
+# --- Last Modified: Tue 11 May 2021 02:34:52 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -69,6 +69,7 @@ def training_loop(
     gan_network_pkl         = None,     # The Generator network pkl.
     save_size               = 128,      # Image size to save per image in traversal.
     trav_walk_scale         = 0.01,     # Traversal walking scale.
+    recursive_walk          = True,     # If recursive walk.
 ):
     # Initialize.
     start_time = time.time()
@@ -171,9 +172,11 @@ def training_loop(
         c_origin = torch.randn([1, G.c_dim], device=device)
         if not M.apply_M_on_z:
             w_origin = G.mapping(z_origin, c_origin) # (1, num_ws, w_dim)
-            # w_walk = get_walk(w_origin, M, n_samples_per, trav_walk_scale).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
-            w_var = run_M(M, w_origin[:, 0]) # (1, M.z_dim, w_dim+num_ws)
-            w_walk = get_walk_wfixed(w_origin, w_var, M, n_samples_per, trav_walk_scale).split(batch_gpu)
+            if recursive_walk:
+                w_walk = get_walk(w_origin, M, n_samples_per, trav_walk_scale).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
+            else:
+                w_var = run_M(M, w_origin[:, 0]) # (1, M.z_dim, w_dim+num_ws)
+                w_walk = get_walk_wfixed(w_origin, w_var, M, n_samples_per, trav_walk_scale).split(batch_gpu)
             images = torch.cat([G.synthesis(w, noise_mode='const') for w in w_walk]) # (gh * gw, c, h, w)
         else:
             z_walk = get_walk_on_z(z_origin, M, n_samples_per, trav_walk_scale).split(batch_gpu)
@@ -306,9 +309,11 @@ def training_loop(
             c_origin = torch.randn([1, G.c_dim], device=device)
             if not M.apply_M_on_z:
                 w_origin = G.mapping(z_origin, c_origin) # (1, num_ws, w_dim)
-                # w_walk = get_walk(w_origin, M, n_samples_per, trav_walk_scale).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
-                w_var = run_M(M, w_origin[:, 0]) # (1, M.z_dim, w_dim+num_ws)
-                w_walk = get_walk_wfixed(w_origin, w_var, M, n_samples_per, trav_walk_scale).split(batch_gpu)
+                if recursive_walk:
+                    w_walk = get_walk(w_origin, M, n_samples_per, trav_walk_scale).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
+                else:
+                    w_var = run_M(M, w_origin[:, 0]) # (1, M.z_dim, w_dim+num_ws)
+                    w_walk = get_walk_wfixed(w_origin, w_var, M, n_samples_per, trav_walk_scale).split(batch_gpu)
                 images = torch.cat([G.synthesis(w, noise_mode='const') for w in w_walk]) # (gh * gw, c, h, w)
             else:
                 z_walk = get_walk_on_z(z_origin, M, n_samples_per, trav_walk_scale).split(batch_gpu)
