@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 10 May 2021 16:53:17 AEST
+# --- Last Modified: Tue 11 May 2021 01:57:02 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -76,6 +76,7 @@ def setup_training_loop_kwargs(
     num_layers = None, # Number of layers in Navigator.
     sensor_type = None, # The Sensor net type.
     norm_on_depth = None, # If normalize diff vectors taking depth in to account.
+    use_norm_mask = None, # If use norm_mask.
     gan_network_pkl = None, # The pretrained GAN network pkl.
     div_lambda = None, # The W-space cos_fn lambda.
     div_heat_lambda = None, # The heat cos_fn lambda.
@@ -92,7 +93,10 @@ def setup_training_loop_kwargs(
     wvae_noise = None, # The noise dim in wvae.
     apply_m_on_z = None, # If apply M on z of G.
     save_size = None, # The size to save per image in traversal.
-    trav_walk_scale = 0.01, # The traversal walking scale.
+    trav_walk_scale = None, # The traversal walking scale.
+    post_vae_lambda = None, # The post_vae lambda.
+    post_vae_kl_lambda = None, # The KL lambda in post_vae.
+    ce_diffdim_lambda = None, # The cross_entropy lambda for diff dim.
 ):
     args = dnnlib.EasyDict()
 
@@ -219,6 +223,9 @@ def setup_training_loop_kwargs(
     args.M_kwargs.kl_lambda = kl_lambda
     args.M_kwargs.wvae_noise = wvae_noise
     args.M_kwargs.apply_M_on_z = apply_m_on_z
+    args.M_kwargs.post_vae_lambda = post_vae_lambda
+    args.M_kwargs.post_vae_kl_lambda = post_vae_kl_lambda
+    args.M_kwargs.ce_diffdim_lambda = ce_diffdim_lambda
 
     args.M_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', lr=spec.lrate, betas=[0,0.99], eps=1e-8)
     if sensor_type is None:
@@ -235,6 +242,7 @@ def setup_training_loop_kwargs(
     args.loss_kwargs.var_sample_scale = var_sample_scale
     args.loss_kwargs.var_sample_mean = var_sample_mean
     args.loss_kwargs.sensor_used_layers = sensor_used_layers
+    args.loss_kwargs.use_norm_mask = use_norm_mask
 
     args.total_kimg = spec.kimg
     args.batch_size = spec.mb
@@ -376,6 +384,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--nav_type', help='The Navigator type', type=str, default='ada')
 @click.option('--num_layers', help='Number of layers in Navigator', metavar='INT', default=2)
 @click.option('--norm_on_depth', help='If normalize diff vectors taking depth into account', default=True, type=bool)
+@click.option('--use_norm_mask', help='If use norm mask when computing main loss', type=bool, default=True)
 @click.option('--div_lambda', help='The W-space div_lambda', type=float, default=0.)
 @click.option('--div_heat_lambda', help='The div_heat_lambda', type=float, default=0.)
 @click.option('--norm_lambda', help='The norm lambda in diff features', type=float, default=0.)
@@ -392,6 +401,9 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--apply_m_on_z', help='If apply M on z of G', type=bool, default=False)
 @click.option('--save_size', help='The size to save per image in traversal', type=int, default=128)
 @click.option('--trav_walk_scale', help='The walk scale in traversal', type=float, default=0.01)
+@click.option('--post_vae_lambda', help='The post_vae lambda.', type=float, default=0.)
+@click.option('--post_vae_kl_lambda', help='The KL lambda in post_vae.', type=float, default=1.)
+@click.option('--ce_diffdim_lambda', help='The cross_entropy lambda for diff dim.', type=float, default=1.)
 
 def main(ctx, outdir, dry_run, **config_kwargs):
     """Train a GAN using the techniques described in the paper

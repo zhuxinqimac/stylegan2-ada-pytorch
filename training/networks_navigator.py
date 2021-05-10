@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sun 09 May 2021 23:44:00 AEST
+# --- Last Modified: Tue 11 May 2021 00:48:29 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -20,12 +20,15 @@ import torch
 import torch.nn.functional as F
 from torch_utils import misc
 from torch_utils import persistence
+from torch_utils import training_stats
 from torch_utils.ops import conv2d_resample
 from torch_utils.ops import upfirdn2d
 from torch_utils.ops import bias_act
 from torch_utils.ops import fma
 from training.networks import SynthesisNetwork, FullyConnectedLayer, normalize_2nd_moment
 from training.networks_uneven import GroupFullyConnectedLayer
+from training.loss_discover import fuse_hat, gaussian_kl, reparametrise_gaussian
+from training.networks_vae import VAEEncoder, VAEDecoder
 
 #----------------------------------------------------------------------------
 def softmax_last_dim_fn(x):
@@ -45,6 +48,8 @@ class Navigator(torch.nn.Module):
         w_dim,                      # Intermediate latent (W) dimensionality.
         num_ws,                     # Number of intermediate latents for synthesis net input.
         g_z_dim         = 512,      # Number of z_dim in G.
+        resolution      = 512,      # Image resolution of G.
+        nc              = 3,        # Image channels of G.
         activation      = 'lrelu',  # Activation function: 'relu', 'lrelu', etc.
         lr_multiplier   = 1,        # Learning rate multiplier.
         nav_type        = 'ada',    # Navigator type: 'ada', 'fixed'.
@@ -55,13 +60,18 @@ class Navigator(torch.nn.Module):
         wvae_lambda     = 0.,       # The vae lambda for w space.
         kl_lambda       = 1.,       # The KL lambda in wvae loss.
         wvae_noise      = 0,        # The number of noise dims in wvae.
-        apply_M_on_z    = False,     # If apply M network on z of G.
+        apply_M_on_z    = False,    # If apply M network on z of G.
+        post_vae_lambda = 0.,       # The post_vae lambda.
+        post_vae_kl_lambda = 1.,    # The KL lambda in post_vae.
+        ce_diffdim_lambda = 1.,    # The cross_entropy loss lambda for diff dim.
     ):
         super().__init__()
         self.z_dim = z_dim
         self.c_dim = c_dim
         self.w_dim = w_dim
         self.g_z_dim = g_z_dim
+        self.resolution = resolution
+        self.nc = nc
         self.num_ws = num_ws
         self.activation = activation
         self.lr_multiplier = lr_multiplier
@@ -113,6 +123,89 @@ class Navigator(torch.nn.Module):
         if self.use_global_layer_heat:
             self.heat_logits = torch.nn.Parameter(torch.randn([1, self.z_dim, self.num_ws])) # (1, z_dim, num_ws)
         # self.epsilon_dir = torch.nn.Parameter(torch.randn([self.z_dim]) * 0.02)
+
+        self.post_vae_lambda = post_vae_lambda
+        if self.post_vae_lambda != 0:
+            self.post_enc = VAEEncoder(self.resolution, self.nc, self.z_dim)
+            self.post_dec = VAEDecoder(self.resolution, self.nc, self.z_dim)
+            self.post_vae_kl_lambda = post_vae_kl_lambda
+            self.ce_loss_fn = torch.nn.CrossEntropyLoss()
+            self.ce_diffdim_lambda = ce_diffdim_lambda
+
+    def post_vae_loss(self, imgs_all, pos_neg_idx):
+        '''
+        imgs_all: (2.5b, c, h, w), [:b]: orig, [b:1.5b]: q, [1.5b:2b]: pos, [2b:2.5b]: neg
+        pos_neg_idx: (b//2, 2)
+        '''
+        b_size = imgs_all.size(0) // 5 * 2
+        imgs_all = imgs_all[:2*b_size] # Discard neg examples: (2b, c, h, w)
+        mu_all, logvar_all = torch.split(self.post_enc(imgs_all.clip(-1., 1.)), self.z_dim, dim=1) # (2b, z_dim)
+
+        # KL loss
+        loss_kl = gaussian_kl(mu_all, logvar_all)
+        training_stats.report('Loss/M/loss_postvae_kl', loss_kl)
+        mu_sample = reparametrise_gaussian(mu_all, logvar_all) # (2b, z_dim)
+
+        # Recons loss
+        imgs_hat = self.post_dec(mu_sample) # (2b, c, h, w)
+        loss_mse = (imgs_all.clip(-1., 1.) - (imgs_hat.sigmoid()-0.5)*2.).pow(2).sum() / imgs_all.size(0)
+        training_stats.report('Loss/M/loss_postvae_mse', loss_mse)
+
+        # Diff index predict loss
+        mu_q_orig, mu_pos_orig, mu_q, mu_pos = torch.split(mu_all[:, :self.z_dim], b_size//2, dim=0) # (b//2, z_dim)
+        # logvar_q_orig, logvar_pos_orig, logvar_q, logvar_pos = torch.split(logvar_all[:, :self.z_dim], b_size//2, dim=0) # (b//2, z_dim)
+        delta_q = (mu_q - mu_q_orig)**2 # (b//2, z_dim)
+        delta_pos = (mu_pos - mu_pos_orig)**2
+        loss_ce_q = self.ce_loss_fn(delta_q * 100., pos_neg_idx[:, 0])
+        loss_ce_pos = self.ce_loss_fn(delta_pos * 100., pos_neg_idx[:, 0])
+        loss_ce = (loss_ce_q + loss_ce_pos) / 2.
+        training_stats.report('Loss/M/loss_ce_diffdim', loss_ce)
+
+        loss_post_vae = loss_mse + self.post_vae_kl_lambda * loss_kl + self.ce_diffdim_lambda * loss_ce
+        training_stats.report('Loss/M/loss_postvae', loss_post_vae)
+
+        return self.post_vae_lambda * loss_post_vae
+
+    def post_vae_loss_avg_shared(self, imgs_all, pos_neg_idx):
+        '''
+        imgs_all: (2.5b, c, h, w), [:b]: orig, [b:1.5b]: q, [1.5b:2b]: pos, [2b:2.5b]: neg
+        pos_neg_idx: (b//2, 2)
+        '''
+        b_size = imgs_all.size(0) // 5 * 2
+        imgs_all = imgs_all[:2*b_size] # Discard neg examples: (2b, c, h, w)
+        mu_all, logvar_all = torch.split(self.post_enc(imgs_all.clip(-1., 1.)), self.z_dim, dim=1) # (2b, z_dim)
+        mu_q_orig, mu_pos_orig, mu_q, mu_pos = torch.split(mu_all[:, :self.z_dim], b_size//2, dim=0) # (b//2, z_dim)
+        logvar_q_orig, logvar_pos_orig, logvar_q, logvar_pos = torch.split(logvar_all[:, :self.z_dim], b_size//2, dim=0) # (b//2, z_dim)
+
+        # Get mean of z
+        avg_mu_q, avg_mu_pos = (mu_q_orig + mu_q) / 2., (mu_pos_orig + mu_pos) / 2.
+        avg_logvar_q, avg_logvar_pos = (logvar_q_orig + logvar_q) / 2., (logvar_pos_orig + logvar_pos) / 2.
+
+        # Get varied onehot mask
+        pos_idx = pos_neg_idx[:, 0] # (b//2)
+        onehot_mask = F.one_hot(pos_idx, self.z_dim).float() # (b//2, z_dim)
+
+        # Fuse varied and avg dimensions
+        mu_q_orig_hat, mu_q_hat = fuse_hat(mu_q_orig, mu_q, avg_mu_q, onehot_mask) # (b//2, z_dim)
+        mu_pos_orig_hat, mu_pos_hat = fuse_hat(mu_pos_orig, mu_pos, avg_mu_pos, onehot_mask)
+        logvar_q_orig_hat, logvar_q_hat = fuse_hat(logvar_q_orig, logvar_q, avg_logvar_q, onehot_mask)
+        logvar_pos_orig_hat, logvar_pos_hat = fuse_hat(logvar_pos_orig, logvar_pos, avg_logvar_pos, onehot_mask)
+
+        mu_hat = torch.cat([mu_q_orig_hat, mu_pos_orig_hat, mu_q_hat, mu_pos_hat], dim=0)
+        logvar_hat = torch.cat([logvar_q_orig_hat, logvar_pos_orig_hat, logvar_q_hat, logvar_pos_hat], dim=0)
+
+        loss_kl = gaussian_kl(mu_hat, logvar_hat)
+        training_stats.report('Loss/M/loss_postvae_kl', loss_kl)
+        mu_sample = reparametrise_gaussian(mu_hat, logvar_hat) # (2b, z_dim)
+
+        imgs_hat = self.post_dec(mu_sample) # (2b, c, h, w)
+        loss_mse = (imgs_all.clip(-1., 1.) - (imgs_hat.sigmoid()-0.5)*2.).pow(2).sum() / imgs_all.size(0)
+        training_stats.report('Loss/M/loss_postvae_mse', loss_mse)
+
+        loss_post_vae = loss_mse + self.post_vae_kl_lambda * loss_kl
+        training_stats.report('Loss/M/loss_postvae', loss_post_vae)
+
+        return self.post_vae_lambda * loss_post_vae
 
     def get_heat_fn(self, heat_fn_name):
         if heat_fn_name == 'softmax':

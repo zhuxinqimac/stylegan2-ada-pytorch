@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 10 May 2021 13:28:51 AEST
+# --- Last Modified: Tue 11 May 2021 01:55:53 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -44,7 +44,7 @@ def gaussian_kl(mu, logvar):
 class DiscoverLoss(Loss):
     def __init__(self, device, G_mapping, G_synthesis, M, S, S_L, norm_on_depth,
                  div_lambda=0., div_heat_lambda=0., norm_lambda=0., var_sample_scale=1.,
-                 var_sample_mean=0., sensor_used_layers=5):
+                 var_sample_mean=0., sensor_used_layers=5, use_norm_mask=True):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -53,6 +53,7 @@ class DiscoverLoss(Loss):
         self.S = S
         self.S_L = S_L
         self.norm_on_depth = norm_on_depth
+        self.use_norm_mask = use_norm_mask
         self.div_lambda = div_lambda
         self.div_heat_lambda = div_heat_lambda
         self.norm_lambda = norm_lambda
@@ -118,11 +119,16 @@ class DiscoverLoss(Loss):
         mask_pos_comb = mask_q * mask_pos
         mask_neg_comb = mask_q * mask_neg
 
-        cos_sim_pos = self.cos_fn(diff_q, diff_pos) * mask_pos_comb
-        cos_sim_neg = self.cos_fn(diff_q, diff_neg) * mask_neg_comb
-
-        loss_pos = (-cos_sim_pos**2).sum(dim=[1,2]) / mask_pos_comb.sum(dim=[1,2]) # (0.5batch)
-        loss_neg = (cos_sim_neg**2).sum(dim=[1,2]) / mask_neg_comb.sum(dim=[1,2])
+        if self.use_norm_mask:
+            cos_sim_pos = self.cos_fn(diff_q, diff_pos) * mask_pos_comb
+            cos_sim_neg = self.cos_fn(diff_q, diff_neg) * mask_neg_comb
+            loss_pos = (-cos_sim_pos**2).sum(dim=[1,2]) / mask_pos_comb.sum(dim=[1,2]) # (0.5batch)
+            loss_neg = (cos_sim_neg**2).sum(dim=[1,2]) / mask_neg_comb.sum(dim=[1,2])
+        else:
+            cos_sim_pos = self.cos_fn(diff_q, diff_pos)
+            cos_sim_neg = self.cos_fn(diff_q, diff_neg)
+            loss_pos = (-cos_sim_pos**2).mean(dim=[1,2]) # (0.5batch)
+            loss_neg = (cos_sim_neg**2).mean(dim=[1,2])
         training_stats.report('Loss/M/loss_diff_pos_{}'.format(idx), loss_pos)
         training_stats.report('Loss/M/loss_diff_neg_{}'.format(idx), loss_neg)
         loss = loss_pos + loss_neg # (0.5batch)
@@ -275,9 +281,16 @@ class DiscoverLoss(Loss):
                 batch = gen_z.size(0)
                 ws_orig = self.run_G_mapping(gen_z, gen_c)
                 ws = ws_orig[:, 0] # remove broadcast
+
+                # Predict delta for every direction at every input point.
                 out_M = self.run_M(ws, sync)
                 delta = out_M[:, :, :self.M.w_dim]
-                loss_diversity = self.calc_loss_diversity(delta) # (b/1)
+
+                # Dir diversity loss.
+                if self.div_lambda != 0:
+                    loss_diversity = self.calc_loss_diversity(delta) # (b/1)
+
+                # Sample directions for q, pos, neg.
                 if delta.size(0) == 1:
                     delta = delta.repeat(batch, 1, 1) # (b, M.z_dim, w_dim)
                 pos_neg_idx = self.sample_batch_pos_neg_dirs(batch // 2, self.M.z_dim).to(delta.device) # (b//2, 2)
@@ -285,6 +298,7 @@ class DiscoverLoss(Loss):
                 delta_pos = torch.gather(delta[batch//2:], 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(1, 1, self.M.w_dim)).squeeze()
                 delta_neg = torch.gather(delta[batch//2:], 1, pos_neg_idx[:, 1].view(batch//2, 1, 1).repeat(1, 1, self.M.w_dim)).squeeze() # (b//2, w_dim)
 
+                # Predict heatmap on each layer for G_synthesis.
                 if self.M.use_global_layer_heat:
                     heat_logits = self.M.heat_logits.repeat(batch//2, 1, 1) # (b//2, M.z_dim, num_ws)
                     layer_heat_q = self.M.heat_fn(torch.gather(heat_logits, 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(
@@ -327,10 +341,17 @@ class DiscoverLoss(Loss):
 
                 ws_all = torch.cat([ws_orig, ws_q, ws_pos, ws_neg], dim=0) # (2.5 * batch, num_ws, w_dim)
                 imgs_all = self.run_G_synthesis(ws_all)
-                outs_all = self.run_S(imgs_all)
-                loss_Mmain = self.extract_diff_loss(outs_all)
-                training_stats.report('Loss/M/loss_diversity', loss_diversity)
-                loss_Mmain += self.div_lambda * loss_diversity
+
+                # Main loss
+                if self.M.post_vae_lambda == 0:
+                    outs_all = self.run_S(imgs_all)
+                    loss_Mmain = self.extract_diff_loss(outs_all)
+                else:
+                    loss_Mmain = self.M.post_vae_loss(imgs_all, pos_neg_idx)
+
+                if self.div_lambda != 0:
+                    training_stats.report('Loss/M/loss_diversity', loss_diversity)
+                    loss_Mmain += self.div_lambda * loss_diversity
 
                 if self.M.use_local_layer_heat or self.M.use_global_layer_heat:
                     loss_Mmain += self.div_heat_lambda * loss_heat_diversity

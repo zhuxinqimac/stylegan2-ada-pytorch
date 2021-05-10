@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 10 May 2021 16:51:25 AEST
+# --- Last Modified: Mon 10 May 2021 23:59:17 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -34,162 +34,11 @@ from torch_utils.ops import conv2d_gradfix
 from torch_utils.ops import grid_sample_gradfix
 from training.training_loop import setup_snapshot_image_grid, save_image_grid
 from training.training_loop_uneven import get_traversal
+from training.walk_utils import run_M, get_walk_wfixed, get_walk, get_walk_on_z
+from training.walk_utils import get_diff_masks, get_vae_walk
 
 import legacy
 from metrics import metric_main
-
-def run_M(M, w):
-    delta = M(w)
-    return delta
-
-def get_walk_wfixed(w_origin, w_var, M, n_samples_per, trav_walk_scale=0.2):
-    # gh, gw = M.z_dim, n_samples_per
-    # return: (gh * gw, num_ws, w_dim)
-    # w_origin: (1, num_ws, w_dim)
-    # w_var: (1, M.z_dim, w_dim+num_ws)
-    walk_ls = []
-    for i in range(M.z_dim):
-        row_ls = []
-        row_ls.append(w_origin)
-        if M.use_local_layer_heat:
-            layer_heat = M.heat_fn(w_var[:, i, M.w_dim:]).unsqueeze(2) # (1, num_ws, 1)
-        elif M.use_global_layer_heat:
-            layer_heat = M.heat_fn(M.heat_logits[:, i]).unsqueeze(2) # (1, num_ws, 1)
-        else:
-            layer_heat = torch.ones(1, M.num_ws, 1).to(w_origin.device) * 0.2
-
-        # Forward:
-        w_save = w_origin.clone()
-        for j in range(n_samples_per // 2):
-            w_save = w_save + trav_walk_scale * w_var[:, i:i+1, :M.w_dim] * layer_heat # (1, num_ws, w_dim)
-            row_ls.append(w_save.clone())
-        # Backward:
-        w_save = w_origin.clone()
-        for j in range(n_samples_per - n_samples_per // 2 - 1):
-            w_save = w_save - trav_walk_scale * w_var[:, i:i+1, :M.w_dim] * layer_heat # (1, num_ws, w_dim)
-            row_ls = [w_save.clone()] + row_ls
-
-        row_tensor = torch.cat(row_ls, dim=0)
-        walk_ls.append(row_tensor)
-    walk_tensor = torch.cat(walk_ls, dim=0) # (z_dim * n_samples_per, num_ws, w_dim)
-    return walk_tensor
-
-def get_walk(w_origin_ws, M, n_samples_per, trav_walk_scale=0.01):
-    # gh, gw = M.z_dim, n_samples_per
-    # return: (gh * gw, num_ws, w_dim)
-    walk_ls = []
-    w_origin = w_origin_ws[:, 0] # remove broadcast.
-    for i in range(M.z_dim):
-        row_ls = []
-        row_ls.append(w_origin_ws)
-
-        # print('M.use_layer_heat:', M.use_layer_heat)
-        w = w_origin.clone()
-        w_save = w_origin_ws.clone()
-        # Forward:
-        for j in range(n_samples_per // 2):
-            for k in range(15): # Record every 10 steps
-                out_M = run_M(M, w) # (1, M.z_dim, w_dim+num_ws)
-                delta = out_M[:, :, :M.w_dim] * trav_walk_scale # (1, M.z_dim, w_dim)
-                if M.use_local_layer_heat:
-                    layer_heat = M.heat_fn(out_M[:, i, M.w_dim:]).unsqueeze(2) # (1, num_ws, 1)
-                elif M.use_global_layer_heat:
-                    layer_heat = M.heat_fn(M.heat_logits[:, i]).unsqueeze(2) # (1, num_ws, 1)
-                else:
-                    layer_heat = torch.ones(1, M.num_ws, 1).to(w_origin.device) * 0.2
-                w_save = w_save + delta[:, i:i+1] * layer_heat # (1, num_ws, w_dim)
-                w = w_save.mean(dim=1)
-            row_ls.append(w_save.clone())
-
-        w = w_origin.clone()
-        w_save = w_origin_ws.clone()
-        # Backward:
-        for j in range(n_samples_per - n_samples_per // 2 - 1):
-            for k in range(15): # Record every 10 steps
-                out_M = run_M(M, w) # (1, M.z_dim, w_dim+num_ws)
-                delta = -out_M[:, :, :M.w_dim] * trav_walk_scale # (1, M.z_dim, w_dim)
-                if M.use_local_layer_heat:
-                    layer_heat = M.heat_fn(out_M[:, i, M.w_dim:]).unsqueeze(2) # (1, num_ws, 1)
-                elif M.use_global_layer_heat:
-                    layer_heat = M.heat_fn(M.heat_logits[:, i]).unsqueeze(2) # (1, num_ws, 1)
-                else:
-                    layer_heat = torch.ones(1, M.num_ws, 1).to(w_origin.device) * 0.2
-                w_save = w_save + delta[:, i:i+1] * layer_heat # (1, num_ws, w_dim)
-                w = w_save.mean(dim=1)
-            row_ls = [w_save.clone()] + row_ls
-
-        row_tensor = torch.cat(row_ls, dim=0)
-        walk_ls.append(row_tensor)
-    walk_tensor = torch.cat(walk_ls, dim=0) # (z_dim * n_samples_per, num_ws, w_dim)
-    return walk_tensor
-
-def get_walk_on_z(z_origin, M, n_samples_per, trav_walk_scale=0.001):
-    # gh, gw = M.z_dim, n_samples_per
-    # return: (gh * gw, num_ws, g_z_dim)
-    walk_ls = []
-    for i in range(M.z_dim):
-        row_ls = []
-        row_ls.append(z_origin)
-
-        # print('M.use_layer_heat:', M.use_layer_heat)
-        z = z_origin.clone()
-        # Forward:
-        for j in range(n_samples_per // 2):
-            for k in range(15): # Record every 10 steps
-                out_M = run_M(M, z) # (1, M.z_dim, g_z_dim+num_ws)
-                delta = out_M[:, :, :M.g_z_dim] * trav_walk_scale # (1, M.z_dim, g_z_dim)
-                if M.use_local_layer_heat:
-                    layer_heat = M.heat_fn(out_M[:, i, M.g_z_dim:]).unsqueeze(2) # (1, num_ws, 1)
-                elif M.use_global_layer_heat:
-                    layer_heat = M.heat_fn(M.heat_logits[:, i]).unsqueeze(2) # (1, num_ws, 1)
-                else:
-                    layer_heat = torch.ones(1, M.num_ws, 1).to(z_origin.device) * 0.2
-                z = z + delta[:, i] # (1, g_z_dim)
-            row_ls.append(z.clone())
-
-        z = z_origin.clone()
-        # Backward:
-        for j in range(n_samples_per - n_samples_per // 2 - 1):
-            for k in range(15): # Record every 10 steps
-                out_M = run_M(M, z) # (1, M.z_dim, g_z_dim+num_ws)
-                delta = -out_M[:, :, :M.g_z_dim] * trav_walk_scale # (1, M.z_dim, g_z_dim)
-                if M.use_local_layer_heat:
-                    layer_heat = M.heat_fn(out_M[:, i, M.g_z_dim:]).unsqueeze(2) # (1, num_ws, 1)
-                elif M.use_global_layer_heat:
-                    layer_heat = M.heat_fn(M.heat_logits[:, i]).unsqueeze(2) # (1, num_ws, 1)
-                else:
-                    layer_heat = torch.ones(1, M.num_ws, 1).to(z_origin.device) * 0.2
-                z = z + delta[:, i] # (1, g_z_dim)
-            row_ls = [z.clone()] + row_ls
-
-        row_tensor = torch.cat(row_ls, dim=0)
-        walk_ls.append(row_tensor)
-    walk_tensor = torch.cat(walk_ls, dim=0) # (z_dim * n_samples_per, g_z_dim)
-    return walk_tensor
-
-def get_diff_masks(images, gw, gh, S, save_size):
-    # masks = get_diff_masks(images, n_samples_per, M.z_dim, S)
-    # images: (gh*gw, c, h, w)
-    b, c, h, w = images.size()
-    images = images.view(gh, gw, c, h, w)
-    img_ls = []
-    for i in range(gh):
-        img_ls.append(images[i, gw//2].view(1, c, h, w))
-        img_ls.append(images[i, gw//2+1].view(1, c, h, w))
-    img_tensor = torch.cat(img_ls, dim=0) # (gh*2, c, h, w)
-    outs = S.forward(img_tensor) # list of (gh*2, ci, hi, wi)
-    diff_ls = []
-    for feat_L in outs:
-        feat_L_scaled = F.interpolate(feat_L, (save_size, save_size), mode='bilinear')
-        diff = feat_L_scaled[::2] - feat_L_scaled[1::2] # (gh, ci, h, w)
-        diff_norm = torch.norm(diff, dim=1) # (gh, h, w)
-        diff_norm_viewed = diff_norm.view(gh, save_size * save_size)
-        diff_norm_max = diff_norm_viewed.max(dim=1, keepdim=True)[0]
-        diff_norm_min = diff_norm_viewed.min(dim=1, keepdim=True)[0]
-        diff_mask = (diff_norm_viewed - diff_norm_min) / (diff_norm_max - diff_norm_min)
-        diff_ls.append(diff_mask.view(gh, 1, save_size, save_size))
-    diff_out = torch.cat(diff_ls, dim=1).view(gh*len(outs), 1, save_size, save_size)
-    return diff_out
 
 #----------------------------------------------------------------------------
 
@@ -249,7 +98,7 @@ def training_loop(
     # Construct Navigator networks.
     if rank == 0:
         print('Constructing navigator networks...')
-    common_kwargs = dict(c_dim=G.c_dim, w_dim=G.w_dim, num_ws=G.num_ws, g_z_dim=G.z_dim)
+    common_kwargs = dict(c_dim=G.c_dim, w_dim=G.w_dim, num_ws=G.num_ws, g_z_dim=G.z_dim, resolution=G.img_resolution, nc=G.img_channels)
     M = dnnlib.util.construct_class_by_name(**M_kwargs, **common_kwargs).train().requires_grad_(False).to(device) # subclass of torch.nn.Module
 
     # Resume from existing pickle.
@@ -265,6 +114,7 @@ def training_loop(
     if rank == 0:
         print('Passed resume')
 
+    print('M.post_vae_lambda:', M.post_vae_lambda)
     # Print network summary tables.
     if rank == 0:
         z = torch.empty([batch_gpu, G.z_dim], device=device)
@@ -273,6 +123,10 @@ def training_loop(
         img = misc.print_module_summary(G, [z, c])
         w = torch.empty([batch_gpu, M.w_dim], device=device)
         misc.print_module_summary(M, [w])
+        if M.post_vae_lambda != 0:
+            v = torch.empty([batch_gpu, M.z_dim], device=device)
+            misc.print_module_summary(M.post_enc, [img])
+            misc.print_module_summary(M.post_dec, [v])
 
     # Distribute across GPUs.
     if rank == 0:
@@ -317,21 +171,33 @@ def training_loop(
         c_origin = torch.randn([1, G.c_dim], device=device)
         if not M.apply_M_on_z:
             w_origin = G.mapping(z_origin, c_origin) # (1, num_ws, w_dim)
-            # w_walk = get_walk(w_origin, M, n_samples_per, trav_walk_scale).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
-            w_var = run_M(M, w_origin[:, 0]) # (1, M.z_dim, w_dim+num_ws)
-            w_walk = get_walk_wfixed(w_origin, w_var, M, n_samples_per, trav_walk_scale).split(batch_gpu)
+            w_walk = get_walk(w_origin, M, n_samples_per, trav_walk_scale).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
+            # w_var = run_M(M, w_origin[:, 0]) # (1, M.z_dim, w_dim+num_ws)
+            # w_walk = get_walk_wfixed(w_origin, w_var, M, n_samples_per, trav_walk_scale).split(batch_gpu)
             images = torch.cat([G.synthesis(w, noise_mode='const') for w in w_walk]) # (gh * gw, c, h, w)
         else:
             z_walk = get_walk_on_z(z_origin, M, n_samples_per, trav_walk_scale).split(batch_gpu)
             images = torch.cat([G.synthesis(G.mapping(z, c_origin.repeat(z.size(0), 1)), noise_mode='const') for z in z_walk])
-        masks = get_diff_masks(images, n_samples_per, M.z_dim, S, save_size).cpu().numpy()
+
+        if M.post_vae_lambda != 0:
+            v_origin = torch.randn([1, M.z_dim], device=device)
+            v_walk = get_vae_walk(v_origin, M, n_samples_per).split(batch_gpu)
+            v_images = torch.cat([M.post_dec(v).sigmoid() for v in v_walk])
+            if save_size < v_images.size(-1):
+                v_images = F.adaptive_avg_pool2d(v_images, (save_size, save_size)).cpu().numpy()
+            else:
+                v_images = v_images.cpu().numpy()
+            save_image_grid(v_images, os.path.join(run_dir, 'vae_trav_init.png'), drange=[0,1], grid_size=walk_grid_size)
+        else:
+            masks = get_diff_masks(images, n_samples_per, M.z_dim, S, save_size).cpu().numpy()
+            save_image_grid(masks, os.path.join(run_dir, 'diff_init.png'), drange=[0,1], grid_size=(loss_kwargs.S_L, M.z_dim))
+
         if save_size < images.size(-1):
             images = F.adaptive_avg_pool2d(images, (save_size, save_size)).cpu().numpy()
         else:
             images = images.cpu().numpy()
         print('images.shape:', images.shape)
         save_image_grid(images, os.path.join(run_dir, 'trav_init.png'), drange=[-1,1], grid_size=walk_grid_size)
-        save_image_grid(masks, os.path.join(run_dir, 'diff_init.png'), drange=[0,1], grid_size=(loss_kwargs.S_L, M.z_dim))
 
     # Initialize logs.
     if rank == 0:
@@ -440,20 +306,32 @@ def training_loop(
             c_origin = torch.randn([1, G.c_dim], device=device)
             if not M.apply_M_on_z:
                 w_origin = G.mapping(z_origin, c_origin) # (1, num_ws, w_dim)
-                # w_walk = get_walk(w_origin, M, n_samples_per, trav_walk_scale).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
-                w_var = run_M(M, w_origin[:, 0]) # (1, M.z_dim, w_dim+num_ws)
-                w_walk = get_walk_wfixed(w_origin, w_var, M, n_samples_per, trav_walk_scale).split(batch_gpu)
+                w_walk = get_walk(w_origin, M, n_samples_per, trav_walk_scale).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
+                # w_var = run_M(M, w_origin[:, 0]) # (1, M.z_dim, w_dim+num_ws)
+                # w_walk = get_walk_wfixed(w_origin, w_var, M, n_samples_per, trav_walk_scale).split(batch_gpu)
                 images = torch.cat([G.synthesis(w, noise_mode='const') for w in w_walk]) # (gh * gw, c, h, w)
             else:
                 z_walk = get_walk_on_z(z_origin, M, n_samples_per, trav_walk_scale).split(batch_gpu)
                 images = torch.cat([G.synthesis(G.mapping(z, c_origin.repeat(z.size(0), 1)), noise_mode='const') for z in z_walk])
-            masks = get_diff_masks(images, n_samples_per, M.z_dim, S, save_size).cpu().numpy()
+
+            if M.post_vae_lambda != 0:
+                v_origin = torch.randn([1, M.z_dim], device=device)
+                v_walk = get_vae_walk(v_origin, M, n_samples_per).split(batch_gpu)
+                v_images = torch.cat([M.post_dec(v).sigmoid() for v in v_walk])
+                if save_size < v_images.size(-1):
+                    v_images = F.adaptive_avg_pool2d(v_images, (save_size, save_size)).cpu().numpy()
+                else:
+                    v_images = v_images.cpu().numpy()
+                save_image_grid(v_images, os.path.join(run_dir, f'vae_trav_{cur_nimg//1000:06d}.png'), drange=[0,1], grid_size=walk_grid_size)
+            else:
+                masks = get_diff_masks(images, n_samples_per, M.z_dim, S, save_size).cpu().numpy()
+                save_image_grid(masks, os.path.join(run_dir, f'diff_{cur_nimg//1000:06d}.png'), drange=[0,1], grid_size=(loss_kwargs.S_L, M.z_dim))
+
             if save_size < images.size(-1):
                 images = F.adaptive_avg_pool2d(images, (save_size, save_size)).cpu().numpy()
             else:
                 images = images.cpu().numpy()
             save_image_grid(images, os.path.join(run_dir, f'trav_{cur_nimg//1000:06d}.png'), drange=[-1,1], grid_size=walk_grid_size)
-            save_image_grid(masks, os.path.join(run_dir, f'diff_{cur_nimg//1000:06d}.png'), drange=[0,1], grid_size=(loss_kwargs.S_L, M.z_dim))
 
         # Save network snapshot.
         snapshot_pkl = None
