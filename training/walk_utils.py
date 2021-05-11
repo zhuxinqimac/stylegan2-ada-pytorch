@@ -8,7 +8,7 @@
 
 # --- File Name: walk_utils.py
 # --- Creation Date: 10-05-2021
-# --- Last Modified: Mon 10 May 2021 21:12:29 AEST
+# --- Last Modified: Tue 11 May 2021 20:06:10 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -67,7 +67,7 @@ def get_walk(w_origin_ws, M, n_samples_per, trav_walk_scale=0.01):
         w_save = w_origin_ws.clone()
         # Forward:
         for j in range(n_samples_per // 2):
-            for k in range(15): # Record every 10 steps
+            for k in range(15): # Record every 15 steps
                 out_M = run_M(M, w) # (1, M.z_dim, w_dim+num_ws)
                 delta = out_M[:, :, :M.w_dim] * trav_walk_scale # (1, M.z_dim, w_dim)
                 if M.use_local_layer_heat:
@@ -84,7 +84,7 @@ def get_walk(w_origin_ws, M, n_samples_per, trav_walk_scale=0.01):
         w_save = w_origin_ws.clone()
         # Backward:
         for j in range(n_samples_per - n_samples_per // 2 - 1):
-            for k in range(15): # Record every 10 steps
+            for k in range(15): # Record every 15 steps
                 out_M = run_M(M, w) # (1, M.z_dim, w_dim+num_ws)
                 delta = -out_M[:, :, :M.w_dim] * trav_walk_scale # (1, M.z_dim, w_dim)
                 if M.use_local_layer_heat:
