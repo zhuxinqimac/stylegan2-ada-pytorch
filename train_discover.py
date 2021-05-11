@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 11 May 2021 02:35:54 AEST
+# --- Last Modified: Tue 11 May 2021 17:17:22 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -77,6 +77,7 @@ def setup_training_loop_kwargs(
     sensor_type = None, # The Sensor net type.
     norm_on_depth = None, # If normalize diff vectors taking depth in to account.
     use_norm_mask = None, # If use norm_mask.
+    use_dynamic_scale = None, # If dynamic scale in loss.
     gan_network_pkl = None, # The pretrained GAN network pkl.
     div_lambda = None, # The W-space cos_fn lambda.
     div_heat_lambda = None, # The heat cos_fn lambda.
@@ -244,6 +245,7 @@ def setup_training_loop_kwargs(
     args.loss_kwargs.var_sample_mean = var_sample_mean
     args.loss_kwargs.sensor_used_layers = sensor_used_layers
     args.loss_kwargs.use_norm_mask = use_norm_mask
+    args.loss_kwargs.use_dynamic_scale = use_dynamic_scale
 
     args.total_kimg = spec.kimg
     args.batch_size = spec.mb
@@ -387,6 +389,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--num_layers', help='Number of layers in Navigator', metavar='INT', default=2)
 @click.option('--norm_on_depth', help='If normalize diff vectors taking depth into account', default=True, type=bool)
 @click.option('--use_norm_mask', help='If use norm mask when computing main loss', type=bool, default=True)
+@click.option('--use_dynamic_scale', help='If use dynamic scale in loss', type=bool, default=True)
 @click.option('--div_lambda', help='The W-space div_lambda', type=float, default=0.)
 @click.option('--div_heat_lambda', help='The div_heat_lambda', type=float, default=0.)
 @click.option('--norm_lambda', help='The norm lambda in diff features', type=float, default=0.)

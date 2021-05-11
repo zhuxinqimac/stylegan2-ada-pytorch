@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 11 May 2021 01:55:53 AEST
+# --- Last Modified: Tue 11 May 2021 17:16:19 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -44,7 +44,7 @@ def gaussian_kl(mu, logvar):
 class DiscoverLoss(Loss):
     def __init__(self, device, G_mapping, G_synthesis, M, S, S_L, norm_on_depth,
                  div_lambda=0., div_heat_lambda=0., norm_lambda=0., var_sample_scale=1.,
-                 var_sample_mean=0., sensor_used_layers=5, use_norm_mask=True):
+                 var_sample_mean=0., sensor_used_layers=5, use_norm_mask=True, use_dynamic_scale=True):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -57,6 +57,7 @@ class DiscoverLoss(Loss):
         self.div_lambda = div_lambda
         self.div_heat_lambda = div_heat_lambda
         self.norm_lambda = norm_lambda
+        self.use_dynamic_scale = use_dynamic_scale
         self.var_sample_scale = var_sample_scale
         self.var_sample_mean = var_sample_mean
         self.cos_fn = nn.CosineSimilarity(dim=1)
@@ -322,7 +323,10 @@ class DiscoverLoss(Loss):
                 else:
                     layer_heat_q = layer_heat_pos = layer_heat_neg = 1.
 
-                scale = torch.abs(torch.randn(batch//2, device=delta.device) * self.var_sample_scale + self.var_sample_mean).view(batch//2, 1)
+                if self.use_dynamic_scale:
+                    scale = torch.abs(torch.randn(batch//2, device=delta.device) * self.var_sample_scale + self.var_sample_mean).view(batch//2, 1)
+                else:
+                    scale = self.var_sample_scale
 
                 if (not self.M.use_local_layer_heat) and (not self.M.use_global_layer_heat):
                     ws_q = ws[:batch//2] + (delta_q * scale) # (batch//2, w_dim)
