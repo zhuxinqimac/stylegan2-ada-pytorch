@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 11 May 2021 17:16:19 AEST
+# --- Last Modified: Thu 13 May 2021 15:14:05 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -44,7 +44,8 @@ def gaussian_kl(mu, logvar):
 class DiscoverLoss(Loss):
     def __init__(self, device, G_mapping, G_synthesis, M, S, S_L, norm_on_depth,
                  div_lambda=0., div_heat_lambda=0., norm_lambda=0., var_sample_scale=1.,
-                 var_sample_mean=0., sensor_used_layers=5, use_norm_mask=True, use_dynamic_scale=True):
+                 var_sample_mean=0., sensor_used_layers=5, use_norm_mask=True,
+                 divide_mask_sum=True, use_dynamic_scale=True):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -54,6 +55,7 @@ class DiscoverLoss(Loss):
         self.S_L = S_L
         self.norm_on_depth = norm_on_depth
         self.use_norm_mask = use_norm_mask
+        self.divide_mask_sum = divide_mask_sum
         self.div_lambda = div_lambda
         self.div_heat_lambda = div_heat_lambda
         self.norm_lambda = norm_lambda
@@ -123,8 +125,12 @@ class DiscoverLoss(Loss):
         if self.use_norm_mask:
             cos_sim_pos = self.cos_fn(diff_q, diff_pos) * mask_pos_comb
             cos_sim_neg = self.cos_fn(diff_q, diff_neg) * mask_neg_comb
-            loss_pos = (-cos_sim_pos**2).sum(dim=[1,2]) / mask_pos_comb.sum(dim=[1,2]) # (0.5batch)
-            loss_neg = (cos_sim_neg**2).sum(dim=[1,2]) / mask_neg_comb.sum(dim=[1,2])
+            if self.divide_mask_sum:
+                loss_pos = (-cos_sim_pos**2).sum(dim=[1,2]) / mask_pos_comb.sum(dim=[1,2]) # (0.5batch)
+                loss_neg = (cos_sim_neg**2).sum(dim=[1,2]) / mask_neg_comb.sum(dim=[1,2])
+            else:
+                loss_pos = (-cos_sim_pos**2).sum(dim=[1,2]) # (0.5batch)
+                loss_neg = (cos_sim_neg**2).sum(dim=[1,2])
         else:
             cos_sim_pos = self.cos_fn(diff_q, diff_pos)
             cos_sim_neg = self.cos_fn(diff_q, diff_neg)

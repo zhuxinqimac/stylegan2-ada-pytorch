@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 11 May 2021 02:34:52 AEST
+# --- Last Modified: Wed 12 May 2021 17:31:59 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -195,6 +195,16 @@ def training_loop(
             masks = get_diff_masks(images, n_samples_per, M.z_dim, S, save_size).cpu().numpy()
             save_image_grid(masks, os.path.join(run_dir, 'diff_init.png'), drange=[0,1], grid_size=(loss_kwargs.S_L, M.z_dim))
 
+        if M.wvae_lambda != 0:
+            v_origin = torch.randn([1, M.z_dim], device=device)
+            v_walk = get_vae_walk(v_origin, M, n_samples_per).split(batch_gpu)
+            v_images = torch.cat([G.synthesis(M.vae_dec(v).unsqueeze(1).repeat(1, M.num_ws, 1), noise_mode='const') for v in v_walk])
+            if save_size < v_images.size(-1):
+                v_images = F.adaptive_avg_pool2d(v_images, (save_size, save_size)).cpu().numpy()
+            else:
+                v_images = v_images.cpu().numpy()
+            save_image_grid(v_images, os.path.join(run_dir, 'wvae_trav_init.png'), drange=[-1,1], grid_size=walk_grid_size)
+
         if save_size < images.size(-1):
             images = F.adaptive_avg_pool2d(images, (save_size, save_size)).cpu().numpy()
         else:
@@ -331,6 +341,16 @@ def training_loop(
             else:
                 masks = get_diff_masks(images, n_samples_per, M.z_dim, S, save_size).cpu().numpy()
                 save_image_grid(masks, os.path.join(run_dir, f'diff_{cur_nimg//1000:06d}.png'), drange=[0,1], grid_size=(loss_kwargs.S_L, M.z_dim))
+
+            if M.wvae_lambda != 0:
+                v_origin = torch.randn([1, M.z_dim], device=device)
+                v_walk = get_vae_walk(v_origin, M, n_samples_per).split(batch_gpu)
+                v_images = torch.cat([G.synthesis(M.vae_dec(v).unsqueeze(1).repeat(1, M.num_ws, 1), noise_mode='const') for v in v_walk])
+                if save_size < v_images.size(-1):
+                    v_images = F.adaptive_avg_pool2d(v_images, (save_size, save_size)).cpu().numpy()
+                else:
+                    v_images = v_images.cpu().numpy()
+                save_image_grid(v_images, os.path.join(run_dir, f'wvae_trav_{cur_nimg//1000:06d}.png'), drange=[-1,1], grid_size=walk_grid_size)
 
             if save_size < images.size(-1):
                 images = F.adaptive_avg_pool2d(images, (save_size, save_size)).cpu().numpy()
