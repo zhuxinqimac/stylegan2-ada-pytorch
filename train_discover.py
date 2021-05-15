@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 15 May 2021 21:09:02 AEST
+# --- Last Modified: Sun 16 May 2021 01:40:56 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -101,6 +101,7 @@ def setup_training_loop_kwargs(
     post_vae_lambda = None, # The post_vae lambda.
     post_vae_kl_lambda = None, # The KL lambda in post_vae.
     ce_diffdim_lambda = None, # The cross_entropy lambda for diff dim.
+    lrate = None, # Learning rate.
 ):
     args = dnnlib.EasyDict()
 
@@ -231,7 +232,7 @@ def setup_training_loop_kwargs(
     args.M_kwargs.post_vae_kl_lambda = post_vae_kl_lambda
     args.M_kwargs.ce_diffdim_lambda = ce_diffdim_lambda
 
-    args.M_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', lr=spec.lrate, betas=[0,0.99], eps=1e-8)
+    args.M_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', lr=spec.lrate if lrate is None else lrate, betas=[0,0.99], eps=1e-8)
     if sensor_type is None:
         sensor_type = 'alex'
     args.sensor_type = sensor_type
@@ -416,6 +417,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--post_vae_lambda', help='The post_vae lambda.', type=float, default=0.)
 @click.option('--post_vae_kl_lambda', help='The KL lambda in post_vae.', type=float, default=1.)
 @click.option('--ce_diffdim_lambda', help='The cross_entropy lambda for diff dim.', type=float, default=1.)
+@click.option('--lrate', help='The lr_multiplier in M net', type=float, metavar='FLOAT')
 
 def main(ctx, outdir, dry_run, **config_kwargs):
     """Train a GAN using the techniques described in the paper
