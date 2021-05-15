@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Thu 13 May 2021 15:15:12 AEST
+# --- Last Modified: Sat 15 May 2021 21:09:02 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -79,6 +79,7 @@ def setup_training_loop_kwargs(
     use_norm_mask = None, # If use norm_mask.
     divide_mask_sum = None, # If divide the loss with mask_sum.
     use_dynamic_scale = None, # If dynamic scale in loss.
+    use_norm_as_mask = None, # If use norm as mask.
     gan_network_pkl = None, # The pretrained GAN network pkl.
     div_lambda = None, # The W-space cos_fn lambda.
     div_heat_lambda = None, # The heat cos_fn lambda.
@@ -248,6 +249,7 @@ def setup_training_loop_kwargs(
     args.loss_kwargs.use_norm_mask = use_norm_mask
     args.loss_kwargs.divide_mask_sum = divide_mask_sum
     args.loss_kwargs.use_dynamic_scale = use_dynamic_scale
+    args.loss_kwargs.use_norm_as_mask = use_norm_as_mask
 
     args.total_kimg = spec.kimg
     args.batch_size = spec.mb
@@ -393,6 +395,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--use_norm_mask', help='If use norm mask when computing main loss', type=bool, default=True)
 @click.option('--divide_mask_sum', help='If divide cos with mask_sum when computing main loss', type=bool, default=True)
 @click.option('--use_dynamic_scale', help='If use dynamic scale in loss', type=bool, default=True)
+@click.option('--use_norm_as_mask', help='If use norm as mask', type=bool, default=False)
 @click.option('--div_lambda', help='The W-space div_lambda', type=float, default=0.)
 @click.option('--div_heat_lambda', help='The div_heat_lambda', type=float, default=0.)
 @click.option('--norm_lambda', help='The norm lambda in diff features', type=float, default=0.)

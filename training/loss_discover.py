@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Thu 13 May 2021 15:14:05 AEST
+# --- Last Modified: Sat 15 May 2021 21:10:13 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -45,7 +45,7 @@ class DiscoverLoss(Loss):
     def __init__(self, device, G_mapping, G_synthesis, M, S, S_L, norm_on_depth,
                  div_lambda=0., div_heat_lambda=0., norm_lambda=0., var_sample_scale=1.,
                  var_sample_mean=0., sensor_used_layers=5, use_norm_mask=True,
-                 divide_mask_sum=True, use_dynamic_scale=True):
+                 divide_mask_sum=True, use_dynamic_scale=True, use_norm_as_mask=False):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -65,6 +65,7 @@ class DiscoverLoss(Loss):
         self.cos_fn = nn.CosineSimilarity(dim=1)
         self.cos_fn_diversity = nn.CosineSimilarity(dim=3)
         self.sensor_used_layers = sensor_used_layers
+        self.use_norm_as_mask = use_norm_as_mask
         assert self.sensor_used_layers <= self.S_L
 
     def run_G_mapping(self, z, c):
@@ -96,13 +97,16 @@ class DiscoverLoss(Loss):
     def get_norm_mask(self, diff):
         # norm = torch.linalg.norm(diff, dim=1) # (0.5batch, h, w)
         norm = torch.norm(diff, dim=1) # (0.5batch, h, w)
-        b_half, h, w = norm.size()
-        norm_viewed = norm.view(b_half, h * w)
-        numerator = norm_viewed - norm_viewed.min(dim=1, keepdim=True)[0]
-        denominator = norm_viewed.max(dim=1, keepdim=True)[0] - norm_viewed.min(dim=1, keepdim=True)[0]
-        # print('numerator.shape:', numerator.shape)
-        # print('denominator.shape:', denominator.shape)
-        mask = (numerator / denominator).view(b_half, h, w)
+        if self.use_norm_as_mask:
+            mask = norm.clone()
+        else:
+            b_half, h, w = norm.size()
+            norm_viewed = norm.view(b_half, h * w)
+            numerator = norm_viewed - norm_viewed.min(dim=1, keepdim=True)[0]
+            denominator = norm_viewed.max(dim=1, keepdim=True)[0] - norm_viewed.min(dim=1, keepdim=True)[0] + 1e-6
+            # print('numerator.shape:', numerator.shape)
+            # print('denominator.shape:', denominator.shape)
+            mask = (numerator / denominator).view(b_half, h, w)
         return norm, mask
 
     def extract_diff_L(self, feats_i):
@@ -126,8 +130,8 @@ class DiscoverLoss(Loss):
             cos_sim_pos = self.cos_fn(diff_q, diff_pos) * mask_pos_comb
             cos_sim_neg = self.cos_fn(diff_q, diff_neg) * mask_neg_comb
             if self.divide_mask_sum:
-                loss_pos = (-cos_sim_pos**2).sum(dim=[1,2]) / mask_pos_comb.sum(dim=[1,2]) # (0.5batch)
-                loss_neg = (cos_sim_neg**2).sum(dim=[1,2]) / mask_neg_comb.sum(dim=[1,2])
+                loss_pos = (-cos_sim_pos**2).sum(dim=[1,2]) / (mask_pos_comb.sum(dim=[1,2]) + 1e-6) # (0.5batch)
+                loss_neg = (cos_sim_neg**2).sum(dim=[1,2]) / (mask_neg_comb.sum(dim=[1,2]) + 1e-6)
             else:
                 loss_pos = (-cos_sim_pos**2).sum(dim=[1,2]) # (0.5batch)
                 loss_neg = (cos_sim_neg**2).sum(dim=[1,2])
@@ -147,13 +151,17 @@ class DiscoverLoss(Loss):
         norm_q, mask_q = self.get_norm_mask(diff_q) # (0.5batch, h, w), (0.5batch, h, w)
         norm_pos, mask_pos = self.get_norm_mask(diff_pos)
         norm_neg, mask_neg = self.get_norm_mask(diff_neg)
-        assert mask_q.max() == 1
-        assert mask_q.min() == 0
+        # assert mask_q.max() == 1
+        # assert mask_q.min() == 0
 
         loss_diff = self.extract_loss_L_by_maskdiff(diff_q, diff_pos, diff_neg, mask_q, mask_pos, mask_neg, idx)
         training_stats.report('Loss/M/loss_diff_{}'.format(idx), loss_diff)
-        loss_norm = sum([(norm**2).sum(dim=[1,2]) / mask.sum(dim=[1,2]) \
-                         for norm, mask in [(norm_q, mask_q), (norm_pos, mask_pos), (norm_neg, mask_neg)]])
+        if self.use_norm_mask:
+            loss_norm = sum([(norm**2).sum(dim=[1,2]) / (mask.sum(dim=[1,2]) + 1e-6) \
+                             for norm, mask in [(norm_q, mask_q), (norm_pos, mask_pos), (norm_neg, mask_neg)]])
+        else:
+            loss_norm = sum([(norm**2).sum(dim=[1,2]) \
+                             for norm, mask in [(norm_q, mask_q), (norm_pos, mask_pos), (norm_neg, mask_neg)]])
         training_stats.report('Loss/M/loss_norm_{}'.format(idx), loss_norm)
         return loss_diff + self.norm_lambda * loss_norm
 
@@ -173,10 +181,13 @@ class DiscoverLoss(Loss):
         real_min = torch.cat(min_ls, dim=1).min(dim=1)[0]
 
         for i, norm in enumerate(norm_ls):
-            numerator = norm - real_min.view(b_half, 1, 1)
-            denominator = (real_max - real_min).view(b_half, 1, 1)
-            mask = (numerator / denominator) # (b_half, hi, wi)
-            norm_mask_ls.append(mask)
+            if self.use_norm_as_mask:
+                norm_mask_ls.append(norm.clone())
+            else:
+                numerator = norm - real_min.view(b_half, 1, 1)
+                denominator = (real_max - real_min).view(b_half, 1, 1) + 1e-6
+                mask = (numerator / denominator) # (b_half, hi, wi)
+                norm_mask_ls.append(mask)
         return norm_ls, norm_mask_ls
 
     def extract_depth_diff_loss(self, diff_q_ls, diff_pos_ls, diff_neg_ls, mask_q_ls, mask_pos_ls, mask_neg_ls):
@@ -190,8 +201,12 @@ class DiscoverLoss(Loss):
     def extract_depth_norm_loss(self, norm_q_ls, norm_pos_ls, norm_neg_ls, mask_q_ls, mask_pos_ls, mask_neg_ls):
         loss = 0
         for i, norm_q in enumerate(norm_q_ls):
-            loss_norm = sum([(norm**2).sum(dim=[1,2])/mask.sum(dim=[1,2]) for norm, mask in \
-                             [(norm_q, mask_q_ls[i]), (norm_pos_ls[i], mask_pos_ls[i]), (norm_neg_ls[i], mask_neg_ls[i])]])
+            if self.use_norm_mask:
+                loss_norm = sum([(norm**2).sum(dim=[1,2])/(mask.sum(dim=[1,2]) + 1e-6) for norm, mask in \
+                                 [(norm_q, mask_q_ls[i]), (norm_pos_ls[i], mask_pos_ls[i]), (norm_neg_ls[i], mask_neg_ls[i])]])
+            else:
+                loss_norm = sum([(norm**2).sum(dim=[1,2]) for norm, mask in \
+                                 [(norm_q, mask_q_ls[i]), (norm_pos_ls[i], mask_pos_ls[i]), (norm_neg_ls[i], mask_neg_ls[i])]])
             loss += loss_norm
         return loss
 
