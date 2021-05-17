@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 17 May 2021 18:27:44 AEST
+# --- Last Modified: Mon 17 May 2021 18:29:53 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -207,7 +207,7 @@ class DiscoverLoss(Loss):
     def compute_lerp_loss(self, diff_q, diff_pos, diff_neg, pos_neg_idx, feats_i):
         loss_lerp = 0.
         if self.lerp_lambda != 0:
-            print('using lerp loss')
+            # print('using lerp loss')
             b_half = pos_neg_idx.size(0)
             norm_size = self.diff_mask_avg_ls[feats_i].size() # (z_dim, ci, hi, wi)
             for (diff, diff_idx) in [(diff_q, pos_neg_idx[:,0]), (diff_pos, pos_neg_idx[:,0]), (diff_neg, pos_neg_idx[:,1])]:
@@ -217,6 +217,8 @@ class DiscoverLoss(Loss):
                 for j in range(diff_mask_avg_tmp.size(0)):
                     self.diff_mask_avg_ls[feats_i][diff_idx[j]].copy_(
                         self.diff_mask_avg_ls[feats_i][diff_idx[j]].lerp(diff_mask_avg_tmp[j], 0.5).detach())
+            print('self.diff_mask_avg_ls[feats_i].shape:', self.diff_mask_avg_ls[feats_i].shape)
+            print('diff_mask_avg_tmp.shape:', diff_mask_avg_tmp.shape)
         return loss_lerp
 
     def extract_depth_diff_loss(self, diff_q_ls, diff_pos_ls, diff_neg_ls, mask_q_ls, mask_pos_ls, mask_neg_ls, pos_neg_idx):
