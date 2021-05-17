@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sun 16 May 2021 01:40:56 AEST
+# --- Last Modified: Mon 17 May 2021 18:15:58 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -102,6 +102,8 @@ def setup_training_loop_kwargs(
     post_vae_kl_lambda = None, # The KL lambda in post_vae.
     ce_diffdim_lambda = None, # The cross_entropy lambda for diff dim.
     lrate = None, # Learning rate.
+    diff_avg_lerp_rate = None, # Lerp rate for diff_avg.
+    lerp_lambda = None, # Lerp lambda.
 ):
     args = dnnlib.EasyDict()
 
@@ -251,6 +253,8 @@ def setup_training_loop_kwargs(
     args.loss_kwargs.divide_mask_sum = divide_mask_sum
     args.loss_kwargs.use_dynamic_scale = use_dynamic_scale
     args.loss_kwargs.use_norm_as_mask = use_norm_as_mask
+    args.loss_kwargs.diff_avg_lerp_rate = diff_avg_lerp_rate
+    args.loss_kwargs.lerp_lambda = lerp_lambda
 
     args.total_kimg = spec.kimg
     args.batch_size = spec.mb
@@ -418,6 +422,8 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--post_vae_kl_lambda', help='The KL lambda in post_vae.', type=float, default=1.)
 @click.option('--ce_diffdim_lambda', help='The cross_entropy lambda for diff dim.', type=float, default=1.)
 @click.option('--lrate', help='The lr_multiplier in M net', type=float, metavar='FLOAT')
+@click.option('--diff_avg_lerp_rate', help='The lerp rate for diff_avg', type=float, default=0.01)
+@click.option('--lerp_lambda', help='The lerp lambda', type=float, default=0.)
 
 def main(ctx, outdir, dry_run, **config_kwargs):
     """Train a GAN using the techniques described in the paper

@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 15 May 2021 21:10:13 AEST
+# --- Last Modified: Mon 17 May 2021 18:11:33 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -45,7 +45,8 @@ class DiscoverLoss(Loss):
     def __init__(self, device, G_mapping, G_synthesis, M, S, S_L, norm_on_depth,
                  div_lambda=0., div_heat_lambda=0., norm_lambda=0., var_sample_scale=1.,
                  var_sample_mean=0., sensor_used_layers=5, use_norm_mask=True,
-                 divide_mask_sum=True, use_dynamic_scale=True, use_norm_as_mask=False):
+                 divide_mask_sum=True, use_dynamic_scale=True, use_norm_as_mask=False,
+                 diff_avg_lerp_rate=0.01, lerp_lambda=0.):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -67,6 +68,14 @@ class DiscoverLoss(Loss):
         self.sensor_used_layers = sensor_used_layers
         self.use_norm_as_mask = use_norm_as_mask
         assert self.sensor_used_layers <= self.S_L
+        # self.diff_mask_avg_ls = [[torch.zero([], device=device) for j in range(self.S_L)] for i in self.M.z_dim]
+
+        self.diff_avg_lerp_rate = diff_avg_lerp_rate
+        self.lerp_lambda = lerp_lambda
+        if self.lerp_lambda != 0:
+            with torch.no_grad():
+                outs = self.run_S(torch.zeros(1, G_synthesis.img_channels, G_synthesis.img_resolution, G_synthesis.img_resolution, device=self.device))
+            self.diff_mask_avg_ls = [torch.zeros_like(x, device=self.device).repeat(self.M.z_dim, 1, 1, 1) for x in outs] # list of (z_dim, ci, hi, wi)
 
     def run_G_mapping(self, z, c):
         # with misc.ddp_sync(self.G_mapping, sync):
@@ -145,7 +154,8 @@ class DiscoverLoss(Loss):
         loss = loss_pos + loss_neg # (0.5batch)
         return loss
 
-    def extract_loss_L(self, feats_i, idx):
+    def extract_loss_L(self, feats_i, idx, pos_neg_idx):
+        # pos_neg_idx: (b//2, 2)
         diff_q, diff_pos, diff_neg = self.extract_diff_L(feats_i)
 
         norm_q, mask_q = self.get_norm_mask(diff_q) # (0.5batch, h, w), (0.5batch, h, w)
@@ -156,14 +166,18 @@ class DiscoverLoss(Loss):
 
         loss_diff = self.extract_loss_L_by_maskdiff(diff_q, diff_pos, diff_neg, mask_q, mask_pos, mask_neg, idx)
         training_stats.report('Loss/M/loss_diff_{}'.format(idx), loss_diff)
-        if self.use_norm_mask:
+        if self.divide_mask_sum:
             loss_norm = sum([(norm**2).sum(dim=[1,2]) / (mask.sum(dim=[1,2]) + 1e-6) \
                              for norm, mask in [(norm_q, mask_q), (norm_pos, mask_pos), (norm_neg, mask_neg)]])
         else:
             loss_norm = sum([(norm**2).sum(dim=[1,2]) \
                              for norm, mask in [(norm_q, mask_q), (norm_pos, mask_pos), (norm_neg, mask_neg)]])
         training_stats.report('Loss/M/loss_norm_{}'.format(idx), loss_norm)
-        return loss_diff + self.norm_lambda * loss_norm
+
+        # Norm mask moving avg loss:
+        loss_lerp = self.compute_lerp_loss(diff_q, diff_pos, diff_neg, pos_neg_idx, feats_i)
+
+        return loss_diff + self.norm_lambda * loss_norm + self.lerp_lambda * loss_lerp
 
     def extract_norm_mask_wdepth(self, diff_ls):
         norm_mask_ls, norm_ls, max_ls, min_ls = [], [], [], []
@@ -190,18 +204,36 @@ class DiscoverLoss(Loss):
                 norm_mask_ls.append(mask)
         return norm_ls, norm_mask_ls
 
-    def extract_depth_diff_loss(self, diff_q_ls, diff_pos_ls, diff_neg_ls, mask_q_ls, mask_pos_ls, mask_neg_ls):
+    def compute_lerp_loss(self, diff_q, diff_pos, diff_neg, pos_neg_idx, feats_i):
+        loss_lerp = 0.
+        if self.lerp_lambda != 0:
+            b_half = pos_neg_idx.size(0)
+            norm_size = self.diff_mask_avg_ls[feats_i].size() # (z_dim, ci, hi, wi)
+            for (diff, diff_idx) in [(diff_q, pos_neg_idx[:,0]), (diff_pos, pos_neg_idx[:,0]), (diff_neg, pos_neg_idx[:,1])]:
+                diff_mask_avg_tmp = torch.gather(self.diff_mask_avg_ls[feats_i], 0, diff_idx.view(b_half, 1, 1, 1).repeat(1, *norm_size[1:]))
+                diff_mask_avg_tmp = diff_mask_avg_tmp.lerp(diff, self.diff_avg_lerp_rate)
+                loss_lerp += (diff_mask_avg_tmp - diff).square().sum(dim=[1,2,3]).mean()
+                for j in range(diff_mask_avg_tmp.size(0)):
+                    self.diff_mask_avg_ls[feats_i][diff_idx[j]].copy_(
+                        self.diff_mask_avg_ls[feats_i][diff_idx[j]].lerp(diff_mask_avg_tmp[j], self.diff_avg_lerp_rate).detach())
+        return loss_lerp
+
+    def extract_depth_diff_loss(self, diff_q_ls, diff_pos_ls, diff_neg_ls, mask_q_ls, mask_pos_ls, mask_neg_ls, pos_neg_idx):
         loss = 0
         for i, diff_q_i in enumerate(diff_q_ls):
             loss_i = self.extract_loss_L_by_maskdiff(diff_q_i, diff_pos_ls[i], diff_neg_ls[i],
                                                      mask_q_ls[i], mask_pos_ls[i], mask_neg_ls[i], i)
-            loss += loss_i
+
+            # Norm mask moving avg loss:
+            loss_lerp = self.compute_lerp_loss(diff_q_i, diff_pos_ls[i], diff_neg_ls[i], pos_neg_idx, i)
+            loss += loss_i + self.lerp_lambda * loss_lerp
+
         return loss
 
     def extract_depth_norm_loss(self, norm_q_ls, norm_pos_ls, norm_neg_ls, mask_q_ls, mask_pos_ls, mask_neg_ls):
         loss = 0
         for i, norm_q in enumerate(norm_q_ls):
-            if self.use_norm_mask:
+            if self.divide_mask_sum:
                 loss_norm = sum([(norm**2).sum(dim=[1,2])/(mask.sum(dim=[1,2]) + 1e-6) for norm, mask in \
                                  [(norm_q, mask_q_ls[i]), (norm_pos_ls[i], mask_pos_ls[i]), (norm_neg_ls[i], mask_neg_ls[i])]])
             else:
@@ -210,14 +242,14 @@ class DiscoverLoss(Loss):
             loss += loss_norm
         return loss
 
-    def extract_diff_loss(self, outs):
+    def extract_diff_loss(self, outs, pos_neg_idx):
         if not self.norm_on_depth:
             loss = 0
         else:
             diff_q_ls, diff_pos_ls, diff_neg_ls = [], [], []
         for kk in range(self.S_L - self.sensor_used_layers, self.S_L):
             if not self.norm_on_depth:
-                loss_kk = self.extract_loss_L(outs[kk], kk)
+                loss_kk = self.extract_loss_L(outs[kk], kk, pos_neg_idx)
                 loss += loss_kk
             else:
                 diff_q_kk, diff_pos_kk, diff_neg_kk = self.extract_diff_L(outs[kk])
@@ -229,7 +261,7 @@ class DiscoverLoss(Loss):
             norm_pos_ls, mask_pos_ls = self.extract_norm_mask_wdepth(diff_pos_ls)
             norm_neg_ls, mask_neg_ls = self.extract_norm_mask_wdepth(diff_neg_ls)
             loss_diff = self.extract_depth_diff_loss(diff_q_ls, diff_pos_ls, diff_neg_ls,
-                                                     mask_q_ls, mask_pos_ls, mask_neg_ls)
+                                                     mask_q_ls, mask_pos_ls, mask_neg_ls, pos_neg_idx)
             training_stats.report('Loss/M/loss_diff', loss_diff)
             loss_norm = self.extract_depth_norm_loss(norm_q_ls, norm_pos_ls, norm_neg_ls, mask_q_ls, mask_pos_ls, mask_neg_ls)
             training_stats.report('Loss/M/loss_norm', loss_norm)
@@ -370,7 +402,7 @@ class DiscoverLoss(Loss):
                 # Main loss
                 if self.M.post_vae_lambda == 0:
                     outs_all = self.run_S(imgs_all)
-                    loss_Mmain = self.extract_diff_loss(outs_all)
+                    loss_Mmain = self.extract_diff_loss(outs_all, pos_neg_idx)
                 else:
                     loss_Mmain = self.M.post_vae_loss(imgs_all, pos_neg_idx)
 
