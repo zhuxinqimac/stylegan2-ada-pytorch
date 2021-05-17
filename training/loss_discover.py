@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 17 May 2021 18:33:18 AEST
+# --- Last Modified: Mon 17 May 2021 18:46:09 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -217,6 +217,7 @@ class DiscoverLoss(Loss):
                 for j in range(diff_mask_avg_tmp.size(0)):
                     self.diff_mask_avg_ls[feats_i][diff_idx[j]].copy_(
                         self.diff_mask_avg_ls[feats_i][diff_idx[j]].lerp(diff_mask_avg_tmp[j], 0.5).detach())
+            training_stats.report('Loss/M/loss_lerp_{}'.format(feats_i), loss_lerp)
             # print('self.diff_mask_avg_ls[feats_i].shape:', self.diff_mask_avg_ls[feats_i].shape)
             # print('diff_mask_avg_tmp.shape:', diff_mask_avg_tmp.shape)
         return loss_lerp
