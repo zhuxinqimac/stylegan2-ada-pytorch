@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 17 May 2021 18:46:09 AEST
+# --- Last Modified: Mon 17 May 2021 21:05:03 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -68,14 +68,13 @@ class DiscoverLoss(Loss):
         self.sensor_used_layers = sensor_used_layers
         self.use_norm_as_mask = use_norm_as_mask
         assert self.sensor_used_layers <= self.S_L
-        # self.diff_mask_avg_ls = [[torch.zero([], device=device) for j in range(self.S_L)] for i in self.M.z_dim]
 
         self.diff_avg_lerp_rate = diff_avg_lerp_rate
         self.lerp_lambda = lerp_lambda
         if self.lerp_lambda != 0:
             with torch.no_grad():
                 outs = self.run_S(torch.zeros(1, G_synthesis.img_channels, G_synthesis.img_resolution, G_synthesis.img_resolution, device=self.device))
-            self.diff_mask_avg_ls = [torch.zeros_like(x, device=self.device).repeat(self.M.z_dim, 1, 1, 1) for x in outs] # list of (z_dim, ci, hi, wi)
+            self.M.diff_mask_avg_ls = [torch.zeros_like(x, device=self.device).repeat(self.M.z_dim, 1, 1, 1) for x in outs] # list of (z_dim, ci, hi, wi)
 
     def run_G_mapping(self, z, c):
         # with misc.ddp_sync(self.G_mapping, sync):
@@ -142,8 +141,8 @@ class DiscoverLoss(Loss):
                 loss_pos = (-cos_sim_pos**2).sum(dim=[1,2]) / (mask_pos_comb.sum(dim=[1,2]) + 1e-6) # (0.5batch)
                 loss_neg = (cos_sim_neg**2).sum(dim=[1,2]) / (mask_neg_comb.sum(dim=[1,2]) + 1e-6)
             else:
-                loss_pos = (-cos_sim_pos**2).sum(dim=[1,2]) # (0.5batch)
-                loss_neg = (cos_sim_neg**2).sum(dim=[1,2])
+                loss_pos = (-cos_sim_pos**2).mean(dim=[1,2]) # (0.5batch)
+                loss_neg = (cos_sim_neg**2).mean(dim=[1,2])
         else:
             cos_sim_pos = self.cos_fn(diff_q, diff_pos)
             cos_sim_neg = self.cos_fn(diff_q, diff_neg)
@@ -170,7 +169,7 @@ class DiscoverLoss(Loss):
             loss_norm = sum([(norm**2).sum(dim=[1,2]) / (mask.sum(dim=[1,2]) + 1e-6) \
                              for norm, mask in [(norm_q, mask_q), (norm_pos, mask_pos), (norm_neg, mask_neg)]])
         else:
-            loss_norm = sum([(norm**2).sum(dim=[1,2]) \
+            loss_norm = sum([(norm**2).mean(dim=[1,2]) \
                              for norm, mask in [(norm_q, mask_q), (norm_pos, mask_pos), (norm_neg, mask_neg)]])
         training_stats.report('Loss/M/loss_norm_{}'.format(idx), loss_norm)
 
@@ -209,16 +208,16 @@ class DiscoverLoss(Loss):
         if self.lerp_lambda != 0:
             # print('using lerp loss')
             b_half = pos_neg_idx.size(0)
-            norm_size = self.diff_mask_avg_ls[feats_i].size() # (z_dim, ci, hi, wi)
+            norm_size = self.M.diff_mask_avg_ls[feats_i].size() # (z_dim, ci, hi, wi)
             for (diff, diff_idx) in [(diff_q, pos_neg_idx[:,0]), (diff_pos, pos_neg_idx[:,0]), (diff_neg, pos_neg_idx[:,1])]:
-                diff_mask_avg_tmp = torch.gather(self.diff_mask_avg_ls[feats_i], 0, diff_idx.view(b_half, 1, 1, 1).repeat(1, *norm_size[1:]))
+                diff_mask_avg_tmp = torch.gather(self.M.diff_mask_avg_ls[feats_i], 0, diff_idx.view(b_half, 1, 1, 1).repeat(1, *norm_size[1:]))
                 diff_mask_avg_tmp = diff_mask_avg_tmp.lerp(diff, self.diff_avg_lerp_rate)
-                loss_lerp += (diff_mask_avg_tmp - diff).square().sum(dim=[1,2,3]).mean()
+                loss_lerp += (diff_mask_avg_tmp - diff).square().mean()
                 for j in range(diff_mask_avg_tmp.size(0)):
-                    self.diff_mask_avg_ls[feats_i][diff_idx[j]].copy_(
-                        self.diff_mask_avg_ls[feats_i][diff_idx[j]].lerp(diff_mask_avg_tmp[j], 0.5).detach())
+                    self.M.diff_mask_avg_ls[feats_i][diff_idx[j]].copy_(
+                        self.M.diff_mask_avg_ls[feats_i][diff_idx[j]].lerp(diff_mask_avg_tmp[j], 0.5).detach())
             training_stats.report('Loss/M/loss_lerp_{}'.format(feats_i), loss_lerp)
-            # print('self.diff_mask_avg_ls[feats_i].shape:', self.diff_mask_avg_ls[feats_i].shape)
+            # print('self.M.diff_mask_avg_ls[feats_i].shape:', self.M.diff_mask_avg_ls[feats_i].shape)
             # print('diff_mask_avg_tmp.shape:', diff_mask_avg_tmp.shape)
         return loss_lerp
 
@@ -241,7 +240,7 @@ class DiscoverLoss(Loss):
                 loss_norm = sum([(norm**2).sum(dim=[1,2])/(mask.sum(dim=[1,2]) + 1e-6) for norm, mask in \
                                  [(norm_q, mask_q_ls[i]), (norm_pos_ls[i], mask_pos_ls[i]), (norm_neg_ls[i], mask_neg_ls[i])]])
             else:
-                loss_norm = sum([(norm**2).sum(dim=[1,2]) for norm, mask in \
+                loss_norm = sum([(norm**2).mean(dim=[1,2]) for norm, mask in \
                                  [(norm_q, mask_q_ls[i]), (norm_pos_ls[i], mask_pos_ls[i]), (norm_neg_ls[i], mask_neg_ls[i])]])
             loss += loss_norm
         return loss
