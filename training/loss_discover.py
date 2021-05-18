@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 19 May 2021 01:15:46 AEST
+# --- Last Modified: Wed 19 May 2021 01:18:42 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -277,7 +277,7 @@ class DiscoverLoss(Loss):
         '''
         delta1 = delta[:, np.newaxis, ...] # (b/1, 1, z_dim, w_dim)
         delta2 = delta[:, :, np.newaxis, ...] # (b/1, z_dim, 1, w_dim)
-        print('delta1.len:', torch.norm(delta1, -1).squeeze())
+        print('delta1.len:', torch.norm(delta1, dim=-1).squeeze())
         # norm = torch.norm(diff, dim=1) # (0.5batch, h, w)
         cos_div = self.cos_fn_diversity(delta1, delta2) # (b/1, z_dim, z_dim)
         print('cos_div:', cos_div)
