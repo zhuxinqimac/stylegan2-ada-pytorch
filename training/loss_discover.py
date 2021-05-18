@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 17 May 2021 21:05:03 AEST
+# --- Last Modified: Wed 19 May 2021 01:10:47 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -278,6 +278,7 @@ class DiscoverLoss(Loss):
         delta1 = delta[:, np.newaxis, ...] # (b/1, 1, z_dim, w_dim)
         delta2 = delta[:, :, np.newaxis, ...] # (b/1, z_dim, 1, w_dim)
         cos_div = self.cos_fn_diversity(delta1, delta2) # (b/1, z_dim, z_dim)
+        print('cos_div:', cos_div)
         div_mask = 1. - torch.eye(self.M.z_dim, device=delta.device).view(1, self.M.z_dim, self.M.z_dim)
         loss = (cos_div * div_mask)**2
         return loss.sum(dim=[1,2]).mean()
