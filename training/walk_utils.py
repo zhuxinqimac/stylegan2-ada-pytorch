@@ -8,12 +8,14 @@
 
 # --- File Name: walk_utils.py
 # --- Creation Date: 10-05-2021
-# --- Last Modified: Tue 11 May 2021 20:06:10 AEST
+# --- Last Modified: Wed 19 May 2021 23:25:31 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
 Helper functions for traversal.
 """
+import cv
+import numpy as np
 import torch
 import torch.nn.functional as F
 
@@ -146,6 +148,20 @@ def get_walk_on_z(z_origin, M, n_samples_per, trav_walk_scale=0.001):
     walk_tensor = torch.cat(walk_ls, dim=0) # (z_dim * n_samples_per, g_z_dim)
     return walk_tensor
 
+def grayscale_to_heatmap(diff_mask):
+    # diff_mask: (b, 1, h, w) [0-1]
+    # return: (b, 3, h, w) [0-1]
+    diff_mask = diff_mask.detach().cpu().numpy()
+    heatmaps = []
+    for img in diff_mask:
+        heatmap_array = cv2.applyColorMap((img[0] * 255).astype(np.uint8),
+                                          cv2.COLORMAP_RAINBOW) # (h,w,3)
+        heatmap = cv2.cvtColor(heatmap_array, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.
+        heatmap = torch.tensor(heatmap.transpose(2, 0, 1)) # (3, h, w)
+        heatmaps.append(heatmap.unsqueeze(0))
+    heatmaps_tensor = torch.cat(heatmaps, dim=0)
+    return heatmaps_tensor
+
 def get_diff_masks(images, gw, gh, S, save_size):
     # masks = get_diff_masks(images, n_samples_per, M.z_dim, S)
     # images: (gh*gw, c, h, w)
@@ -157,18 +173,30 @@ def get_diff_masks(images, gw, gh, S, save_size):
         img_ls.append(images[i, gw//2+1].view(1, c, h, w))
     img_tensor = torch.cat(img_ls, dim=0) # (gh*2, c, h, w)
     outs = S.forward(img_tensor) # list of (gh*2, ci, hi, wi)
-    diff_ls = []
+    max_ls = []
+    min_ls = []
+    norm_ls = []
     for feat_L in outs:
         feat_L_scaled = F.interpolate(feat_L, (save_size, save_size), mode='bilinear')
         diff = feat_L_scaled[::2] - feat_L_scaled[1::2] # (gh, ci, h, w)
         diff_norm = torch.norm(diff, dim=1) # (gh, h, w)
         diff_norm_viewed = diff_norm.view(gh, save_size * save_size)
-        diff_norm_max = diff_norm_viewed.max(dim=1, keepdim=True)[0]
-        diff_norm_min = diff_norm_viewed.min(dim=1, keepdim=True)[0]
-        diff_mask = (diff_norm_viewed - diff_norm_min) / (diff_norm_max - diff_norm_min)
-        diff_ls.append(diff_mask.view(gh, 1, save_size, save_size))
+        norm_ls.append(diff_norm) # (gh, hi, wi)
+        max_ls.append(diff_norm_viewed.max(dim=1, keepdim=True)[0])
+        min_ls.append(diff_norm_viewed.min(dim=1, keepdim=True)[0])
+
+    real_max = torch.cat(max_ls, dim=1).max(dim=1)[0] # (gh)
+    real_min = torch.cat(min_ls, dim=1).min(dim=1)[0]
+
+    diff_ls = []
+    for i, diff_norm in enumerate(norm_ls):
+        numerator = diff_norm - real_min.view(gh, 1, 1)
+        denominator = (real_max - real_min).view(gh, 1, 1) + 1e-6
+        mask = (numerator / denominator) # (gh, hi, wi)
+        norm_mask_ls.append(mask.view(gh, 1, save_size, save_size))
     diff_out = torch.cat(diff_ls, dim=1).view(gh*len(outs), 1, save_size, save_size)
-    return diff_out
+    diff_out_heatmap = grayscale_to_heatmap(diff_out)
+    return diff_out_heatmap
 
 def get_vae_walk(v_origin, M, n_samples_per):
     # v_origin: (1, M.z_dim)
