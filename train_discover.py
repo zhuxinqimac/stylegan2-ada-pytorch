@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 19 May 2021 23:54:24 AEST
+# --- Last Modified: Wed 19 May 2021 23:56:44 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -104,7 +104,7 @@ def setup_training_loop_kwargs(
     lrate = None, # Learning rate.
     diff_avg_lerp_rate = None, # Lerp rate for diff_avg.
     lerp_lambda = None, # Lerp lambda.
-    show_normD = None, # If show normD
+    show_normd = None, # If show normD
 ):
     args = dnnlib.EasyDict()
 
@@ -262,7 +262,7 @@ def setup_training_loop_kwargs(
     args.batch_gpu = spec.mb // spec.ref_gpus
     args.save_size = save_size
     args.recursive_walk = recursive_walk
-    args.show_normD = show_normD
+    args.show_normD = show_normd
 
     if kimg is not None:
         assert isinstance(kimg, int)
@@ -426,7 +426,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--lrate', help='The lr_multiplier in M net', type=float, metavar='FLOAT')
 @click.option('--diff_avg_lerp_rate', help='The lerp rate for diff_avg', type=float, default=0.01)
 @click.option('--lerp_lambda', help='The lerp lambda', type=float, default=0.)
-@click.option('--show_normD', help='If show normD in saving heatmap', type=bool, default=False)
+@click.option('--show_normd', help='If show normD in saving heatmap', type=bool, default=False)
 
 def main(ctx, outdir, dry_run, **config_kwargs):
     """Train a GAN using the techniques described in the paper
