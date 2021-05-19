@@ -8,13 +8,13 @@
 
 # --- File Name: walk_utils.py
 # --- Creation Date: 10-05-2021
-# --- Last Modified: Wed 19 May 2021 23:25:31 AEST
+# --- Last Modified: Wed 19 May 2021 23:29:58 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
 Helper functions for traversal.
 """
-import cv
+import cv2
 import numpy as np
 import torch
 import torch.nn.functional as F
