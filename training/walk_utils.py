@@ -8,7 +8,7 @@
 
 # --- File Name: walk_utils.py
 # --- Creation Date: 10-05-2021
-# --- Last Modified: Wed 19 May 2021 23:29:58 AEST
+# --- Last Modified: Wed 19 May 2021 23:34:58 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -193,7 +193,7 @@ def get_diff_masks(images, gw, gh, S, save_size):
         numerator = diff_norm - real_min.view(gh, 1, 1)
         denominator = (real_max - real_min).view(gh, 1, 1) + 1e-6
         mask = (numerator / denominator) # (gh, hi, wi)
-        norm_mask_ls.append(mask.view(gh, 1, save_size, save_size))
+        diff_ls.append(mask.view(gh, 1, save_size, save_size))
     diff_out = torch.cat(diff_ls, dim=1).view(gh*len(outs), 1, save_size, save_size)
     diff_out_heatmap = grayscale_to_heatmap(diff_out)
     return diff_out_heatmap
