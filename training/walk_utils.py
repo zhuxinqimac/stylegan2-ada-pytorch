@@ -8,7 +8,7 @@
 
 # --- File Name: walk_utils.py
 # --- Creation Date: 10-05-2021
-# --- Last Modified: Wed 19 May 2021 23:34:58 AEST
+# --- Last Modified: Wed 19 May 2021 23:51:09 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -162,7 +162,7 @@ def grayscale_to_heatmap(diff_mask):
     heatmaps_tensor = torch.cat(heatmaps, dim=0)
     return heatmaps_tensor
 
-def get_diff_masks(images, gw, gh, S, save_size):
+def get_diff_masks(images, gw, gh, S, save_size, normD=False):
     # masks = get_diff_masks(images, n_samples_per, M.z_dim, S)
     # images: (gh*gw, c, h, w)
     b, c, h, w = images.size()
@@ -190,10 +190,16 @@ def get_diff_masks(images, gw, gh, S, save_size):
 
     diff_ls = []
     for i, diff_norm in enumerate(norm_ls):
-        numerator = diff_norm - real_min.view(gh, 1, 1)
-        denominator = (real_max - real_min).view(gh, 1, 1) + 1e-6
-        mask = (numerator / denominator) # (gh, hi, wi)
-        diff_ls.append(mask.view(gh, 1, save_size, save_size))
+        if normD:
+            numerator = diff_norm - real_min.view(gh, 1, 1)
+            denominator = (real_max - real_min).view(gh, 1, 1) + 1e-6
+            mask = (numerator / denominator) # (gh, hi, wi)
+            diff_ls.append(mask.view(gh, 1, save_size, save_size))
+        else:
+            numerator = diff_norm - min_ls[i].view(gh, 1, 1)
+            denominator = (max_ls[i] - min_ls[i]).view(gh, 1, 1) + 1e-6
+            mask = (numerator / denominator) # (gh, hi, wi)
+            diff_ls.append(mask.view(gh, 1, save_size, save_size))
     diff_out = torch.cat(diff_ls, dim=1).view(gh*len(outs), 1, save_size, save_size)
     diff_out_heatmap = grayscale_to_heatmap(diff_out)
     return diff_out_heatmap

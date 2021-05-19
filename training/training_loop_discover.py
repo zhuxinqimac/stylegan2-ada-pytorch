@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 12 May 2021 17:31:59 AEST
+# --- Last Modified: Wed 19 May 2021 23:53:07 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -70,6 +70,7 @@ def training_loop(
     save_size               = 128,      # Image size to save per image in traversal.
     trav_walk_scale         = 0.01,     # Traversal walking scale.
     recursive_walk          = True,     # If recursive walk.
+    show_normD              = False,    # If normD when show heatmap.
 ):
     # Initialize.
     start_time = time.time()
@@ -192,7 +193,7 @@ def training_loop(
                 v_images = v_images.cpu().numpy()
             save_image_grid(v_images, os.path.join(run_dir, 'vae_trav_init.png'), drange=[0,1], grid_size=walk_grid_size)
         else:
-            masks = get_diff_masks(images, n_samples_per, M.z_dim, S, save_size).cpu().numpy()
+            masks = get_diff_masks(images, n_samples_per, M.z_dim, S, save_size, normD=show_normD).cpu().numpy()
             save_image_grid(masks, os.path.join(run_dir, 'diff_init.png'), drange=[0,1], grid_size=(loss_kwargs.S_L, M.z_dim))
 
         if M.wvae_lambda != 0:
@@ -339,7 +340,7 @@ def training_loop(
                     v_images = v_images.cpu().numpy()
                 save_image_grid(v_images, os.path.join(run_dir, f'vae_trav_{cur_nimg//1000:06d}.png'), drange=[0,1], grid_size=walk_grid_size)
             else:
-                masks = get_diff_masks(images, n_samples_per, M.z_dim, S, save_size).cpu().numpy()
+                masks = get_diff_masks(images, n_samples_per, M.z_dim, S, save_size, normD=show_normD).cpu().numpy()
                 save_image_grid(masks, os.path.join(run_dir, f'diff_{cur_nimg//1000:06d}.png'), drange=[0,1], grid_size=(loss_kwargs.S_L, M.z_dim))
 
             if M.wvae_lambda != 0:
