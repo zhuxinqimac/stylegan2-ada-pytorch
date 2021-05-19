@@ -8,7 +8,7 @@
 
 # --- File Name: walk_utils.py
 # --- Creation Date: 10-05-2021
-# --- Last Modified: Thu 20 May 2021 00:04:15 AEST
+# --- Last Modified: Thu 20 May 2021 00:05:02 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -202,8 +202,8 @@ def get_diff_masks(images, gw, gh, S, save_size, normD=False):
             diff_ls.append(mask.view(gh, 1, save_size, save_size))
     diff_out = torch.cat(diff_ls, dim=1).view(gh*len(outs), 1, save_size, save_size)
     if normD:
-        diff_out_heatmap = grayscale_to_heatmap(diff_out)
-    return diff_out_heatmap
+        diff_out = grayscale_to_heatmap(diff_out)
+    return diff_out
 
 def get_vae_walk(v_origin, M, n_samples_per):
     # v_origin: (1, M.z_dim)
