@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Thu 20 May 2021 19:12:53 AEST
+# --- Last Modified: Thu 20 May 2021 22:40:49 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -46,7 +46,7 @@ class DiscoverLoss(Loss):
                  div_lambda=0., div_heat_lambda=0., norm_lambda=0., var_sample_scale=1.,
                  var_sample_mean=0., sensor_used_layers=5, use_norm_mask=True,
                  divide_mask_sum=True, use_dynamic_scale=True, use_norm_as_mask=False,
-                 diff_avg_lerp_rate=0.01, lerp_lambda=0., neg_lambda=1.):
+                 diff_avg_lerp_rate=0.01, lerp_lambda=0., neg_lambda=1., neg_on_self=False):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -68,6 +68,7 @@ class DiscoverLoss(Loss):
         self.sensor_used_layers = sensor_used_layers
         self.use_norm_as_mask = use_norm_as_mask
         self.neg_lambda = neg_lambda
+        self.neg_on_self = neg_on_self
         assert self.sensor_used_layers <= self.S_L
 
         self.diff_avg_lerp_rate = diff_avg_lerp_rate
@@ -128,7 +129,10 @@ class DiscoverLoss(Loss):
         p2_e_neg = feats_i[4*batch_25//5:]
         diff_q = p1_e - p1_s # (0.5batch, c, h, w)
         diff_pos = p2_e_pos - p2_s
-        diff_neg = p2_e_neg - p2_s
+        if self.neg_on_self:
+            diff_neg = p2_e_neg - p1_s # here p2_e_neg is moved from p1
+        else:
+            diff_neg = p2_e_neg - p2_s
         return diff_q, diff_pos, diff_neg
 
     def extract_loss_L_by_maskdiff(self, diff_q, diff_pos, diff_neg, mask_q, mask_pos, mask_neg, idx):
@@ -357,7 +361,10 @@ class DiscoverLoss(Loss):
                 pos_neg_idx = self.sample_batch_pos_neg_dirs(batch // 2, self.M.z_dim).to(delta.device) # (b//2, 2)
                 delta_q = torch.gather(delta[:batch//2], 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(1, 1, self.M.w_dim)).squeeze()
                 delta_pos = torch.gather(delta[batch//2:], 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(1, 1, self.M.w_dim)).squeeze()
-                delta_neg = torch.gather(delta[batch//2:], 1, pos_neg_idx[:, 1].view(batch//2, 1, 1).repeat(1, 1, self.M.w_dim)).squeeze() # (b//2, w_dim)
+                if self.neg_on_self:
+                    delta_neg = torch.gather(delta[:batch//2], 1, pos_neg_idx[:, 1].view(batch//2, 1, 1).repeat(1, 1, self.M.w_dim)).squeeze() # (b//2, w_dim)
+                else:
+                    delta_neg = torch.gather(delta[batch//2:], 1, pos_neg_idx[:, 1].view(batch//2, 1, 1).repeat(1, 1, self.M.w_dim)).squeeze() # (b//2, w_dim)
 
                 # Predict heatmap on each layer for G_synthesis.
                 if self.M.use_global_layer_heat:
@@ -377,8 +384,12 @@ class DiscoverLoss(Loss):
                     # layer_heat_pos = layer_heat_q
                     layer_heat_pos = self.M.heat_fn(torch.gather(heat_logits[batch//2:], 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(
                         1, 1, self.G_mapping.num_ws)).squeeze()).unsqueeze(2)
-                    layer_heat_neg = self.M.heat_fn(torch.gather(heat_logits[batch//2:], 1, pos_neg_idx[:, 1].view(batch//2, 1, 1).repeat(
-                        1, 1, self.G_mapping.num_ws)).squeeze()).unsqueeze(2) # (b//2, num_ws, 1)
+                    if self.neg_on_self:
+                        layer_heat_neg = self.M.heat_fn(torch.gather(heat_logits[:batch//2], 1, pos_neg_idx[:, 1].view(batch//2, 1, 1).repeat(
+                            1, 1, self.G_mapping.num_ws)).squeeze()).unsqueeze(2) # (b//2, num_ws, 1)
+                    else:
+                        layer_heat_neg = self.M.heat_fn(torch.gather(heat_logits[batch//2:], 1, pos_neg_idx[:, 1].view(batch//2, 1, 1).repeat(
+                            1, 1, self.G_mapping.num_ws)).squeeze()).unsqueeze(2) # (b//2, num_ws, 1)
                     loss_heat_diversity = self.calc_loss_diversity(heat_logits)
                 else:
                     layer_heat_q = layer_heat_pos = layer_heat_neg = 1.
@@ -391,7 +402,10 @@ class DiscoverLoss(Loss):
                 if (not self.M.use_local_layer_heat) and (not self.M.use_global_layer_heat):
                     ws_q = ws[:batch//2] + (delta_q * scale) # (batch//2, w_dim)
                     ws_pos = ws[batch//2:] + (delta_pos * scale)
-                    ws_neg = ws[batch//2:] + (delta_neg * scale)
+                    if self.neg_on_self:
+                        ws_neg = ws[:batch//2] + (delta_neg * scale)
+                    else:
+                        ws_neg = ws[batch//2:] + (delta_neg * scale)
                     if self.M.wvae_lambda != 0:
                         loss_wvae = self.get_wvae_loss(ws, ws_q, ws_pos, pos_neg_idx)
                         training_stats.report('Loss/M/loss_wvae', loss_wvae)
@@ -401,7 +415,10 @@ class DiscoverLoss(Loss):
                 else:
                     ws_q = ws[:batch//2].unsqueeze(1) + (delta_q * scale).unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) * layer_heat_q
                     ws_pos = ws[batch//2:].unsqueeze(1) + (delta_pos * scale).unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) * layer_heat_pos
-                    ws_neg = ws[batch//2:].unsqueeze(1) + (delta_neg * scale).unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) * layer_heat_neg
+                    if self.neg_on_self:
+                        ws_neg = ws[:batch//2].unsqueeze(1) + (delta_neg * scale).unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) * layer_heat_neg
+                    else:
+                        ws_neg = ws[batch//2:].unsqueeze(1) + (delta_neg * scale).unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) * layer_heat_neg
 
                 ws_all = torch.cat([ws_orig, ws_q, ws_pos, ws_neg], dim=0) # (2.5 * batch, num_ws, w_dim)
                 imgs_all = self.run_G_synthesis(ws_all)
