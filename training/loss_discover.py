@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Thu 20 May 2021 00:00:31 AEST
+# --- Last Modified: Thu 20 May 2021 19:12:53 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -46,7 +46,7 @@ class DiscoverLoss(Loss):
                  div_lambda=0., div_heat_lambda=0., norm_lambda=0., var_sample_scale=1.,
                  var_sample_mean=0., sensor_used_layers=5, use_norm_mask=True,
                  divide_mask_sum=True, use_dynamic_scale=True, use_norm_as_mask=False,
-                 diff_avg_lerp_rate=0.01, lerp_lambda=0.):
+                 diff_avg_lerp_rate=0.01, lerp_lambda=0., neg_lambda=1.):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -67,6 +67,7 @@ class DiscoverLoss(Loss):
         self.cos_fn_diversity = nn.CosineSimilarity(dim=3)
         self.sensor_used_layers = sensor_used_layers
         self.use_norm_as_mask = use_norm_as_mask
+        self.neg_lambda = neg_lambda
         assert self.sensor_used_layers <= self.S_L
 
         self.diff_avg_lerp_rate = diff_avg_lerp_rate
@@ -150,7 +151,7 @@ class DiscoverLoss(Loss):
             loss_neg = (cos_sim_neg**2).mean(dim=[1,2])
         training_stats.report('Loss/M/loss_diff_pos_{}'.format(idx), loss_pos)
         training_stats.report('Loss/M/loss_diff_neg_{}'.format(idx), loss_neg)
-        loss = loss_pos + loss_neg # (0.5batch)
+        loss = loss_pos + self.neg_lambda * loss_neg # (0.5batch)
         return loss
 
     def extract_loss_L(self, feats_i, idx, pos_neg_idx):
