@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 21 May 2021 16:05:14 AEST
+# --- Last Modified: Fri 21 May 2021 16:10:21 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -78,7 +78,11 @@ class DiscoverLoss(Loss):
         if self.lerp_lambda != 0:
             with torch.no_grad():
                 outs = self.run_S(torch.zeros(1, G_synthesis.img_channels, G_synthesis.img_resolution, G_synthesis.img_resolution, device=self.device))
-            self.M.diff_mask_avg_ls = [torch.zeros_like(x, device=self.device).repeat(self.M.z_dim, 1, 1, 1) for x in outs] # list of (z_dim, ci, hi, wi)
+            if not self.use_catdiff:
+                self.M.diff_mask_avg_ls = [torch.zeros_like(x, device=self.device).repeat(self.M.z_dim, 1, 1, 1) for x in outs] # list of (z_dim, ci, hi, wi)
+            else:
+                feat_len = sum([x.size(1) for x in outs])
+                self.M.diff_mask_avg_ls = [torch.zeros((self.M.z_dim, feat_len, 32, 32), device=self.device)] # list of (z_dim, c_sum, h, w)
 
     def run_G_mapping(self, z, c):
         # with misc.ddp_sync(self.G_mapping, sync):
