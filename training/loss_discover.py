@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 21 May 2021 16:10:21 AEST
+# --- Last Modified: Fri 21 May 2021 16:11:34 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -300,9 +300,9 @@ class DiscoverLoss(Loss):
         res_q = torch.cat(res_q, dim=1) # (b//2, c_sum, h, w)
         res_pos = torch.cat(res_pos, dim=1)
         res_neg = torch.cat(res_neg, dim=1)
-        print('res_q.size:', res_q.size())
-        print('res_pos.size:', res_pos.size())
-        print('res_neg.size:', res_neg.size())
+        # print('res_q.size:', res_q.size())
+        # print('res_pos.size:', res_pos.size())
+        # print('res_neg.size:', res_neg.size())
         loss = self.extract_loss_L(res_q, res_pos, res_neg, -1, pos_neg_idx)
         return loss
 
