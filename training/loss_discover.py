@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Thu 20 May 2021 22:40:49 AEST
+# --- Last Modified: Fri 21 May 2021 15:52:57 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -46,7 +46,8 @@ class DiscoverLoss(Loss):
                  div_lambda=0., div_heat_lambda=0., norm_lambda=0., var_sample_scale=1.,
                  var_sample_mean=0., sensor_used_layers=5, use_norm_mask=True,
                  divide_mask_sum=True, use_dynamic_scale=True, use_norm_as_mask=False,
-                 diff_avg_lerp_rate=0.01, lerp_lambda=0., neg_lambda=1., neg_on_self=False):
+                 diff_avg_lerp_rate=0.01, lerp_lambda=0., neg_lambda=1., neg_on_self=False,
+                 use_catdiff=False):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -69,6 +70,7 @@ class DiscoverLoss(Loss):
         self.use_norm_as_mask = use_norm_as_mask
         self.neg_lambda = neg_lambda
         self.neg_on_self = neg_on_self
+        self.use_catdiff = use_catdiff
         assert self.sensor_used_layers <= self.S_L
 
         self.diff_avg_lerp_rate = diff_avg_lerp_rate
@@ -158,9 +160,9 @@ class DiscoverLoss(Loss):
         loss = loss_pos + self.neg_lambda * loss_neg # (0.5batch)
         return loss
 
-    def extract_loss_L(self, feats_i, idx, pos_neg_idx):
+    def extract_loss_L(self, diff_q, diff_pos, diff_neg, idx, pos_neg_idx):
         # pos_neg_idx: (b//2, 2)
-        diff_q, diff_pos, diff_neg = self.extract_diff_L(feats_i)
+        # diff_q, diff_pos, diff_neg = self.extract_diff_L(feats_i)
 
         norm_q, mask_q = self.get_norm_mask(diff_q) # (0.5batch, h, w), (0.5batch, h, w)
         norm_pos, mask_pos = self.get_norm_mask(diff_pos)
@@ -257,7 +259,8 @@ class DiscoverLoss(Loss):
             diff_q_ls, diff_pos_ls, diff_neg_ls = [], [], []
         for kk in range(self.S_L - self.sensor_used_layers, self.S_L):
             if not self.norm_on_depth:
-                loss_kk = self.extract_loss_L(outs[kk], kk, pos_neg_idx)
+                diff_q, diff_pos, diff_neg = self.extract_diff_L(outs[kk])
+                loss_kk = self.extract_loss_L(diff_q, diff_pos, diff_neg, kk, pos_neg_idx)
                 loss += loss_kk
             else:
                 diff_q_kk, diff_pos_kk, diff_neg_kk = self.extract_diff_L(outs[kk])
@@ -274,6 +277,23 @@ class DiscoverLoss(Loss):
             loss_norm = self.extract_depth_norm_loss(norm_q_ls, norm_pos_ls, norm_neg_ls, mask_q_ls, mask_pos_ls, mask_neg_ls)
             training_stats.report('Loss/M/loss_norm', loss_norm)
             loss = loss_diff + self.norm_lambda * loss_norm
+        return loss
+
+    def extract_catdiff_loss(self, outs, pos_neg_idx):
+        diff_q_ls, diff_pos_ls, diff_neg_ls = [], [], []
+        # res = [interpolate(diffs[kk], out_HW=(16, 16)) for kk in range(self.L)]
+        for kk in range(self.S_L - self.sensor_used_layers, self.S_L):
+            diff_q_kk, diff_pos_kk, diff_neg_kk = self.extract_diff_L(outs[kk])
+            diff_q_ls.append(diff_q_kk)
+            diff_pos_ls.append(diff_pos_kk)
+            diff_neg_ls.append(diff_neg_kk)
+        res_q = [interpolate(diff_q_ls[kk], out_HW=(16, 16)) for kk in range(self.S_L - self.sensor_used_layers, self.S_L)]
+        res_pos = [interpolate(diff_pos_ls[kk], out_HW=(16, 16)) for kk in range(self.S_L - self.sensor_used_layers, self.S_L)]
+        res_neg = [interpolate(diff_neg_ls[kk], out_HW=(16, 16)) for kk in range(self.S_L - self.sensor_used_layers, self.S_L)]
+        res_q = torch.cat(res_q, dim=1) # (b//2, c_sum, h, w)
+        res_pos = torch.cat(res_pos, dim=1)
+        res_neg = torch.cat(res_neg, dim=1)
+        loss = self.extract_loss_L(res_q, res_pos, res_neg, -1, pos_neg_idx)
         return loss
 
     def calc_loss_diversity(self, delta):
@@ -426,7 +446,10 @@ class DiscoverLoss(Loss):
                 # Main loss
                 if self.M.post_vae_lambda == 0:
                     outs_all = self.run_S(imgs_all)
-                    loss_Mmain = self.extract_diff_loss(outs_all, pos_neg_idx)
+                    if self.use_catdiff:
+                        loss_Mmain = self.extract_catdiff_loss(outs_all, pos_neg_idx)
+                    else:
+                        loss_Mmain = self.extract_diff_loss(outs_all, pos_neg_idx)
                 else:
                     loss_Mmain = self.M.post_vae_loss(imgs_all, pos_neg_idx)
 
