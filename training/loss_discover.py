@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 21 May 2021 15:52:57 AEST
+# --- Last Modified: Fri 21 May 2021 16:03:14 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -281,15 +281,18 @@ class DiscoverLoss(Loss):
 
     def extract_catdiff_loss(self, outs, pos_neg_idx):
         diff_q_ls, diff_pos_ls, diff_neg_ls = [], [], []
-        # res = [interpolate(diffs[kk], out_HW=(16, 16)) for kk in range(self.L)]
+        # res = [F.interpolate(diffs[kk], size=(16, 16)) for kk in range(self.L)]
         for kk in range(self.S_L - self.sensor_used_layers, self.S_L):
             diff_q_kk, diff_pos_kk, diff_neg_kk = self.extract_diff_L(outs[kk])
             diff_q_ls.append(diff_q_kk)
             diff_pos_ls.append(diff_pos_kk)
             diff_neg_ls.append(diff_neg_kk)
-        res_q = [interpolate(diff_q_ls[kk], out_HW=(16, 16)) for kk in range(self.S_L - self.sensor_used_layers, self.S_L)]
-        res_pos = [interpolate(diff_pos_ls[kk], out_HW=(16, 16)) for kk in range(self.S_L - self.sensor_used_layers, self.S_L)]
-        res_neg = [interpolate(diff_neg_ls[kk], out_HW=(16, 16)) for kk in range(self.S_L - self.sensor_used_layers, self.S_L)]
+        res_q = [F.interpolate(diff_q_ls[kk], size=(16, 16), mode='bilinear', align_corners=False) \
+                 for kk in range(self.S_L - self.sensor_used_layers, self.S_L)]
+        res_pos = [F.interpolate(diff_pos_ls[kk], size=(16, 16), mode='bilinear', align_corners=False) \
+                   for kk in range(self.S_L - self.sensor_used_layers, self.S_L)]
+        res_neg = [F.interpolate(diff_neg_ls[kk], size=(16, 16), mode='bilinear', align_corners=False) \
+                   for kk in range(self.S_L - self.sensor_used_layers, self.S_L)]
         res_q = torch.cat(res_q, dim=1) # (b//2, c_sum, h, w)
         res_pos = torch.cat(res_pos, dim=1)
         res_neg = torch.cat(res_neg, dim=1)
