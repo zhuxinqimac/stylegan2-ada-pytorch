@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 21 May 2021 16:11:34 AEST
+# --- Last Modified: Sat 22 May 2021 16:00:48 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -46,8 +46,8 @@ class DiscoverLoss(Loss):
                  div_lambda=0., div_heat_lambda=0., norm_lambda=0., var_sample_scale=1.,
                  var_sample_mean=0., sensor_used_layers=5, use_norm_mask=True,
                  divide_mask_sum=True, use_dynamic_scale=True, use_norm_as_mask=False,
-                 diff_avg_lerp_rate=0.01, lerp_lambda=0., neg_lambda=1., neg_on_self=False,
-                 use_catdiff=False):
+                 diff_avg_lerp_rate=0.01, lerp_lambda=0., lerp_norm=False,
+                 neg_lambda=1., neg_on_self=False, use_catdiff=False):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -75,9 +75,12 @@ class DiscoverLoss(Loss):
 
         self.diff_avg_lerp_rate = diff_avg_lerp_rate
         self.lerp_lambda = lerp_lambda
+        self.lerp_norm = lerp_norm
         if self.lerp_lambda != 0:
             with torch.no_grad():
                 outs = self.run_S(torch.zeros(1, G_synthesis.img_channels, G_synthesis.img_resolution, G_synthesis.img_resolution, device=self.device))
+            if self.lerp_norm:
+                outs = [torch.norm(x, dim=1, keepdim=True) for x in outs] # list of (1, hi, wi)
             if not self.use_catdiff:
                 self.M.diff_mask_avg_ls = [torch.zeros_like(x, device=self.device).repeat(self.M.z_dim, 1, 1, 1) for x in outs] # list of (z_dim, ci, hi, wi)
             else:
@@ -221,6 +224,8 @@ class DiscoverLoss(Loss):
             b_half = pos_neg_idx.size(0)
             norm_size = self.M.diff_mask_avg_ls[feats_idx].size() # (z_dim, ci, hi, wi)
             for (diff, diff_idx) in [(diff_q, pos_neg_idx[:,0]), (diff_pos, pos_neg_idx[:,0]), (diff_neg, pos_neg_idx[:,1])]:
+                if self.lerp_norm:
+                    diff = torch.norm(diff, dim=1, keepdim=True)
                 diff_mask_avg_tmp = torch.gather(self.M.diff_mask_avg_ls[feats_idx], 0, diff_idx.view(b_half, 1, 1, 1).repeat(1, *norm_size[1:]))
                 diff_mask_avg_tmp = diff_mask_avg_tmp.lerp(diff, self.diff_avg_lerp_rate)
                 loss_lerp += (diff_mask_avg_tmp - diff).square().mean()

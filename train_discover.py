@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 21 May 2021 15:53:55 AEST
+# --- Last Modified: Sat 22 May 2021 16:02:12 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -104,6 +104,7 @@ def setup_training_loop_kwargs(
     lrate = None, # Learning rate.
     diff_avg_lerp_rate = None, # Lerp rate for diff_avg.
     lerp_lambda = None, # Lerp lambda.
+    lerp_norm = None, # If lerp on l2-norm.
     neg_lambda = None, # Neg sample lambda.
     neg_on_self = None, # If apply neg samples on self.
     use_catdiff = None, # If use concat features in perceiver.
@@ -259,6 +260,7 @@ def setup_training_loop_kwargs(
     args.loss_kwargs.use_norm_as_mask = use_norm_as_mask
     args.loss_kwargs.diff_avg_lerp_rate = diff_avg_lerp_rate
     args.loss_kwargs.lerp_lambda = lerp_lambda
+    args.loss_kwargs.lerp_norm = lerp_norm
     args.loss_kwargs.neg_lambda = neg_lambda
     args.loss_kwargs.neg_on_self = neg_on_self
     args.loss_kwargs.use_catdiff = use_catdiff
@@ -432,6 +434,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--lrate', help='The lr_multiplier in M net', type=float, metavar='FLOAT')
 @click.option('--diff_avg_lerp_rate', help='The lerp rate for diff_avg', type=float, default=0.01)
 @click.option('--lerp_lambda', help='The lerp lambda', type=float, default=0.)
+@click.option('--lerp_norm', help='If lerp on l2-norm instead of on feature', type=bool, default=False)
 @click.option('--neg_lambda', help='The negative pair lambda', type=float, default=1.)
 @click.option('--neg_on_self', help='If apply neg samples on self sample', type=bool, default=False)
 @click.option('--use_catdiff', help='If concat diff features', type=bool, default=False)
