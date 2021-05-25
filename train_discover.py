@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 22 May 2021 16:02:12 AEST
+# --- Last Modified: Tue 25 May 2021 00:56:30 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -101,6 +101,7 @@ def setup_training_loop_kwargs(
     post_vae_lambda = None, # The post_vae lambda.
     post_vae_kl_lambda = None, # The KL lambda in post_vae.
     ce_diffdim_lambda = None, # The cross_entropy lambda for diff dim.
+    use_group_fc = None, # If use group_fc in navigator.
     lrate = None, # Learning rate.
     diff_avg_lerp_rate = None, # Lerp rate for diff_avg.
     lerp_lambda = None, # Lerp lambda.
@@ -238,6 +239,7 @@ def setup_training_loop_kwargs(
     args.M_kwargs.post_vae_lambda = post_vae_lambda
     args.M_kwargs.post_vae_kl_lambda = post_vae_kl_lambda
     args.M_kwargs.ce_diffdim_lambda = ce_diffdim_lambda
+    args.M_kwargs.use_group_fc = use_group_fc
 
     args.M_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', lr=spec.lrate if lrate is None else lrate, betas=[0,0.99], eps=1e-8)
     if sensor_type is None:
@@ -431,6 +433,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--post_vae_lambda', help='The post_vae lambda.', type=float, default=0.)
 @click.option('--post_vae_kl_lambda', help='The KL lambda in post_vae.', type=float, default=1.)
 @click.option('--ce_diffdim_lambda', help='The cross_entropy lambda for diff dim.', type=float, default=1.)
+@click.option('--use_group_fc', help='If use group_fc in navigator.', type=bool, default=True)
 @click.option('--lrate', help='The lr_multiplier in M net', type=float, metavar='FLOAT')
 @click.option('--diff_avg_lerp_rate', help='The lerp rate for diff_avg', type=float, default=0.01)
 @click.option('--lerp_lambda', help='The lerp lambda', type=float, default=0.)

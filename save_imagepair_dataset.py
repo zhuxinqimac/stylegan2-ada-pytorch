@@ -8,7 +8,7 @@
 
 # --- File Name: save_imagepair_dataset.py
 # --- Creation Date: 22-05-2021
-# --- Last Modified: Sat 22 May 2021 21:15:34 AEST
+# --- Last Modified: Tue 25 May 2021 19:12:16 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -44,6 +44,7 @@ def img_to_255(images):
 @click.option('--seed', help='Random seed', type=int, default=303, show_default=True)
 @click.option('--outdir', help='Where to save the output dataset', required=True, metavar='DIR')
 @click.option('--outfile', help='Out file name', required=True, metavar='DIR')
+@click.option('--use_dynamic_scale', help='If use dynamic scale', default=False, type=bool)
 @click.option('--edit_scale', help='The scale to edit', default=0.1, type=float)
 @click.option('--n_samples', help='The number of image pairs', default=240000, type=int)
 @click.option('--batch_size', help='The batch size when generating', default=100, type=int)
@@ -54,6 +55,7 @@ def run_create_dataset(
     outdir: str,
     outfile: str,
     seed: int,
+    use_dynamic_scale: bool,
     edit_scale: float,
     n_samples: int,
     batch_size: int,
@@ -88,7 +90,13 @@ def run_create_dataset(
         with torch.no_grad():
             g_w = G.mapping(g_z, g_c)[:, 0] # (b, w_dim)
             out_M = M(g_w)
-        delta_all = out_M[:, :, :M.w_dim] * edit_scale # (b, M.z_dim, w_dim)
+
+        if use_dynamic_scale:
+            scale = torch.randn(batch_size, device=device).view(batch_size, 1, 1) * edit_scale
+        else:
+            scale = edit_scale
+
+        delta_all = out_M[:, :, :M.w_dim] * scale # (b, M.z_dim, w_dim)
         var_idx = torch.randint(0, M.z_dim, (batch_size,), device=device) # (b)
         delta = torch.gather(delta_all, 1, var_idx.view(batch_size, 1, 1).repeat(1, 1, M.w_dim)).squeeze() # (b, w_dim)
         w = (g_w + delta).unsqueeze(1).repeat(1, M.num_ws, 1) # (b, num_ws, w_dim)
@@ -116,8 +124,11 @@ def run_create_dataset(
     f1.close()
 
     for i in range(n_saved_samples):
-        PIL.Image.fromarray(orig_np[i], 'RGB').save(f'{outdir}/orig_{i}.png')
-        PIL.Image.fromarray(edit_np[i], 'RGB').save(f'{outdir}/edit_{i}.png')
+        orig_tmp = orig_np[i].squeeze()
+        edit_tmp = edit_np[i].squeeze()
+        img_format = 'RGB' if orig_tmp.ndim == 3 else 'L'
+        PIL.Image.fromarray(orig_tmp, img_format).save(f'{outdir}/orig_{i}.png')
+        PIL.Image.fromarray(edit_tmp, img_format).save(f'{outdir}/edit_{i}.png')
 
 #----------------------------------------------------------------------------
 

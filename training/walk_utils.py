@@ -8,7 +8,7 @@
 
 # --- File Name: walk_utils.py
 # --- Creation Date: 10-05-2021
-# --- Last Modified: Thu 20 May 2021 00:05:02 AEST
+# --- Last Modified: Tue 25 May 2021 13:19:42 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -172,6 +172,8 @@ def get_diff_masks(images, gw, gh, S, save_size, normD=False):
         img_ls.append(images[i, gw//2].view(1, c, h, w))
         img_ls.append(images[i, gw//2+1].view(1, c, h, w))
     img_tensor = torch.cat(img_ls, dim=0) # (gh*2, c, h, w)
+    if img_tensor.size(1) == 1:
+        img_tensor = img_tensor.repeat(1, 3, 1, 1)
     outs = S.forward(img_tensor) # list of (gh*2, ci, hi, wi)
     max_ls = []
     min_ls = []
@@ -214,3 +216,11 @@ def get_vae_walk(v_origin, M, n_samples_per):
         v_out[i, :, i] = torch.linspace(-2.5, 2.5, n_samples_per)
     v_out = v_out.view(M.z_dim*n_samples_per, M.z_dim)
     return v_out
+
+def add_outline(images, width=1):
+    num, img_w, img_h = images.shape[0], images.shape[-1], images.shape[-2]
+    images[:, :, :width, :] = 255
+    images[:, :, -width:, :] = 255
+    images[:, :, :, :width] = 255
+    images[:, :, :, -width:] = 255
+    return images

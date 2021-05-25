@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 19 May 2021 23:53:07 AEST
+# --- Last Modified: Wed 26 May 2021 04:26:03 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -35,7 +35,7 @@ from torch_utils.ops import grid_sample_gradfix
 from training.training_loop import setup_snapshot_image_grid, save_image_grid
 from training.training_loop_uneven import get_traversal
 from training.walk_utils import run_M, get_walk_wfixed, get_walk, get_walk_on_z
-from training.walk_utils import get_diff_masks, get_vae_walk
+from training.walk_utils import get_diff_masks, get_vae_walk, add_outline
 
 import legacy
 from metrics import metric_main
@@ -172,7 +172,7 @@ def training_loop(
         z_origin = torch.randn([1, G.z_dim], device=device)
         c_origin = torch.randn([1, G.c_dim], device=device)
         if not M.apply_M_on_z:
-            w_origin = G.mapping(z_origin, c_origin) # (1, num_ws, w_dim)
+            w_origin = G.mapping(z_origin, c_origin, truncation_psi=0.7) # (1, num_ws, w_dim)
             if recursive_walk:
                 w_walk = get_walk(w_origin, M, n_samples_per, trav_walk_scale).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
             else:
@@ -181,7 +181,7 @@ def training_loop(
             images = torch.cat([G.synthesis(w, noise_mode='const') for w in w_walk]) # (gh * gw, c, h, w)
         else:
             z_walk = get_walk_on_z(z_origin, M, n_samples_per, trav_walk_scale).split(batch_gpu)
-            images = torch.cat([G.synthesis(G.mapping(z, c_origin.repeat(z.size(0), 1)), noise_mode='const') for z in z_walk])
+            images = torch.cat([G.synthesis(G.mapping(z, c_origin.repeat(z.size(0), 1), truncation_psi=0.7), noise_mode='const') for z in z_walk])
 
         if M.post_vae_lambda != 0:
             v_origin = torch.randn([1, M.z_dim], device=device)
@@ -191,9 +191,11 @@ def training_loop(
                 v_images = F.adaptive_avg_pool2d(v_images, (save_size, save_size)).cpu().numpy()
             else:
                 v_images = v_images.cpu().numpy()
+            v_images = add_outline(v_images)
             save_image_grid(v_images, os.path.join(run_dir, 'vae_trav_init.png'), drange=[0,1], grid_size=walk_grid_size)
         else:
             masks = get_diff_masks(images, n_samples_per, M.z_dim, S, save_size, normD=show_normD).cpu().numpy()
+            masks = add_outline(masks)
             save_image_grid(masks, os.path.join(run_dir, 'diff_init.png'), drange=[0,1], grid_size=(loss_kwargs.S_L, M.z_dim))
 
         if M.wvae_lambda != 0:
@@ -204,6 +206,7 @@ def training_loop(
                 v_images = F.adaptive_avg_pool2d(v_images, (save_size, save_size)).cpu().numpy()
             else:
                 v_images = v_images.cpu().numpy()
+            v_images = add_outline(v_images)
             save_image_grid(v_images, os.path.join(run_dir, 'wvae_trav_init.png'), drange=[-1,1], grid_size=walk_grid_size)
 
         if save_size < images.size(-1):
@@ -211,6 +214,7 @@ def training_loop(
         else:
             images = images.cpu().numpy()
         print('images.shape:', images.shape)
+        images = add_outline(images)
         save_image_grid(images, os.path.join(run_dir, 'trav_init.png'), drange=[-1,1], grid_size=walk_grid_size)
 
     # Initialize logs.
@@ -319,7 +323,7 @@ def training_loop(
             z_origin = torch.randn([1, G.z_dim], device=device)
             c_origin = torch.randn([1, G.c_dim], device=device)
             if not M.apply_M_on_z:
-                w_origin = G.mapping(z_origin, c_origin) # (1, num_ws, w_dim)
+                w_origin = G.mapping(z_origin, c_origin, truncation_psi=0.7) # (1, num_ws, w_dim)
                 if recursive_walk:
                     w_walk = get_walk(w_origin, M, n_samples_per, trav_walk_scale).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
                 else:
@@ -328,7 +332,7 @@ def training_loop(
                 images = torch.cat([G.synthesis(w, noise_mode='const') for w in w_walk]) # (gh * gw, c, h, w)
             else:
                 z_walk = get_walk_on_z(z_origin, M, n_samples_per, trav_walk_scale).split(batch_gpu)
-                images = torch.cat([G.synthesis(G.mapping(z, c_origin.repeat(z.size(0), 1)), noise_mode='const') for z in z_walk])
+                images = torch.cat([G.synthesis(G.mapping(z, c_origin.repeat(z.size(0), 1), truncation_psi=0.7), noise_mode='const') for z in z_walk])
 
             if M.post_vae_lambda != 0:
                 v_origin = torch.randn([1, M.z_dim], device=device)
@@ -338,9 +342,11 @@ def training_loop(
                     v_images = F.adaptive_avg_pool2d(v_images, (save_size, save_size)).cpu().numpy()
                 else:
                     v_images = v_images.cpu().numpy()
+                v_images = add_outline(v_images)
                 save_image_grid(v_images, os.path.join(run_dir, f'vae_trav_{cur_nimg//1000:06d}.png'), drange=[0,1], grid_size=walk_grid_size)
             else:
                 masks = get_diff_masks(images, n_samples_per, M.z_dim, S, save_size, normD=show_normD).cpu().numpy()
+                masks = add_outline(masks)
                 save_image_grid(masks, os.path.join(run_dir, f'diff_{cur_nimg//1000:06d}.png'), drange=[0,1], grid_size=(loss_kwargs.S_L, M.z_dim))
 
             if M.wvae_lambda != 0:
@@ -351,12 +357,14 @@ def training_loop(
                     v_images = F.adaptive_avg_pool2d(v_images, (save_size, save_size)).cpu().numpy()
                 else:
                     v_images = v_images.cpu().numpy()
+                v_images = add_outline(v_images)
                 save_image_grid(v_images, os.path.join(run_dir, f'wvae_trav_{cur_nimg//1000:06d}.png'), drange=[-1,1], grid_size=walk_grid_size)
 
             if save_size < images.size(-1):
                 images = F.adaptive_avg_pool2d(images, (save_size, save_size)).cpu().numpy()
             else:
                 images = images.cpu().numpy()
+            images = add_outline(images)
             save_image_grid(images, os.path.join(run_dir, f'trav_{cur_nimg//1000:06d}.png'), drange=[-1,1], grid_size=walk_grid_size)
 
         # Save network snapshot.

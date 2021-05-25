@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 22 May 2021 16:00:48 AEST
+# --- Last Modified: Tue 25 May 2021 00:30:24 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -105,6 +105,8 @@ class DiscoverLoss(Loss):
 
     def run_S(self, imgs):
         # with misc.ddp_sync(self.S, sync):
+        if imgs.size(1) == 1:
+            imgs = imgs.repeat(1, 3, 1, 1)
         outs = self.S.forward(imgs)
         return outs
 

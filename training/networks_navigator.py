@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 19 May 2021 02:39:38 AEST
+# --- Last Modified: Tue 25 May 2021 00:59:45 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -67,7 +67,8 @@ class Navigator(torch.nn.Module):
         apply_M_on_z    = False,    # If apply M network on z of G.
         post_vae_lambda = 0.,       # The post_vae lambda.
         post_vae_kl_lambda = 1.,    # The KL lambda in post_vae.
-        ce_diffdim_lambda = 1.,    # The cross_entropy loss lambda for diff dim.
+        ce_diffdim_lambda = 1.,     # The cross_entropy loss lambda for diff dim.
+        use_group_fc    = True,     # If use group_FC in ada mode.
     ):
         super().__init__()
         self.z_dim = z_dim
@@ -85,6 +86,7 @@ class Navigator(torch.nn.Module):
         self.use_local_layer_heat = use_local_layer_heat
         self.heat_fn = self.get_heat_fn(heat_fn)
         self.apply_M_on_z = apply_M_on_z
+        self.use_group_fc = use_group_fc
 
         # WVAE model parameters.
         self.wvae_lambda = wvae_lambda
@@ -109,13 +111,20 @@ class Navigator(torch.nn.Module):
         if self.nav_type == 'ada':
             for idx in range(self.num_layers):
                 act = 'linear' if idx == num_layers-1 else activation
-                in_features = w_dim * self.z_dim
+                in_features = w_dim * self.z_dim if self.use_group_fc else w_dim
                 if self.use_local_layer_heat and idx == num_layers-1:
                     out_features = (w_dim+self.num_ws) * self.z_dim
+                elif not self.use_group_fc and not (idx == num_layers-1):
+                    out_features = w_dim
                 else:
                     out_features = w_dim * self.z_dim
-                layer = GroupFullyConnectedLayer(in_features, out_features, activation=act,
-                                                 lr_multiplier=lr_multiplier, groups=self.z_dim)
+
+                if self.use_group_fc:
+                    layer = GroupFullyConnectedLayer(in_features, out_features, activation=act,
+                                                     lr_multiplier=lr_multiplier, groups=self.z_dim)
+                else:
+                    layer = FullyConnectedLayer(in_features, out_features, activation=act,
+                                                lr_multiplier=lr_multiplier)
                 setattr(self, f'fc{idx}', layer)
         elif self.nav_type == 'fixed':
             layer = GroupFullyConnectedLayer(z_dim, w_dim * self.z_dim, activation='linear',
@@ -231,10 +240,15 @@ class Navigator(torch.nn.Module):
         # x_in: (b, w_dim)
         # To output delta per z_dim in W space.
         if self.nav_type == 'ada':
-            x = x_in.unsqueeze(1).repeat([1, self.z_dim, 1]) # (b, z_dim, w_dim)
+            if self.use_group_fc:
+                x = x_in.unsqueeze(1).repeat([1, self.z_dim, 1]) # (b, z_dim, w_dim)
+            else:
+                x = x_in
             for idx in range(self.num_layers):
                 layer = getattr(self, f'fc{idx}')
                 x = layer(x)
+            if not self.use_group_fc:
+                x = x.view(-1, self.z_dim, self.w_dim)
         elif self.nav_type == 'fixed':
             # x_in not used.
             x = torch.ones(x_in.size(0), self.z_dim, 1).to(x_in.device) # (1, z_dim, 1)

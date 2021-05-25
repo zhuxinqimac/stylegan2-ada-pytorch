@@ -197,6 +197,29 @@ def open_mnist(images_gz: str, *, max_images: Optional[int]):
 
 #----------------------------------------------------------------------------
 
+def open_dsprites(dsprites_filename: str, *, max_images: Optional[int]):
+    data = np.load(dsprites_filename, encoding='latin1', allow_pickle=True)
+    images = data['imgs'] * 255 # (737280, 64, 64) of uint8
+    # labels = data['latents_classes']  # (737280, 6), [color(0), shape(3), scale(6), orientation(40), x(32), y(32)]
+    labels = data['latents_classes'][:, 1].astype(np.int32)  # (737280), [shape(3)]
+
+    assert images.shape == (737280, 64, 64) and images.dtype == np.uint8
+    assert labels.shape == (737280,) and labels.dtype in [np.int32, np.int64]
+    assert np.min(images) == 0 and np.max(images) == 255
+    assert np.min(labels) == 0 and np.max(labels) == 2
+
+    max_idx = maybe_min(len(images), max_images)
+
+    def iterate_images():
+        for idx, img in enumerate(images):
+            yield dict(img=img, label=int(labels[idx]))
+            if idx >= max_idx-1:
+                break
+
+    return max_idx, iterate_images()
+
+#----------------------------------------------------------------------------
+
 def open_3dshapes(h5_file: str, *, max_images: Optional[int]):
     images = []
     labels = []
@@ -288,6 +311,8 @@ def open_dataset(source, *, max_images: Optional[int]):
             return open_mnist(source, max_images=max_images)
         elif os.path.basename(source) == '3dshapes.h5':
             return open_3dshapes(source, max_images=max_images)
+        elif os.path.basename(source) == 'dsprites_ndarray_co1sh3sc6or40x32y32_64x64.npz':
+            return open_dsprites(source, max_images=max_images)
         elif file_ext(source) == 'zip':
             return open_image_zip(source, max_images=max_images)
         else:
