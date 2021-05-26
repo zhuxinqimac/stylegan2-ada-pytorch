@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 25 May 2021 00:56:30 AEST
+# --- Last Modified: Thu 27 May 2021 00:41:26 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -107,6 +107,7 @@ def setup_training_loop_kwargs(
     lerp_lambda = None, # Lerp lambda.
     lerp_norm = None, # If lerp on l2-norm.
     neg_lambda = None, # Neg sample lambda.
+    pos_lambda = None, # Pos sample lambda.
     neg_on_self = None, # If apply neg samples on self.
     use_catdiff = None, # If use concat features in perceiver.
     show_normd = None, # If show normD
@@ -264,6 +265,7 @@ def setup_training_loop_kwargs(
     args.loss_kwargs.lerp_lambda = lerp_lambda
     args.loss_kwargs.lerp_norm = lerp_norm
     args.loss_kwargs.neg_lambda = neg_lambda
+    args.loss_kwargs.pos_lambda = pos_lambda
     args.loss_kwargs.neg_on_self = neg_on_self
     args.loss_kwargs.use_catdiff = use_catdiff
 
@@ -439,6 +441,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--lerp_lambda', help='The lerp lambda', type=float, default=0.)
 @click.option('--lerp_norm', help='If lerp on l2-norm instead of on feature', type=bool, default=False)
 @click.option('--neg_lambda', help='The negative pair lambda', type=float, default=1.)
+@click.option('--pos_lambda', help='The positive pair lambda', type=float, default=1.)
 @click.option('--neg_on_self', help='If apply neg samples on self sample', type=bool, default=False)
 @click.option('--use_catdiff', help='If concat diff features', type=bool, default=False)
 @click.option('--show_normd', help='If show normD in saving heatmap', type=bool, default=False)

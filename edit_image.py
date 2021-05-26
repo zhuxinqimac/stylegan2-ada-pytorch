@@ -8,7 +8,7 @@
 
 # --- File Name: edit_image.py
 # --- Creation Date: 16-05-2021
-# --- Last Modified: Sun 16 May 2021 23:34:12 AEST
+# --- Last Modified: Wed 26 May 2021 23:34:13 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -16,9 +16,11 @@ Edit an existing image.
 """
 import copy
 import os
+from tqdm import tqdm
 from time import perf_counter
 
 import click
+import re
 import imageio
 import pickle
 import numpy as np
@@ -28,6 +30,7 @@ import torch.nn.functional as F
 
 import dnnlib
 import legacy
+from typing import List, Optional
 
 # from projector import project
 
@@ -189,6 +192,16 @@ class CommaSeparatedFloatList(click.ParamType):
             return []
         return [float(x.strip()) for x in value[1:-1].split(',')]
 
+def num_range(s: str) -> List[int]:
+    '''Accept either a comma separated list of numbers 'a,b,c' or a range 'a-c' and return as a list of ints.'''
+
+    range_re = re.compile(r'^(\d+)-(\d+)$')
+    m = range_re.match(s)
+    if m:
+        return list(range(int(m.group(1)), int(m.group(2))+1))
+    vals = s.split(',')
+    return [int(x) for x in vals]
+
 #----------------------------------------------------------------------------
 
 @click.command()
@@ -199,10 +212,13 @@ class CommaSeparatedFloatList(click.ParamType):
 @click.option('--seed', help='Random seed', type=int, default=303, show_default=True)
 @click.option('--save-video', help='Save an mp4 video of optimization progress', type=bool, default=True, show_default=True)
 @click.option('--outdir', help='Where to save the output images', required=True, metavar='DIR')
-@click.option('--edit_dim', help='The latent dim to edit', required=True, metavar='INT', type=int)
+@click.option('--edit_dims', help='The latent dim to edit', required=True, type=num_range)
 @click.option('--edit_scale', help='The scale to edit', required=True, type=CommaSeparatedFloatList())
 @click.option('--impact_w_layers', help='Optionally limit the impact on certain W space', default=None, type=CommaSeparatedIntList())
 @click.option('--train_project', help='If training projection', type=bool, default=False, show_default=True)
+@click.option('--gen_rand_image', help='If generate rand images', type=bool, default=False, show_default=True)
+@click.option('--truncation_psi', help='Truncation psi in mapping net', default=0.7, type=float, show_default=True)
+@click.option('--n_samples', help='Samples to show', default=5, type=int, show_default=True)
 def run_edit(
     gan_network: str,
     m_network: str,
@@ -211,10 +227,13 @@ def run_edit(
     save_video: bool,
     seed: int,
     num_steps: int,
-    edit_dim: int,
+    edit_dims: int,
     edit_scale: list,
     impact_w_layers: list,
-    train_project: bool
+    train_project: bool,
+    gen_rand_image: bool,
+    truncation_psi: float,
+    n_samples: int,
 ):
     """ Edit an existing image by first projecting it into latent space W and then modify it
     by M network with specified dimension.
@@ -235,15 +254,17 @@ def run_edit(
     with open(m_network, 'rb') as f:
         M = pickle.load(f)['M'].requires_grad_(False).to(device)
 
-    # Load target image.
-    target_pil = PIL.Image.open(target).convert('RGB')
-    w, h = target_pil.size
-    s = min(w, h)
-    target_pil = target_pil.crop(((w - s) // 2, (h - s) // 2, (w + s) // 2, (h + s) // 2))
-    target_pil = target_pil.resize((G.img_resolution, G.img_resolution), PIL.Image.LANCZOS)
-    target_uint8 = np.array(target_pil, dtype=np.uint8)
 
+    os.makedirs(outdir, exist_ok=True)
     if train_project:
+        # Load target image.
+        target_pil = PIL.Image.open(target).convert('RGB')
+        w, h = target_pil.size
+        s = min(w, h)
+        target_pil = target_pil.crop(((w - s) // 2, (h - s) // 2, (w + s) // 2, (h + s) // 2))
+        target_pil = target_pil.resize((G.img_resolution, G.img_resolution), PIL.Image.LANCZOS)
+        target_uint8 = np.array(target_pil, dtype=np.uint8)
+
         # Optimize projection.
         start_time = perf_counter()
         projected_w_steps = project(
@@ -256,7 +277,6 @@ def run_edit(
         print (f'Elapsed: {(perf_counter()-start_time):.1f} s')
 
         # Render debug output: optional video and projected image and W vector.
-        os.makedirs(outdir, exist_ok=True)
         if save_video:
             video = imageio.get_writer(f'{outdir}/proj.mp4', mode='I', fps=10, codec='libx264', bitrate='16M')
             print (f'Saving optimization progress video "{outdir}/proj.mp4"')
@@ -275,36 +295,59 @@ def run_edit(
         synth_image = synth_image.permute(0, 2, 3, 1).clamp(0, 255).to(torch.uint8)[0].cpu().numpy()
         PIL.Image.fromarray(synth_image, 'RGB').save(f'{outdir}/proj.png')
         np.savez(f'{outdir}/projected_w.npz', w=projected_w.unsqueeze(0).cpu().numpy())
+    elif gen_rand_image:
+        z_samples = torch.randn(n_samples, G.z_dim, device=device)
+        projected_w = G.mapping(z_samples, None, truncation_psi=truncation_psi)  # [b, num_ws, w_dim]
     else:
         projected_w = np.load(f'{outdir}/projected_w.npz')['w']
         projected_w = torch.tensor(projected_w[0]).to(device)
 
-    # Edit image.
-    out_M = M(projected_w.mean(0).unsqueeze(0)) # (1, M.z_dim, w_dim+(num_ws))
-    delta = out_M[:, :, :M.w_dim] # (1, M.z_dim, w_dim)
-    if M.use_local_layer_heat:
-        # layer_heat = M.heat_fn(out_M[:, edit_dim, M.w_dim:]).unsqueeze(2) # (1, num_ws, 1)
-        layer_heat = softmax_last_dim_fn(out_M[:, edit_dim, M.w_dim:]).unsqueeze(2) # (1, num_ws, 1)
-    elif M.use_global_layer_heat:
-        # layer_heat = M.heat_fn(M.heat_logits[:, i]).unsqueeze(2) # (1, num_ws, 1)
-        layer_heat = softmax_last_dim_fn(M.heat_logits[:, edit_dim]).unsqueeze(2) # (1, num_ws, 1)
+    if not gen_rand_image:
+        # Edit single image.
+        out_M = M(projected_w.mean(0).unsqueeze(0)) # (1, M.z_dim, w_dim+(num_ws))
     else:
-        layer_heat = torch.ones(1, M.num_ws, 1).to(projected_w.device)
+        out_M = M(projected_w.mean(1)) # (b, M.z_dim, w_dim+(num_ws))
 
-    if impact_w_layers:
-        w_pass = torch.zeros(1, M.num_ws, 1, dtype=delta.dtype).to(delta.device)
-        for i in impact_w_layers:
-            w_pass[:,i] = 1.
-    else:
-        w_pass = torch.ones(1, M.num_ws, 1, dtype=delta.dtype).to(delta.device)
+    for edit_dim in tqdm(edit_dims):
+        delta = out_M[:, :, :M.w_dim] # (1/b, M.z_dim, w_dim)
+        b = out_M.size(0)
+        if M.use_local_layer_heat:
+            layer_heat = M.heat_fn(out_M[:, edit_dim, M.w_dim:]).unsqueeze(2) # (1/b, num_ws, 1)
+            # layer_heat = softmax_last_dim_fn(out_M[:, edit_dim, M.w_dim:]).unsqueeze(2) # (1/b, num_ws, 1)
+        elif M.use_global_layer_heat:
+            layer_heat = M.heat_fn(M.heat_logits[:, edit_dim]).unsqueeze(2) # (1/b, num_ws, 1)
+            # layer_heat = softmax_last_dim_fn(M.heat_logits[:, edit_dim]).unsqueeze(2) # (1/b, num_ws, 1)
+        else:
+            layer_heat = torch.ones(b, M.num_ws, 1).to(projected_w.device)
 
-    for scale_i in edit_scale:
-        edit_w = w_pass * scale_i * delta[:, edit_dim:edit_dim+1] * layer_heat # (1, num_ws, w_dim)
-        w_edited = projected_w.unsqueeze(0) + edit_w # (1, num_ws, w_dim)
-        image_edited = G.synthesis(w_edited, noise_mode='const')
-        image_edited = (image_edited + 1) * (255/2)
-        image_edited = image_edited.permute(0, 2, 3, 1).clamp(0, 255).to(torch.uint8)[0].cpu().numpy()
-        PIL.Image.fromarray(image_edited, 'RGB').save(f'{outdir}/proj_edited_d{edit_dim}_s{scale_i}.png')
+        if impact_w_layers:
+            w_pass = torch.zeros(b, M.num_ws, 1, dtype=delta.dtype).to(delta.device)
+            for i in impact_w_layers:
+                w_pass[:,i] = 1.
+        else:
+            w_pass = torch.ones(b, M.num_ws, 1, dtype=delta.dtype).to(delta.device)
+
+        images_all = []
+        for scale_i in tqdm(edit_scale):
+            edit_w = w_pass * scale_i * delta[:, edit_dim:edit_dim+1] * layer_heat # (1/b, num_ws, w_dim)
+            w_edited = projected_w.unsqueeze(0) + edit_w if not gen_rand_image else projected_w + edit_w# (1/b, num_ws, w_dim)
+            # print('w_edited.shape:', w_edited.shape)
+            w_edited_split = w_edited.split(5)
+            image_edited_ls = [G.synthesis(w, noise_mode='const') for w in w_edited_split]
+            image_edited = torch.cat(image_edited_ls, dim=0)
+            image_edited = (image_edited + 1) * (255/2)
+            image_edited = image_edited.permute(0, 2, 3, 1).clamp(0, 255).to(torch.uint8).cpu().numpy() # (b, h, w, c)
+            if not gen_rand_image:
+                PIL.Image.fromarray(image_edited[0], 'RGB').save(f'{outdir}/proj_edited_d{edit_dim}_s{scale_i}.png')
+            else:
+                images_all.append(image_edited[:, :, np.newaxis, ...]) # list of (b, h, 1, w, c)
+        if gen_rand_image:
+            print('images_all[0].shape', images_all[0].shape)
+            images_all = np.concatenate(images_all, axis=2) # (b, h, n_trav, w, c)
+            _, h, n_trav, w, c = images_all.shape
+            images_all = images_all.reshape([b, h, n_trav * w, c]) # (b, h, n_trav*w, c)
+            for i, image_i in enumerate(images_all):
+                PIL.Image.fromarray(image_i, 'RGB').save(f'{outdir}/trav_d{edit_dim}_i{i}.png')
 
 #----------------------------------------------------------------------------
 
