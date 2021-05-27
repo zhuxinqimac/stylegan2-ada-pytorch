@@ -8,7 +8,7 @@
 
 # --- File Name: edit_image.py
 # --- Creation Date: 16-05-2021
-# --- Last Modified: Wed 26 May 2021 23:34:13 AEST
+# --- Last Modified: Fri 28 May 2021 00:08:35 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -219,6 +219,7 @@ def num_range(s: str) -> List[int]:
 @click.option('--gen_rand_image', help='If generate rand images', type=bool, default=False, show_default=True)
 @click.option('--truncation_psi', help='Truncation psi in mapping net', default=0.7, type=float, show_default=True)
 @click.option('--n_samples', help='Samples to show', default=5, type=int, show_default=True)
+@click.option('--use_heat_max', help='If use max of heat', type=bool, default=False, show_default=True)
 def run_edit(
     gan_network: str,
     m_network: str,
@@ -234,6 +235,7 @@ def run_edit(
     gen_rand_image: bool,
     truncation_psi: float,
     n_samples: int,
+    use_heat_max: bool,
 ):
     """ Edit an existing image by first projecting it into latent space W and then modify it
     by M network with specified dimension.
@@ -302,11 +304,13 @@ def run_edit(
         projected_w = np.load(f'{outdir}/projected_w.npz')['w']
         projected_w = torch.tensor(projected_w[0]).to(device)
 
+    print('projected_w.shape:', projected_w.shape)
     if not gen_rand_image:
         # Edit single image.
         out_M = M(projected_w.mean(0).unsqueeze(0)) # (1, M.z_dim, w_dim+(num_ws))
     else:
         out_M = M(projected_w.mean(1)) # (b, M.z_dim, w_dim+(num_ws))
+    print('out_M.shape:', out_M.shape)
 
     for edit_dim in tqdm(edit_dims):
         delta = out_M[:, :, :M.w_dim] # (1/b, M.z_dim, w_dim)
@@ -314,9 +318,17 @@ def run_edit(
         if M.use_local_layer_heat:
             layer_heat = M.heat_fn(out_M[:, edit_dim, M.w_dim:]).unsqueeze(2) # (1/b, num_ws, 1)
             # layer_heat = softmax_last_dim_fn(out_M[:, edit_dim, M.w_dim:]).unsqueeze(2) # (1/b, num_ws, 1)
+            if use_heat_max:
+                max_idx = torch.argmax(layer_heat[:,:,0], dim=1)
+                layer_heat = F.one_hot(max_idx, layer_heat.size(1)).float().to(layer_heat.device).unsqueeze(2)
+                print('layer_heat.shape:', layer_heat.shape)
         elif M.use_global_layer_heat:
             layer_heat = M.heat_fn(M.heat_logits[:, edit_dim]).unsqueeze(2) # (1/b, num_ws, 1)
             # layer_heat = softmax_last_dim_fn(M.heat_logits[:, edit_dim]).unsqueeze(2) # (1/b, num_ws, 1)
+            if use_heat_max:
+                max_idx = torch.argmax(layer_heat[:,:,0], dim=1)
+                layer_heat = F.one_hot(max_idx, layer_heat.size(1)).float().to(layer_heat.device).unsqueeze(2)
+                print('layer_heat.shape:', layer_heat.shape)
         else:
             layer_heat = torch.ones(b, M.num_ws, 1).to(projected_w.device)
 
@@ -324,8 +336,10 @@ def run_edit(
             w_pass = torch.zeros(b, M.num_ws, 1, dtype=delta.dtype).to(delta.device)
             for i in impact_w_layers:
                 w_pass[:,i] = 1.
+            impact_w_surfix = '-'.join([str(x) for x in impact_w_layers])
         else:
             w_pass = torch.ones(b, M.num_ws, 1, dtype=delta.dtype).to(delta.device)
+            impact_w_surfix = 'all'
 
         images_all = []
         for scale_i in tqdm(edit_scale):
@@ -347,7 +361,7 @@ def run_edit(
             _, h, n_trav, w, c = images_all.shape
             images_all = images_all.reshape([b, h, n_trav * w, c]) # (b, h, n_trav*w, c)
             for i, image_i in enumerate(images_all):
-                PIL.Image.fromarray(image_i, 'RGB').save(f'{outdir}/trav_d{edit_dim}_i{i}.png')
+                PIL.Image.fromarray(image_i, 'RGB').save(f'{outdir}/trav_d{edit_dim}_i{i}_w{impact_w_surfix}.png')
 
 #----------------------------------------------------------------------------
 

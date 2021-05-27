@@ -8,7 +8,7 @@
 
 # --- File Name: walk_utils.py
 # --- Creation Date: 10-05-2021
-# --- Last Modified: Tue 25 May 2021 13:19:42 AEST
+# --- Last Modified: Fri 28 May 2021 00:27:01 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -23,7 +23,7 @@ def run_M(M, w):
     delta = M(w)
     return delta
 
-def get_walk_wfixed(w_origin, w_var, M, n_samples_per, trav_walk_scale=0.2):
+def get_walk_wfixed(w_origin, w_var, M, n_samples_per, trav_walk_scale=0.2, use_heat_max=False):
     # gh, gw = M.z_dim, n_samples_per
     # return: (gh * gw, num_ws, w_dim)
     # w_origin: (1, num_ws, w_dim)
@@ -34,8 +34,14 @@ def get_walk_wfixed(w_origin, w_var, M, n_samples_per, trav_walk_scale=0.2):
         row_ls.append(w_origin)
         if M.use_local_layer_heat:
             layer_heat = M.heat_fn(w_var[:, i, M.w_dim:]).unsqueeze(2) # (1, num_ws, 1)
+            if use_heat_max:
+                max_idx = torch.argmax(layer_heat[:,:,0], dim=1)
+                layer_heat = F.one_hot(max_idx, layer_heat.size(1)).float().to(layer_heat.device).unsqueeze(2)
         elif M.use_global_layer_heat:
             layer_heat = M.heat_fn(M.heat_logits[:, i]).unsqueeze(2) # (1, num_ws, 1)
+            if use_heat_max:
+                max_idx = torch.argmax(layer_heat[:,:,0], dim=1)
+                layer_heat = F.one_hot(max_idx, layer_heat.size(1)).float().to(layer_heat.device).unsqueeze(2)
         else:
             layer_heat = torch.ones(1, M.num_ws, 1).to(w_origin.device) * 0.2
 
@@ -55,7 +61,7 @@ def get_walk_wfixed(w_origin, w_var, M, n_samples_per, trav_walk_scale=0.2):
     walk_tensor = torch.cat(walk_ls, dim=0) # (z_dim * n_samples_per, num_ws, w_dim)
     return walk_tensor
 
-def get_walk(w_origin_ws, M, n_samples_per, trav_walk_scale=0.01):
+def get_walk(w_origin_ws, M, n_samples_per, trav_walk_scale=0.01, use_heat_max=False):
     # gh, gw = M.z_dim, n_samples_per
     # return: (gh * gw, num_ws, w_dim)
     walk_ls = []
@@ -74,8 +80,14 @@ def get_walk(w_origin_ws, M, n_samples_per, trav_walk_scale=0.01):
                 delta = out_M[:, :, :M.w_dim] * trav_walk_scale # (1, M.z_dim, w_dim)
                 if M.use_local_layer_heat:
                     layer_heat = M.heat_fn(out_M[:, i, M.w_dim:]).unsqueeze(2) # (1, num_ws, 1)
+                    if use_heat_max:
+                        max_idx = torch.argmax(layer_heat[:,:,0], dim=1)
+                        layer_heat = F.one_hot(max_idx, layer_heat.size(1)).float().to(layer_heat.device).unsqueeze(2)
                 elif M.use_global_layer_heat:
                     layer_heat = M.heat_fn(M.heat_logits[:, i]).unsqueeze(2) # (1, num_ws, 1)
+                    if use_heat_max:
+                        max_idx = torch.argmax(layer_heat[:,:,0], dim=1)
+                        layer_heat = F.one_hot(max_idx, layer_heat.size(1)).float().to(layer_heat.device).unsqueeze(2)
                 else:
                     layer_heat = torch.ones(1, M.num_ws, 1).to(w_origin.device) * 0.2
                 w_save = w_save + delta[:, i:i+1] * layer_heat # (1, num_ws, w_dim)
@@ -91,8 +103,14 @@ def get_walk(w_origin_ws, M, n_samples_per, trav_walk_scale=0.01):
                 delta = -out_M[:, :, :M.w_dim] * trav_walk_scale # (1, M.z_dim, w_dim)
                 if M.use_local_layer_heat:
                     layer_heat = M.heat_fn(out_M[:, i, M.w_dim:]).unsqueeze(2) # (1, num_ws, 1)
+                    if use_heat_max:
+                        max_idx = torch.argmax(layer_heat[:,:,0], dim=1)
+                        layer_heat = F.one_hot(max_idx, layer_heat.size(1)).float().to(layer_heat.device).unsqueeze(2)
                 elif M.use_global_layer_heat:
                     layer_heat = M.heat_fn(M.heat_logits[:, i]).unsqueeze(2) # (1, num_ws, 1)
+                    if use_heat_max:
+                        max_idx = torch.argmax(layer_heat[:,:,0], dim=1)
+                        layer_heat = F.one_hot(max_idx, layer_heat.size(1)).float().to(layer_heat.device).unsqueeze(2)
                 else:
                     layer_heat = torch.ones(1, M.num_ws, 1).to(w_origin.device) * 0.2
                 w_save = w_save + delta[:, i:i+1] * layer_heat # (1, num_ws, w_dim)

@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Thu 27 May 2021 00:41:26 AEST
+# --- Last Modified: Fri 28 May 2021 00:30:28 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -111,6 +111,7 @@ def setup_training_loop_kwargs(
     neg_on_self = None, # If apply neg samples on self.
     use_catdiff = None, # If use concat features in perceiver.
     show_normd = None, # If show normD
+    use_heat_max = None, # If use the max value in heat during trav
 ):
     args = dnnlib.EasyDict()
 
@@ -275,6 +276,7 @@ def setup_training_loop_kwargs(
     args.save_size = save_size
     args.recursive_walk = recursive_walk
     args.show_normD = show_normd
+    args.use_heat_max = use_heat_max
 
     if kimg is not None:
         assert isinstance(kimg, int)
@@ -445,6 +447,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--neg_on_self', help='If apply neg samples on self sample', type=bool, default=False)
 @click.option('--use_catdiff', help='If concat diff features', type=bool, default=False)
 @click.option('--show_normd', help='If show normD in saving heatmap', type=bool, default=False)
+@click.option('--use_heat_max', help='If use the max value in heat when trav', type=bool, default=False)
 
 def main(ctx, outdir, dry_run, **config_kwargs):
     """Train a GAN using the techniques described in the paper
