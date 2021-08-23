@@ -226,7 +226,9 @@ def compute_feature_stats_for_dataset(opts, detector_url, detector_kwargs, rel_l
         print('images.sum:', images.sum())
         if images.shape[1] == 1:
             images = images.repeat([1, 3, 1, 1])
-        features = detector(images.to(opts.device), **detector_kwargs)
+        images = images.to(opts.device)
+        print('images.sum on gpu:', images.sum())
+        features = detector(images, **detector_kwargs)
         print('======== in loop i, passed detector')
         stats.append_torch(features, num_gpus=opts.num_gpus, rank=opts.rank)
         print('======== in loop i, passed stats append')
