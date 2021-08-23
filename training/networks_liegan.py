@@ -8,7 +8,7 @@
 
 # --- File Name: networks_liegan.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Mon 23 Aug 2021 23:04:50 AEST
+# --- Last Modified: Tue 24 Aug 2021 02:44:34 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -158,7 +158,7 @@ class LieGroupGenerator(nn.Module):
         else:
             noise = 0
         feat_maps = feat_maps + noise
-        feat_maps = F.relu(feat_maps + noise)
+        # feat_maps = F.relu(feat_maps + noise)
 
         for i, conv in enumerate(self.convs_up):
             feat_maps = conv(feat_maps) # [b, c_i, h_i, w_i]
@@ -171,13 +171,13 @@ class LieGroupGenerator(nn.Module):
             # print(f'feat_maps_{i}:', feat_maps.size())
 
         # Post-conv noise
-        feat_maps = self.conv_before_final(feat_maps)
-        _, ch, res, _ = feat_maps.size()
-        if (use_noise and self.use_noise) or force_noise:
-            noise = torch.randn([feat_maps.shape[0], 1, res, res], device=feat_maps.device) * self.extra_noises_strength[1]
-        else:
-            noise = 0
-        feat_maps = F.relu(feat_maps + noise)
+        # feat_maps = self.conv_before_final(feat_maps)
+        # _, ch, res, _ = feat_maps.size()
+        # if (use_noise and self.use_noise) or force_noise:
+            # noise = torch.randn([feat_maps.shape[0], 1, res, res], device=feat_maps.device) * self.extra_noises_strength[1]
+        # else:
+            # noise = 0
+        # feat_maps = F.relu(feat_maps + noise)
 
         img = self.conv_final(feat_maps) # [b, c, h, w]
         # print(f'output img.size:', img.size())
