@@ -8,7 +8,7 @@
 
 # --- File Name: networks_liegan.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Mon 23 Aug 2021 20:44:16 AEST
+# --- Last Modified: Mon 23 Aug 2021 20:46:31 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -105,7 +105,6 @@ def build_conv_layers(feat_size, feat_ch, img_resolution, img_channels, feat_bas
         noises_strength.append(nn.Parameter(torch.zeros([])))
         in_ch = out_ch
         out_ch = out_ch // 2
-    noises_strength.append(nn.Parameter(torch.zeros([])))
     conv_before_final = nn.Conv2d(in_ch, out_ch, 3, 1, 1)
     conv_final = nn.Conv2d(out_ch, img_channels, 3, 1, 1)
     extra_noises_strength = [nn.Parameter(torch.zeros([])), nn.Parameter(torch.zeros([]))]
@@ -140,7 +139,7 @@ class LieGroupGenerator(nn.Module):
         self.convs_up = nn.ModuleList(convs_up)
         self.noises_strength = nn.ParameterList(noises_strength)
         self.extra_noises_strength = nn.ParameterList(extra_noises_strength)
-        assert len(self.noises_strength) == len(self.convs_up) + 1
+        assert len(self.noises_strength) == len(self.convs_up)
 
     def forward(self, z, c, use_noise=True, force_noise=False):
         '''
