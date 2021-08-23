@@ -8,11 +8,11 @@
 
 # --- File Name: delete_pkls.py
 # --- Creation Date: 15-11-2020
-# --- Last Modified: Tue 04 May 2021 18:02:27 AEST
+# --- Last Modified: Mon 23 Aug 2021 13:44:11 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
-Docstring
+Delete pkls.
 """
 
 import argparse
