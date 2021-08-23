@@ -182,14 +182,17 @@ def compute_feature_stats_for_dataset(opts, detector_url, detector_kwargs, rel_l
     if data_loader_kwargs is None:
         data_loader_kwargs = dict(pin_memory=True, num_workers=3, prefetch_factor=2)
 
+    print('constructed dataset')
     # Try to lookup from cache.
     cache_file = None
     if opts.cache:
+        print('in opts.cache')
         # Choose cache file name.
         args = dict(dataset_kwargs=opts.dataset_kwargs, detector_url=detector_url, detector_kwargs=detector_kwargs, stats_kwargs=stats_kwargs)
         md5 = hashlib.md5(repr(sorted(args.items())).encode('utf-8'))
         cache_tag = f'{dataset.name}-{get_feature_detector_name(detector_url)}-{md5.hexdigest()}'
         cache_file = dnnlib.make_cache_dir_path('gan-metrics', cache_tag + '.pkl')
+        print('cache chosed')
 
         # Check if the file exists (all processes must agree).
         flag = os.path.isfile(cache_file) if opts.rank == 0 else False
@@ -197,10 +200,12 @@ def compute_feature_stats_for_dataset(opts, detector_url, detector_kwargs, rel_l
             flag = torch.as_tensor(flag, dtype=torch.float32, device=opts.device)
             torch.distributed.broadcast(tensor=flag, src=0)
             flag = (float(flag.cpu()) != 0)
+        print('passed file exists')
 
         # Load.
         if flag:
             return FeatureStats.load(cache_file)
+        print('passed load')
 
     # Initialize.
     num_items = len(dataset)
@@ -209,6 +214,7 @@ def compute_feature_stats_for_dataset(opts, detector_url, detector_kwargs, rel_l
     stats = FeatureStats(max_items=num_items, **stats_kwargs)
     progress = opts.progress.sub(tag='dataset features', num_items=num_items, rel_lo=rel_lo, rel_hi=rel_hi)
     detector = get_feature_detector(url=detector_url, device=opts.device, num_gpus=opts.num_gpus, rank=opts.rank, verbose=progress.verbose)
+    print('passed initialize')
 
     # Main loop.
     item_subset = [(i * opts.num_gpus + opts.rank) % num_items for i in range((num_items - 1) // opts.num_gpus + 1)]
@@ -218,6 +224,7 @@ def compute_feature_stats_for_dataset(opts, detector_url, detector_kwargs, rel_l
         features = detector(images.to(opts.device), **detector_kwargs)
         stats.append_torch(features, num_gpus=opts.num_gpus, rank=opts.rank)
         progress.update(stats.num_items)
+    print('passed main loop')
 
     # Save to cache.
     if cache_file is not None and opts.rank == 0:
@@ -225,6 +232,7 @@ def compute_feature_stats_for_dataset(opts, detector_url, detector_kwargs, rel_l
         temp_file = cache_file + '.' + uuid.uuid4().hex
         stats.save(temp_file)
         os.replace(temp_file, cache_file) # atomic
+    print('passed save to cache')
     return stats
 
 #----------------------------------------------------------------------------
