@@ -215,7 +215,7 @@ def compute_feature_stats_for_dataset(opts, detector_url, detector_kwargs, rel_l
     progress = opts.progress.sub(tag='dataset features', num_items=num_items, rel_lo=rel_lo, rel_hi=rel_hi)
     detector = get_feature_detector(url=detector_url, device=opts.device, num_gpus=opts.num_gpus, rank=opts.rank, verbose=progress.verbose)
     print('passed initialize')
-    detector = copy.deepcopy(detector).eval().to(opts.device)
+    detector = copy.deepcopy(detector).eval().to('cpu')
     print('detector:', detector)
 
     # Main loop.
@@ -226,9 +226,9 @@ def compute_feature_stats_for_dataset(opts, detector_url, detector_kwargs, rel_l
         print('images.sum:', images.sum())
         if images.shape[1] == 1:
             images = images.repeat([1, 3, 1, 1])
-        images = images.to(opts.device)
+        # images = images.to(opts.device)
         print('images.sum on gpu:', images.sum())
-        features = detector(images, **detector_kwargs)
+        features = detector(images, **detector_kwargs).to(opts.device)
         print('======== in loop i, passed detector')
         stats.append_torch(features, num_gpus=opts.num_gpus, rank=opts.rank)
         print('======== in loop i, passed stats append')
