@@ -8,7 +8,7 @@
 
 # --- File Name: loss_group.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Sun 22 Aug 2021 20:46:58 AEST
+# --- Last Modified: Tue 24 Aug 2021 00:22:16 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -77,7 +77,7 @@ class GroupGANLoss(Loss):
     def accumulate_gradients(self, phase, real_img, real_c, gen_z, gen_c, sync, gain):
         assert phase in ['Gmain', 'Greg', 'Gboth', 'Dmain', 'Dreg', 'Dboth']
         do_Gmain = (phase in ['Gmain', 'Gboth'])
-        do_Gregalg = (phase in ['Gregalg', 'Gboth'])
+        do_Greg = (phase in ['Greg', 'Gboth'])
         do_Dmain = (phase in ['Dmain', 'Dboth'])
         do_Dr1   = (phase in ['Dreg', 'Dboth']) and (self.r1_gamma != 0)
 
@@ -93,10 +93,10 @@ class GroupGANLoss(Loss):
             with torch.autograd.profiler.record_function('Gmain_backward'):
                 loss_Gmain.mean().mul(gain).backward()
 
-        # Gregalg: Enforce commute or Hessian loss.
-        if do_Gregalg:
+        # Greg: Enforce commute or Hessian loss.
+        if do_Greg:
             with torch.autograd.profiler.record_function('Compute_regalg_loss'):
-                lie_alg_basis_mul_ij = self.calc_basis_mul_ij(self.G.core.lie_alg_basis)
+                lie_alg_basis_mul_ij = self.calc_basis_mul_ij(self.G.module.core.lie_alg_basis)
                 hessian_loss = 0.
                 if self.hessian_lamb > 0:
                     hessian_loss = self.hessian_lamb * self.calc_hessian_loss(lie_alg_basis_mul_ij)
