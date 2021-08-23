@@ -215,6 +215,7 @@ def compute_feature_stats_for_dataset(opts, detector_url, detector_kwargs, rel_l
     progress = opts.progress.sub(tag='dataset features', num_items=num_items, rel_lo=rel_lo, rel_hi=rel_hi)
     detector = get_feature_detector(url=detector_url, device=opts.device, num_gpus=opts.num_gpus, rank=opts.rank, verbose=progress.verbose)
     print('passed initialize')
+    detector = detector.clone().eval().to(opts.device)
     print('detector:', detector)
 
     # Main loop.
