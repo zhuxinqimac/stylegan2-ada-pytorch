@@ -8,7 +8,7 @@
 
 # --- File Name: train_group.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Tue 24 Aug 2021 00:47:50 AEST
+# --- Last Modified: Tue 24 Aug 2021 00:50:15 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -440,7 +440,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--mirror', help='Enable dataset x-flips [default: false]', type=bool, metavar='BOOL')
 
 # Base config.
-@click.option('--cfg', help='Base config [default: auto]', type=click.Choice(['auto', 'celeba-basic', 'celeba-efficient', 'celeba-experiment', 'celeba-experiment-hpc']))
+@click.option('--cfg', help='Base config [default: auto]', type=click.Choice(['auto', 'celeba-basic', 'celeba-efficient', 'celeba-experiment', 'celeba-experiment-hpc', 'celeba-hessian-hpc']))
 @click.option('--gamma', help='Override R1 gamma', type=float)
 @click.option('--kimg', help='Override training duration', type=int, metavar='INT')
 @click.option('--batch', help='Override batch size', type=int, metavar='INT')
