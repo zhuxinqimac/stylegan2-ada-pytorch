@@ -8,7 +8,7 @@
 
 # --- File Name: networks_liegan.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Mon 23 Aug 2021 20:46:31 AEST
+# --- Last Modified: Mon 23 Aug 2021 23:04:50 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -77,10 +77,10 @@ class GroupProjector(nn.Module):
         self.mat_dim = mat_dim
         self.feat_size = feat_size
         self.feat_ch = feat_ch
-        # self.net = FullyConnectedLayer(mat_dim * mat_dim, feat_size * feat_size * feat_ch,
-                                       # activation='linear')
-        self.net = FullyConnectedLayer(mat_dim * mat_dim, feat_size * feat_size,
+        self.net = FullyConnectedLayer(mat_dim * mat_dim, feat_size * feat_size * feat_ch,
                                        activation='linear')
+        # self.net = FullyConnectedLayer(mat_dim * mat_dim, feat_size * feat_size,
+                                       # activation='linear')
 
     def forward(self, g):
         '''
@@ -88,9 +88,9 @@ class GroupProjector(nn.Module):
         return [b, c, fh, fw]
         '''
         g = g.flatten(1) # [b, mat_dim * mat_dim]
-        feats = self.net(g) # [b, f*f]
-        feats = feats.view(-1, 1, self.feat_size, self.feat_size).repeat(1, self.feat_ch, 1, 1)
-        return feats # [b, ch, f, f]
+        feats = self.net(g) # [b, c*f*f]
+        # feats = feats.view(-1, 1, self.feat_size, self.feat_size).repeat(1, self.feat_ch, 1, 1)
+        return feats.view(-1, self.feat_ch, self.feat_size, self.feat_size) # [b, ch, f, f]
 
 def build_conv_layers(feat_size, feat_ch, img_resolution, img_channels, feat_base=32):
     feat_log2 = int(np.log2(feat_size)) # e.g. 128 -> 7
@@ -154,17 +154,17 @@ class LieGroupGenerator(nn.Module):
         # Pre-conv noise
         _, ch, res, _ = feat_maps.size()
         if (use_noise and self.use_noise) or force_noise:
-            noise = torch.randn([feat_maps.shape[0], ch, res, res], device=feat_maps.device) * self.extra_noises_strength[0]
+            noise = torch.randn([feat_maps.shape[0], 1, res, res], device=feat_maps.device) * self.extra_noises_strength[0]
         else:
             noise = 0
         feat_maps = feat_maps + noise
-        # feat_maps = F.relu(feat_maps + noise)
+        feat_maps = F.relu(feat_maps + noise)
 
         for i, conv in enumerate(self.convs_up):
             feat_maps = conv(feat_maps) # [b, c_i, h_i, w_i]
             _, ch, res, _ = feat_maps.size()
             if (use_noise and self.use_noise) or force_noise:
-                noise = torch.randn([feat_maps.shape[0], ch, res, res], device=feat_maps.device) * self.noises_strength[i]
+                noise = torch.randn([feat_maps.shape[0], 1, res, res], device=feat_maps.device) * self.noises_strength[i]
             else:
                 noise = 0
             feat_maps = F.relu(feat_maps + noise)
@@ -174,7 +174,7 @@ class LieGroupGenerator(nn.Module):
         feat_maps = self.conv_before_final(feat_maps)
         _, ch, res, _ = feat_maps.size()
         if (use_noise and self.use_noise) or force_noise:
-            noise = torch.randn([feat_maps.shape[0], ch, res, res], device=feat_maps.device) * self.extra_noises_strength[1]
+            noise = torch.randn([feat_maps.shape[0], 1, res, res], device=feat_maps.device) * self.extra_noises_strength[1]
         else:
             noise = 0
         feat_maps = F.relu(feat_maps + noise)
