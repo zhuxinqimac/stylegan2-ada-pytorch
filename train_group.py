@@ -8,7 +8,7 @@
 
 # --- File Name: train_group.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Tue 24 Aug 2021 00:47:06 AEST
+# --- Last Modified: Tue 24 Aug 2021 00:47:50 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -170,10 +170,10 @@ def setup_training_loop_kwargs(
         'celeba-experiment': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
                              z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=128, proj_feat_ch=4,
                              post_exp_conv_feat_base=4, commute_lamb=0, hessian_lamb=10), # Populated dynamically based on resolution and GPU count.
-        'celeba-experiment-hpc': dict(ref_gpus=2, kimg=25000,  mb=8, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
+        'celeba-experiment-hpc': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
                              z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=128, proj_feat_ch=4,
                              post_exp_conv_feat_base=4, commute_lamb=0, hessian_lamb=0), # Populated dynamically based on resolution and GPU count.
-        'celeba-hessian-hpc': dict(ref_gpus=2, kimg=25000,  mb=8, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
+        'celeba-hessian-hpc': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
                              z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=128, proj_feat_ch=8,
                              post_exp_conv_feat_base=8, commute_lamb=0, hessian_lamb=10), # Populated dynamically based on resolution and GPU count.
         # 'stylegan2': dict(ref_gpus=8,  kimg=25000,  mb=32, mbstd=4,  fmaps=1,   lrate=0.002,  gamma=10,   ema=10,  ramp=None), # Uses mixed-precision, unlike the original StyleGAN2.
