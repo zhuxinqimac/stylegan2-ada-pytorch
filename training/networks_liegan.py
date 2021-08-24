@@ -8,7 +8,7 @@
 
 # --- File Name: networks_liegan.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Tue 24 Aug 2021 03:10:25 AEST
+# --- Last Modified: Tue 24 Aug 2021 13:43:20 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -57,11 +57,12 @@ class LieGroupCore(nn.Module):
 
         self.lie_alg_basis = init_alg_basis(self.z_dim, self.mat_dim, self.lie_alg_init_scale) # [z_dim, mat_dim, mat_dim]
 
-    def forward(self, z):
+    def forward(self, z, c=None):
         '''
         z: [b, z_dim]
         return [b, mat_dim, mat_dim]
         '''
+        _ = c # Ignore c
         lie_group = lat_to_group(z, self.lie_alg_basis)
         return lie_group
 
