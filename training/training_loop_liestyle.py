@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_liestyle.py
 # --- Creation Date: 26-08-2021
-# --- Last Modified: Thu 26 Aug 2021 02:18:43 AEST
+# --- Last Modified: Thu 26 Aug 2021 02:32:23 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -178,7 +178,7 @@ def training_loop(
         # grid_c = torch.from_numpy(labels).to(device).split(batch_gpu)
         grid_size = (n_samples_per, G.z_dim)
         trav_z = get_traversal(n_samples_per, G.z_dim, device)
-        images = torch.cat([G_ema(z=z, c=None, noise_mode='const').cpu() for z, c in zip(grid_z, grid_c)]).numpy()
+        images = torch.cat([G_ema(z=z, c=None).cpu() for z in trav_z.split(batch_gpu)]).numpy()
         save_image_grid(images, os.path.join(run_dir, 'fakes_init.png'), drange=[-1,1], grid_size=grid_size)
 
     # Initialize logs.
