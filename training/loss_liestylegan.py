@@ -6,13 +6,13 @@
 # You may obtain a copy of the License at
 # http://www.apache.org/licenses/LICENSE-2.0
 
-# --- File Name: loss_group.py
-# --- Creation Date: 22-08-2021
-# --- Last Modified: Thu 26 Aug 2021 01:21:47 AEST
+# --- File Name: loss_liestylegan.py
+# --- Creation Date: 26-08-2021
+# --- Last Modified: Thu 26 Aug 2021 01:22:44 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
-Docstring
+LieStyleGAN loss.
 """
 
 import numpy as np
@@ -20,54 +20,45 @@ import torch
 from torch_utils import training_stats
 from torch_utils import misc
 from torch_utils.ops import conv2d_gradfix
-from training.loss import Loss
+from training.loss_group import calc_basis_mul_ij, calc_hessian_loss, calc_commute_loss
 
 #----------------------------------------------------------------------------
 
-def calc_basis_mul_ij(lie_alg_basis):
-    lie_alg_basis = lie_alg_basis[np.newaxis, ...]  # [1, z_dim, mat_dim, mat_dim]
-    _, lat_dim, mat_dim, _ = list(lie_alg_basis.size())
-    lie_alg_basis_col = lie_alg_basis.view(lat_dim, 1, mat_dim, mat_dim)
-    lie_alg_basis_outer_mul = torch.matmul(
-        lie_alg_basis,
-        lie_alg_basis_col)  # [lat_dim, lat_dim, mat_dim, mat_dim]
-    hessian_mask = 1. - torch.eye(
-        lat_dim, dtype=lie_alg_basis_outer_mul.dtype
-    )[:, :, np.newaxis, np.newaxis].to(lie_alg_basis_outer_mul.device)
-    lie_alg_basis_mul_ij = lie_alg_basis_outer_mul * hessian_mask  # XY
-    return lie_alg_basis_mul_ij
-
-def calc_hessian_loss(lie_alg_basis_mul_ij):
-    # lie_alg_basis_mul_ij [lat_dim, lat_dim, mat_dim, mat_dim]
-    hessian_loss = torch.mean(
-        torch.sum(torch.square(lie_alg_basis_mul_ij), dim=[2, 3]))
-    return hessian_loss
-
-def calc_commute_loss(lie_alg_basis_mul_ij):
-    lie_alg_commutator = lie_alg_basis_mul_ij - lie_alg_basis_mul_ij.permute(
-        0, 1, 3, 2)
-    commute_loss = torch.mean(
-        torch.sum(torch.square(lie_alg_commutator), dim=[2, 3]))
-    return commute_loss
+class Loss:
+    def accumulate_gradients(self, phase, real_img, real_c, gen_z, gen_c, sync, gain): # to be overridden by subclass
+        raise NotImplementedError()
 
 #----------------------------------------------------------------------------
 
-class GroupGANLoss(Loss):
-    def __init__(self, device, G, D, augment_pipe=None, r1_gamma=10, commute_lamb=0., hessian_lamb=0.):
+class LieStyleGANLoss(Loss):
+    def __init__(self, device, G_mapping, G_synthesis, D, augment_pipe=None, style_mixing_prob=0.9, r1_gamma=10,
+                 pl_batch_shrink=2, pl_decay=0.01, pl_weight=2, commute_lamb=0., hessian_lamb=0.):
         super().__init__()
         self.device = device
-        self.G = G
+        self.G_mapping = G_mapping
+        self.G_synthesis = G_synthesis
         self.D = D
         self.augment_pipe = augment_pipe
+        self.style_mixing_prob = style_mixing_prob
         self.r1_gamma = r1_gamma
+        self.pl_batch_shrink = pl_batch_shrink
+        self.pl_decay = pl_decay
+        self.pl_weight = pl_weight
         self.pl_mean = torch.zeros([], device=device)
         self.commute_lamb = commute_lamb
         self.hessian_lamb = hessian_lamb
 
     def run_G(self, z, c, sync):
-        with misc.ddp_sync(self.G, sync):
-            img = self.G(z, c)
-        return img
+        with misc.ddp_sync(self.G_mapping, sync):
+            ws = self.G_mapping(z, c)
+            if self.style_mixing_prob > 0:
+                with torch.autograd.profiler.record_function('style_mixing'):
+                    cutoff = torch.empty([], dtype=torch.int64, device=ws.device).random_(1, ws.shape[1])
+                    cutoff = torch.where(torch.rand([], device=ws.device) < self.style_mixing_prob, cutoff, torch.full_like(cutoff, ws.shape[1]))
+                    ws[:, cutoff:] = self.G_mapping(torch.randn_like(z), c, skip_w_avg_update=True)[:, cutoff:]
+        with misc.ddp_sync(self.G_synthesis, sync):
+            img = self.G_synthesis(ws)
+        return img, ws
 
     def run_D(self, img, c, sync):
         if self.augment_pipe is not None:
@@ -79,14 +70,15 @@ class GroupGANLoss(Loss):
     def accumulate_gradients(self, phase, real_img, real_c, gen_z, gen_c, sync, gain):
         assert phase in ['Gmain', 'Greg', 'Gboth', 'Dmain', 'Dreg', 'Dboth']
         do_Gmain = (phase in ['Gmain', 'Gboth'])
-        do_Greg = (phase in ['Greg', 'Gboth'])
         do_Dmain = (phase in ['Dmain', 'Dboth'])
+        do_Gpl   = (phase in ['Greg', 'Gboth']) and (self.pl_weight != 0)
+        do_Gdis   = (phase in ['Greg', 'Gboth']) and (self.commute_lamb != 0 or self.hessian_lamb != 0)
         do_Dr1   = (phase in ['Dreg', 'Dboth']) and (self.r1_gamma != 0)
 
         # Gmain: Maximize logits for generated images.
         if do_Gmain:
             with torch.autograd.profiler.record_function('Gmain_forward'):
-                gen_img = self.run_G(gen_z, gen_c, sync=sync)
+                gen_img, _gen_ws = self.run_G(gen_z, gen_c, sync=(sync and not do_Gpl)) # May get synced by Gpl.
                 gen_logits = self.run_D(gen_img, gen_c, sync=False)
                 training_stats.report('Loss/scores/fake', gen_logits)
                 training_stats.report('Loss/signs/fake', gen_logits.sign())
@@ -95,10 +87,10 @@ class GroupGANLoss(Loss):
             with torch.autograd.profiler.record_function('Gmain_backward'):
                 loss_Gmain.mean().mul(gain).backward()
 
-        # Greg: Enforce commute or Hessian loss.
-        if do_Greg:
+        # Gdis: Enforce commute or Hessian loss.
+        if do_Gdis:
             with torch.autograd.profiler.record_function('Compute_regalg_loss'):
-                lie_alg_basis_mul_ij = calc_basis_mul_ij(self.G.module.core.lie_alg_basis)
+                lie_alg_basis_mul_ij = calc_basis_mul_ij(self.G_mapping.module.core.lie_alg_basis)
                 hessian_loss = 0.
                 if self.hessian_lamb > 0:
                     hessian_loss = self.hessian_lamb * calc_hessian_loss(lie_alg_basis_mul_ij)
@@ -110,11 +102,29 @@ class GroupGANLoss(Loss):
             with torch.autograd.profiler.record_function('Regalg_backward'):
                 (hessian_loss + commute_loss).mean().mul(gain).backward()
 
+        # Gpl: Apply path length regularization.
+        if do_Gpl:
+            with torch.autograd.profiler.record_function('Gpl_forward'):
+                batch_size = gen_z.shape[0] // self.pl_batch_shrink
+                gen_img, gen_ws = self.run_G(gen_z[:batch_size], gen_c[:batch_size], sync=sync)
+                pl_noise = torch.randn_like(gen_img) / np.sqrt(gen_img.shape[2] * gen_img.shape[3])
+                with torch.autograd.profiler.record_function('pl_grads'), conv2d_gradfix.no_weight_gradients():
+                    pl_grads = torch.autograd.grad(outputs=[(gen_img * pl_noise).sum()], inputs=[gen_ws], create_graph=True, only_inputs=True)[0]
+                pl_lengths = pl_grads.square().sum(2).mean(1).sqrt()
+                pl_mean = self.pl_mean.lerp(pl_lengths.mean(), self.pl_decay)
+                self.pl_mean.copy_(pl_mean.detach())
+                pl_penalty = (pl_lengths - pl_mean).square()
+                training_stats.report('Loss/pl_penalty', pl_penalty)
+                loss_Gpl = pl_penalty * self.pl_weight
+                training_stats.report('Loss/G/reg', loss_Gpl)
+            with torch.autograd.profiler.record_function('Gpl_backward'):
+                (gen_img[:, 0, 0, 0] * 0 + loss_Gpl).mean().mul(gain).backward()
+
         # Dmain: Minimize logits for generated images.
         loss_Dgen = 0
         if do_Dmain:
             with torch.autograd.profiler.record_function('Dgen_forward'):
-                gen_img = self.run_G(gen_z, gen_c, sync=False)
+                gen_img, _gen_ws = self.run_G(gen_z, gen_c, sync=False)
                 gen_logits = self.run_D(gen_img, gen_c, sync=False) # Gets synced by loss_Dreal.
                 training_stats.report('Loss/scores/fake', gen_logits)
                 training_stats.report('Loss/signs/fake', gen_logits.sign())
