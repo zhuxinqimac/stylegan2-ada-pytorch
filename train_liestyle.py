@@ -8,7 +8,7 @@
 
 # --- File Name: train_liestyle.py
 # --- Creation Date: 24-08-2021
-# --- Last Modified: Thu 26 Aug 2021 01:57:53 AEST
+# --- Last Modified: Thu 26 Aug 2021 02:29:38 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -23,7 +23,7 @@ import tempfile
 import torch
 import dnnlib
 
-from training import training_loop
+from training import training_loop_liestyle
 from metrics import metric_main
 from torch_utils import training_stats
 from torch_utils import custom_ops
@@ -158,13 +158,13 @@ def setup_training_loop_kwargs(
     desc += f'-{cfg}'
 
     cfg_specs = {
-        'auto':      dict(ref_gpus=-1, kimg=25000, mb=-1, mbstd=-1, fmaps=-1, lrate=-1, gamma=-1, ema=-1, ramp=0.05,
+        'auto':      dict(ref_gpus=-1, kimg=25000, mb=-1, mbstd=-1, fmaps=-1, lrate=-1, gamma=-1, ema=-1, ramp=0.05, n_samples_per=7,
                           z_dim=64, group_mat_dim=20, lie_alg_init_scale=0.001, commute_lamb=0, hessian_lamb=0), # Populated dynamically based on resolution and GPU count.
-        'liestylegan-celeba': dict(ref_gpus=2,  kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10, ramp=0.05,
+        'liestylegan-celeba': dict(ref_gpus=2,  kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10, ramp=0.05, n_samples_per=7,
                           z_dim=64, group_mat_dim=20, lie_alg_init_scale=0.001, commute_lamb=0, hessian_lamb=0),
-        'liestylegan-celeba-hessian': dict(ref_gpus=2,  kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10, ramp=0.05,
+        'liestylegan-celeba-hessian': dict(ref_gpus=2,  kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10, ramp=0.05, n_samples_per=7,
                           z_dim=64, group_mat_dim=20, lie_alg_init_scale=0.001, commute_lamb=0, hessian_lamb=100),
-        'stylegan2': dict(ref_gpus=8, kimg=25000, mb=32, mbstd=4, fmaps=1, lrate=0.002, gamma=10, ema=10, ramp=None,
+        'stylegan2': dict(ref_gpus=8, kimg=25000, mb=32, mbstd=4, fmaps=1, lrate=0.002, gamma=10, ema=10, ramp=None, n_samples_per=7,
                           z_dim=64, group_mat_dim=20, lie_alg_init_scale=0.001, commute_lamb=0, hessian_lamb=0), # Uses mixed-precision, unlike the original StyleGAN2.
     }
 
@@ -392,7 +392,7 @@ def subprocess_fn(rank, args, temp_dir):
         custom_ops.verbosity = 'none'
 
     # Execute training loop.
-    training_loop.training_loop(rank=rank, **args)
+    training_loop_liestyle.training_loop(rank=rank, **args)
 
 #----------------------------------------------------------------------------
 
