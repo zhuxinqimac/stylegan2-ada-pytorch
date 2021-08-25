@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_liestyle.py
 # --- Creation Date: 26-08-2021
-# --- Last Modified: Thu 26 Aug 2021 00:47:38 AEST
+# --- Last Modified: Thu 26 Aug 2021 02:18:43 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -70,6 +70,7 @@ def training_loop(
     allow_tf32              = False,    # Enable torch.backends.cuda.matmul.allow_tf32 and torch.backends.cudnn.allow_tf32?
     abort_fn                = None,     # Callback function for determining whether to abort training. Must return consistent results across ranks.
     progress_fn             = None,     # Callback function for updating training progress. Called for all ranks.
+    n_samples_per           = 7,        # Number of samples each row in traversal.
 ):
     # Initialize.
     start_time = time.time()
@@ -173,9 +174,11 @@ def training_loop(
         print('Exporting sample images...')
         grid_size, images, labels = setup_snapshot_image_grid(training_set=training_set)
         save_image_grid(images, os.path.join(run_dir, 'reals.png'), drange=[0,255], grid_size=grid_size)
-        grid_z = torch.randn([labels.shape[0], G.z_dim], device=device).split(batch_gpu)
-        grid_c = torch.from_numpy(labels).to(device).split(batch_gpu)
-        images = torch.cat([G_ema(z=z, c=c, noise_mode='const').cpu() for z, c in zip(grid_z, grid_c)]).numpy()
+        # grid_z = torch.randn([labels.shape[0], G.z_dim], device=device).split(batch_gpu)
+        # grid_c = torch.from_numpy(labels).to(device).split(batch_gpu)
+        grid_size = (n_samples_per, G.z_dim)
+        trav_z = get_traversal(n_samples_per, G.z_dim, device)
+        images = torch.cat([G_ema(z=z, c=None, noise_mode='const').cpu() for z, c in zip(grid_z, grid_c)]).numpy()
         save_image_grid(images, os.path.join(run_dir, 'fakes_init.png'), drange=[-1,1], grid_size=grid_size)
 
     # Initialize logs.
@@ -298,7 +301,9 @@ def training_loop(
 
         # Save image snapshot.
         if (rank == 0) and (image_snapshot_ticks is not None) and (done or cur_tick % image_snapshot_ticks == 0):
-            images = torch.cat([G_ema(z=z, c=c, noise_mode='const').cpu() for z, c in zip(grid_z, grid_c)]).numpy()
+            # images = torch.cat([G_ema(z=z, c=c, noise_mode='const').cpu() for z, c in zip(grid_z, grid_c)]).numpy()
+            trav_z = get_traversal(n_samples_per, G.z_dim, device)
+            images = torch.cat([G_ema(z=z, c=None, noise_mode='const').cpu() for z in trav_z.split(batch_gpu)]).numpy()
             save_image_grid(images, os.path.join(run_dir, f'fakes{cur_nimg//1000:06d}.png'), drange=[-1,1], grid_size=grid_size)
 
         # Save network snapshot.
