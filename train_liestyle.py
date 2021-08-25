@@ -8,7 +8,7 @@
 
 # --- File Name: train_liestyle.py
 # --- Creation Date: 24-08-2021
-# --- Last Modified: Thu 26 Aug 2021 02:29:38 AEST
+# --- Last Modified: Thu 26 Aug 2021 03:15:28 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -164,6 +164,8 @@ def setup_training_loop_kwargs(
                           z_dim=64, group_mat_dim=20, lie_alg_init_scale=0.001, commute_lamb=0, hessian_lamb=0),
         'liestylegan-celeba-hessian': dict(ref_gpus=2,  kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10, ramp=0.05, n_samples_per=7,
                           z_dim=64, group_mat_dim=20, lie_alg_init_scale=0.001, commute_lamb=0, hessian_lamb=100),
+        'liestylegan-celeba-hessian200': dict(ref_gpus=2,  kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10, ramp=0.05, n_samples_per=7,
+                          z_dim=64, group_mat_dim=20, lie_alg_init_scale=0.001, commute_lamb=0, hessian_lamb=200),
         'stylegan2': dict(ref_gpus=8, kimg=25000, mb=32, mbstd=4, fmaps=1, lrate=0.002, gamma=10, ema=10, ramp=None, n_samples_per=7,
                           z_dim=64, group_mat_dim=20, lie_alg_init_scale=0.001, commute_lamb=0, hessian_lamb=0), # Uses mixed-precision, unlike the original StyleGAN2.
     }
