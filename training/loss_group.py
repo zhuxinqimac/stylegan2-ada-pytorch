@@ -8,7 +8,7 @@
 
 # --- File Name: loss_group.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Thu 26 Aug 2021 22:22:35 AEST
+# --- Last Modified: Fri 27 Aug 2021 00:40:22 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -50,19 +50,25 @@ def calc_commute_loss(lie_alg_basis_mul_ij):
         torch.sum(torch.square(lie_alg_commutator), dim=[2, 3]))
     return commute_loss
 
+def calc_latent_recons(out_z, gen_z):
+    loss = torch.sum((out_z - gen_z).square(), dim=[1]) # [b]
+    return loss
+
 #----------------------------------------------------------------------------
 
 class GroupGANLoss(Loss):
-    def __init__(self, device, G, D, augment_pipe=None, r1_gamma=10, commute_lamb=0., hessian_lamb=0.):
+    def __init__(self, device, G, D, I=None, augment_pipe=None, r1_gamma=10, commute_lamb=0., hessian_lamb=0., I_lambda=0.):
         super().__init__()
         self.device = device
         self.G = G
         self.D = D
+        self.I = I
         self.augment_pipe = augment_pipe
         self.r1_gamma = r1_gamma
         self.pl_mean = torch.zeros([], device=device)
         self.commute_lamb = commute_lamb
         self.hessian_lamb = hessian_lamb
+        self.I_lambda = I_lambda
 
     def run_G(self, z, c, sync):
         with misc.ddp_sync(self.G, sync):
@@ -76,17 +82,23 @@ class GroupGANLoss(Loss):
             logits = self.D(img, c)
         return logits
 
+    def run_I(self, img, c, sync):
+        with misc.ddp_sync(self.I, sync):
+            logits = self.I(img, c)
+        return logits
+
     def accumulate_gradients(self, phase, real_img, real_c, gen_z, gen_c, sync, gain):
         assert phase in ['Gmain', 'Greg', 'Gboth', 'Dmain', 'Dreg', 'Dboth']
         do_Gmain = (phase in ['Gmain', 'Gboth'])
         do_Galg = (phase in ['Greg', 'Gboth']) and (self.commute_lamb != 0 or self.hessian_lamb != 0)
+        do_GregI = (phase in ['Greg', 'Gboth']) and (self.I_lambda != 0) and (self.I is not None)
         do_Dmain = (phase in ['Dmain', 'Dboth'])
         do_Dr1   = (phase in ['Dreg', 'Dboth']) and (self.r1_gamma != 0)
 
         # Gmain: Maximize logits for generated images.
         if do_Gmain:
             with torch.autograd.profiler.record_function('Gmain_forward'):
-                gen_img = self.run_G(gen_z, gen_c, sync=sync)
+                gen_img = self.run_G(gen_z, gen_c, sync=sync and not do_GregI)
                 gen_logits = self.run_D(gen_img, gen_c, sync=False)
                 training_stats.report('Loss/scores/fake', gen_logits)
                 training_stats.report('Loss/signs/fake', gen_logits.sign())
@@ -95,7 +107,7 @@ class GroupGANLoss(Loss):
             with torch.autograd.profiler.record_function('Gmain_backward'):
                 loss_Gmain.mean().mul(gain).backward()
 
-        # Greg: Enforce commute or Hessian loss.
+        # Galg: Enforce commute or Hessian loss.
         if do_Galg:
             with torch.autograd.profiler.record_function('Compute_regalg_loss'):
                 lie_alg_basis_mul_ij = calc_basis_mul_ij(self.G.module.core.lie_alg_basis)
@@ -109,6 +121,17 @@ class GroupGANLoss(Loss):
                     training_stats.report('Loss/liealg/commute_loss', commute_loss)
             with torch.autograd.profiler.record_function('Regalg_backward'):
                 (hessian_loss + commute_loss).mean().mul(gain).backward()
+
+        # GregI: Enforce InfoGAN loss.
+        if do_GregI:
+            if not do_Gmain:
+                with torch.autograd.profiler.record_function('G_forward_in_regI'):
+                    gen_img = self.run_G(gen_z, gen_c, sync=sync)
+            with torch.autograd.profiler.record_function('I_forward'):
+                out_z = self.run_I(gen_img, gen_c, sync=sync)
+            I_loss = self.I_lambda * calc_latent_recons(out_z, gen_z)
+            with torch.autograd.profiler.record_function('RegI_backward'):
+                I_loss.mean().mul(gain).backward()
 
         # Dmain: Minimize logits for generated images.
         loss_Dgen = 0

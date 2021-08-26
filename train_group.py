@@ -8,7 +8,7 @@
 
 # --- File Name: train_group.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Thu 26 Aug 2021 22:08:51 AEST
+# --- Last Modified: Fri 27 Aug 2021 00:45:54 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -160,16 +160,19 @@ def setup_training_loop_kwargs(
     cfg_specs = {
         'auto':      dict(ref_gpus=-1, kimg=25000,  mb=-1, mbstd=-1, fmaps=-1,  lrate=-1, gamma=-1, ema=-1, ramp=0.05, n_samples_per=7,
                           z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=10, proj_feat_size=128, proj_feat_ch=32,
-                          post_exp_conv_feat_base=32, commute_lamb=0, hessian_lamb=0), # Populated dynamically based on resolution and GPU count.
+                          post_exp_conv_feat_base=32, commute_lamb=0, hessian_lamb=0),
         'celeba-experiment': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
-                             z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=128, proj_feat_ch=4,
-                             post_exp_conv_feat_base=4, commute_lamb=0, hessian_lamb=10), # Populated dynamically based on resolution and GPU count.
+                             z_dim=10, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=128, proj_feat_ch=64, projector_type='action',
+                             post_exp_conv_feat_base=64, commute_lamb=0, hessian_lamb=100),
+        'celeba-experiment-I': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
+                             z_dim=10, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=128, proj_feat_ch=64, projector_type='action',
+                             post_exp_conv_feat_base=64, commute_lamb=0, hessian_lamb=100, I_lambda=1),
         'celeba-experiment-hpc': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
                              z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=128, proj_feat_ch=64, projector_type='action',
-                             post_exp_conv_feat_base=64, commute_lamb=0, hessian_lamb=0), # Populated dynamically based on resolution and GPU count.
+                             post_exp_conv_feat_base=64, commute_lamb=0, hessian_lamb=0),
         'celeba-hessian-hpc': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
                              z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=128, proj_feat_ch=64, projector_type='action',
-                             post_exp_conv_feat_base=64, commute_lamb=0, hessian_lamb=1000), # Populated dynamically based on resolution and GPU count.
+                             post_exp_conv_feat_base=64, commute_lamb=0, hessian_lamb=1000),
         # 'stylegan2': dict(ref_gpus=8,  kimg=25000,  mb=32, mbstd=4,  fmaps=1,   lrate=0.002,  gamma=10,   ema=10,  ramp=None), # Uses mixed-precision, unlike the original StyleGAN2.
         # 'paper256':  dict(ref_gpus=8,  kimg=25000,  mb=64, mbstd=8,  fmaps=0.5, lrate=0.0025, gamma=1,    ema=20,  ramp=None),
         # 'paper512':  dict(ref_gpus=8,  kimg=25000,  mb=64, mbstd=8,  fmaps=1,   lrate=0.0025, gamma=0.5,  ema=20,  ramp=None),
@@ -209,8 +212,20 @@ def setup_training_loop_kwargs(
 
     args.G_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', lr=spec.lrate, betas=[0,0.99], eps=1e-8)
     args.D_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', lr=spec.lrate, betas=[0,0.99], eps=1e-8)
-    args.loss_kwargs = dnnlib.EasyDict(class_name='training.loss_group.GroupGANLoss', r1_gamma=spec.gamma,
-                                       commute_lamb=spec.commute_lamb, hessian_lamb=spec.hessian_lamb)
+    
+    if 'I_lambda' in spec:
+        args.I_kwargs = dnnlib.EasyDict(class_name='training.networks_liegan.Recognizer',  z_dim=spec.z_dim, block_kwargs=dnnlib.EasyDict(),
+                                        mapping_kwargs=dnnlib.EasyDict(), epilogue_kwargs=dnnlib.EasyDict())
+        args.I_kwargs.channel_base = int(spec.fmaps * 32768)
+        args.I_kwargs.channel_max = 512
+        args.I_kwargs.num_fp16_res = 4 # enable mixed-precision training
+        args.I_kwargs.conv_clamp = 256 # clamp activations to avoid float16 overflow
+        args.I_kwargs.epilogue_kwargs.mbstd_group_size = spec.mbstd
+        args.loss_kwargs = dnnlib.EasyDict(class_name='training.loss_group.GroupGANLoss', r1_gamma=spec.gamma,
+                                           commute_lamb=spec.commute_lamb, hessian_lamb=spec.hessian_lamb, I_lambda=spec.I_lambda)
+    else:
+        args.loss_kwargs = dnnlib.EasyDict(class_name='training.loss_group.GroupGANLoss', r1_gamma=spec.gamma,
+                                           commute_lamb=spec.commute_lamb, hessian_lamb=spec.hessian_lamb)
 
     args.n_samples_per = spec.n_samples_per
     args.total_kimg = spec.kimg

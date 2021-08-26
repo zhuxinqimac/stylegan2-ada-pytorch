@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_group.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Thu 26 Aug 2021 21:14:53 AEST
+# --- Last Modified: Fri 27 Aug 2021 00:22:35 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -59,6 +59,7 @@ def training_loop(
     data_loader_kwargs      = {},       # Options for torch.utils.data.DataLoader.
     G_kwargs                = {},       # Options for generator network.
     D_kwargs                = {},       # Options for discriminator network.
+    I_kwargs                = {},       # Options for recognizer network.
     G_opt_kwargs            = {},       # Options for generator optimizer.
     D_opt_kwargs            = {},       # Options for discriminator optimizer.
     augment_kwargs          = None,     # Options for augmentation pipeline. None = disable.
@@ -119,14 +120,19 @@ def training_loop(
     G = dnnlib.util.construct_class_by_name(**G_kwargs, **common_kwargs).train().requires_grad_(False).to(device) # subclass of torch.nn.Module
     D = dnnlib.util.construct_class_by_name(**D_kwargs, **common_kwargs).train().requires_grad_(False).to(device) # subclass of torch.nn.Module
     G_ema = copy.deepcopy(G).eval()
+    if (I_kwargs != {}) and (I_kwargs.class_name is not None):
+        I = dnnlib.util.construct_class_by_name(**I_kwargs, **common_kwargs).train().requires_grad_(False).to(device) # subclass of torch.nn.Module
+    else:
+        I = None
 
     # Resume from existing pickle.
     if (resume_pkl is not None) and (rank == 0):
         print(f'Resuming from "{resume_pkl}"')
         with dnnlib.util.open_url(resume_pkl) as f:
             resume_data = legacy.load_network_pkl(f)
-        for name, module in [('G', G), ('D', D), ('G_ema', G_ema)]:
-            misc.copy_params_and_buffers(resume_data[name], module, require_all=False)
+        for name, module in [('G', G), ('D', D), ('G_ema', G_ema), ('I', I)]:
+            if (module is not None) and (name in resume_data):
+                misc.copy_params_and_buffers(resume_data[name], module, require_all=False)
 
     # Print network summary tables.
     if rank == 0:
@@ -134,6 +140,8 @@ def training_loop(
         c = torch.empty([batch_gpu, G.c_dim], device=device)
         img = misc.print_module_summary(G, [z, c])
         misc.print_module_summary(D, [img, c])
+        if I is not None:
+            misc.print_module_summary(I, [img, c])
 
     # Setup augmentation.
     if rank == 0:
@@ -150,12 +158,12 @@ def training_loop(
     if rank == 0:
         print(f'Distributing across {num_gpus} GPUs...')
     ddp_modules = dict()
-    for name, module in [('G', G), ('D', D), (None, G_ema), ('augment_pipe', augment_pipe)]:
+    for name, module in [('G', G), ('D', D), (None, G_ema), ('augment_pipe', augment_pipe), ('I', I)]:
         if (num_gpus > 1) and (module is not None) and len(list(module.parameters())) != 0:
             module.requires_grad_(True)
             module = torch.nn.parallel.DistributedDataParallel(module, device_ids=[device], broadcast_buffers=False)
             module.requires_grad_(False)
-        if name is not None:
+        if (name is not None) and (module is not None):
             ddp_modules[name] = module
 
     # Setup training phases.
@@ -328,7 +336,7 @@ def training_loop(
         snapshot_data = None
         if (network_snapshot_ticks is not None) and (done or cur_tick % network_snapshot_ticks == 0):
             snapshot_data = dict(training_set_kwargs=dict(training_set_kwargs))
-            for name, module in [('G', G), ('D', D), ('G_ema', G_ema), ('augment_pipe', augment_pipe)]:
+            for name, module in [('G', G), ('D', D), ('G_ema', G_ema), ('augment_pipe', augment_pipe), ('I', I)]:
                 if module is not None:
                     if num_gpus > 1:
                         misc.check_ddp_consistency(module, ignore_regex=r'.*\.w_avg')

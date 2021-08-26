@@ -8,7 +8,7 @@
 
 # --- File Name: networks_liegan.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Thu 26 Aug 2021 22:29:39 AEST
+# --- Last Modified: Fri 27 Aug 2021 00:44:41 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -20,7 +20,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_utils import misc
 from torch_utils import persistence
-from training.networks import FullyConnectedLayer
+from training.networks import FullyConnectedLayer, DiscriminatorBlock
+from training.networks import MinibatchStdLayer, Conv2dLayer
 
 @misc.profiled_function
 def init_alg_basis(z_dim, mat_dim, lie_alg_init_scale):
@@ -219,3 +220,111 @@ class LieGroupGenerator(nn.Module):
         img = self.conv_final(feat_maps) # [b, c, h, w]
         # print(f'output img.size:', img.size())
         return img
+
+#----------------------------------------------------------------------------
+
+@persistence.persistent_class
+class DiscriminatorEpilogueI(torch.nn.Module):
+    def __init__(self,
+        in_channels,                    # Number of input channels.
+        z_dim,                          # Dimensionality of latents.
+        resolution,                     # Resolution of this block.
+        img_channels,                   # Number of input color channels.
+        architecture        = 'resnet', # Architecture: 'orig', 'skip', 'resnet'.
+        mbstd_group_size    = 4,        # Group size for the minibatch standard deviation layer, None = entire minibatch.
+        mbstd_num_channels  = 1,        # Number of features for the minibatch standard deviation layer, 0 = disable.
+        activation          = 'lrelu',  # Activation function: 'relu', 'lrelu', etc.
+        conv_clamp          = None,     # Clamp the output of convolution layers to +-X, None = disable clamping.
+    ):
+        assert architecture in ['orig', 'skip', 'resnet']
+        super().__init__()
+        self.in_channels = in_channels
+        self.z_dim = z_dim
+        self.resolution = resolution
+        self.img_channels = img_channels
+        self.architecture = architecture
+
+        if architecture == 'skip':
+            self.fromrgb = Conv2dLayer(img_channels, in_channels, kernel_size=1, activation=activation)
+        self.mbstd = MinibatchStdLayer(group_size=mbstd_group_size, num_channels=mbstd_num_channels) if mbstd_num_channels > 0 else None
+        self.conv = Conv2dLayer(in_channels + mbstd_num_channels, in_channels, kernel_size=3, activation=activation, conv_clamp=conv_clamp)
+        self.fc = FullyConnectedLayer(in_channels * (resolution ** 2), in_channels, activation=activation)
+        self.out = FullyConnectedLayer(in_channels, z_dim)
+
+    def forward(self, x, img, force_fp32=False):
+        misc.assert_shape(x, [None, self.in_channels, self.resolution, self.resolution]) # [NCHW]
+        _ = force_fp32 # unused
+        dtype = torch.float32
+        memory_format = torch.contiguous_format
+
+        # FromRGB.
+        x = x.to(dtype=dtype, memory_format=memory_format)
+        if self.architecture == 'skip':
+            misc.assert_shape(img, [None, self.img_channels, self.resolution, self.resolution])
+            img = img.to(dtype=dtype, memory_format=memory_format)
+            x = x + self.fromrgb(img)
+
+        # Main layers.
+        if self.mbstd is not None:
+            x = self.mbstd(x)
+        x = self.conv(x)
+        x = self.fc(x.flatten(1))
+        x = self.out(x)
+
+        assert x.dtype == dtype
+        return x
+
+
+@persistence.persistent_class
+class Recognizer(torch.nn.Module):
+    '''
+    Same architecture as Discriminator.
+    '''
+    def __init__(self,
+        z_dim,                          # Dimensionality of latents.
+        c_dim,                          # Conditioning label (C) dimensionality.
+        img_resolution,                 # Input resolution.
+        img_channels,                   # Number of input color channels.
+        architecture        = 'resnet', # Architecture: 'orig', 'skip', 'resnet'.
+        channel_base        = 32768,    # Overall multiplier for the number of channels.
+        channel_max         = 512,      # Maximum number of channels in any layer.
+        num_fp16_res        = 0,        # Use FP16 for the N highest resolutions.
+        conv_clamp          = None,     # Clamp the output of convolution layers to +-X, None = disable clamping.
+        block_kwargs        = {},       # Arguments for DiscriminatorBlock.
+        mapping_kwargs      = {},       # Arguments for MappingNetwork.
+        epilogue_kwargs     = {},       # Arguments for DiscriminatorEpilogue.
+    ):
+        super().__init__()
+        self.z_dim = z_dim
+        self.c_dim = c_dim # Ignore
+        self.img_resolution = img_resolution
+        self.img_resolution_log2 = int(np.log2(img_resolution))
+        self.img_channels = img_channels
+        self.block_resolutions = [2 ** i for i in range(self.img_resolution_log2, 2, -1)]
+        channels_dict = {res: min(channel_base // res, channel_max) for res in self.block_resolutions + [4]}
+        fp16_resolution = max(2 ** (self.img_resolution_log2 + 1 - num_fp16_res), 8)
+
+        common_kwargs = dict(img_channels=img_channels, architecture=architecture, conv_clamp=conv_clamp)
+        cur_layer_idx = 0
+        for res in self.block_resolutions:
+            in_channels = channels_dict[res] if res < img_resolution else 0
+            tmp_channels = channels_dict[res]
+            out_channels = channels_dict[res // 2]
+            use_fp16 = (res >= fp16_resolution)
+            block = DiscriminatorBlock(in_channels, tmp_channels, out_channels, resolution=res,
+                first_layer_idx=cur_layer_idx, use_fp16=use_fp16, **block_kwargs, **common_kwargs)
+            setattr(self, f'b{res}', block)
+            cur_layer_idx += block.num_layers
+        self.b4 = DiscriminatorEpilogueI(channels_dict[4], z_dim=z_dim, resolution=4, **epilogue_kwargs, **common_kwargs)
+
+    def forward(self, img, c, **block_kwargs):
+        x = None
+        _ = c # Ignore
+        for res in self.block_resolutions:
+            block = getattr(self, f'b{res}')
+            x, img = block(x, img, **block_kwargs)
+
+        x = self.b4(x, img)
+        return x
+
+#----------------------------------------------------------------------------
