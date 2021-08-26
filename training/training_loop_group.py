@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_group.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Mon 23 Aug 2021 01:41:03 AEST
+# --- Last Modified: Thu 26 Aug 2021 21:14:53 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -41,13 +41,13 @@ def get_truncated_normal(mean=0, sd=1, low=0, upp=10):
     return truncnorm(
         (low - mean) / sd, (upp - mean) / sd, loc=mean, scale=sd)
 
-def get_traversal(n_samples_per, z_dim, device):
+def get_traversal(n_samples_per, z_dim, device, bound=2):
     # grid_z = torch.randn([1, 1, z_dim]).repeat([z_dim, n_samples_per, 1])
     trunc = get_truncated_normal(low=-0.7, upp=0.7)
     grid_z = np.tile(trunc.rvs(size=(1, 1, z_dim)), [z_dim, n_samples_per, 1])
     grid_z = torch.tensor(grid_z, dtype=torch.float32)
     for i in range(z_dim):
-        grid_z[i, :, i] = torch.linspace(-2, 2, n_samples_per)
+        grid_z[i, :, i] = torch.linspace(-bound, bound, n_samples_per)
     grid_z = grid_z.to(device).view(n_samples_per * z_dim, z_dim)
     return grid_z
 

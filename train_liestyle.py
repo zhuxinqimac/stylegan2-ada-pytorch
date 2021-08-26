@@ -8,7 +8,7 @@
 
 # --- File Name: train_liestyle.py
 # --- Creation Date: 24-08-2021
-# --- Last Modified: Thu 26 Aug 2021 03:17:29 AEST
+# --- Last Modified: Thu 26 Aug 2021 15:29:41 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -162,6 +162,8 @@ def setup_training_loop_kwargs(
                           z_dim=64, group_mat_dim=20, lie_alg_init_scale=0.001, commute_lamb=0, hessian_lamb=0), # Populated dynamically based on resolution and GPU count.
         'liestylegan-celeba': dict(ref_gpus=2,  kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10, ramp=0.05, n_samples_per=7,
                           z_dim=64, group_mat_dim=20, lie_alg_init_scale=0.001, commute_lamb=0, hessian_lamb=0),
+        'liestylegan-celeba-commute': dict(ref_gpus=2,  kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10, ramp=0.05, n_samples_per=7,
+                          z_dim=64, group_mat_dim=20, lie_alg_init_scale=0.001, commute_lamb=100, hessian_lamb=0),
         'liestylegan-celeba-hessian': dict(ref_gpus=2,  kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10, ramp=0.05, n_samples_per=7,
                           z_dim=64, group_mat_dim=20, lie_alg_init_scale=0.001, commute_lamb=0, hessian_lamb=100),
         'liestylegan-celeba-hessian200': dict(ref_gpus=2,  kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10, ramp=0.05, n_samples_per=7,
@@ -427,7 +429,8 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--mirror', help='Enable dataset x-flips [default: false]', type=bool, metavar='BOOL')
 
 # Base config.
-@click.option('--cfg', help='Base config [default: auto]', type=click.Choice(['auto', 'stylegan2', 'liestylegan-celeba', 'liestylegan-celeba-hessian', 'liestylegan-celeba-hessian200']))
+@click.option('--cfg', help='Base config [default: auto]', type=click.Choice(['auto', 'stylegan2', 'liestylegan-celeba', 'liestylegan-celeba-hessian', 'liestylegan-celeba-hessian200',
+                                                                              'liestylegan-celeba-commute']))
 @click.option('--gamma', help='Override R1 gamma', type=float)
 @click.option('--kimg', help='Override training duration', type=int, metavar='INT')
 @click.option('--batch', help='Override batch size', type=int, metavar='INT')

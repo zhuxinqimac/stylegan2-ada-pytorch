@@ -8,7 +8,7 @@
 
 # --- File Name: networks_liegan.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Tue 24 Aug 2021 13:43:20 AEST
+# --- Last Modified: Thu 26 Aug 2021 22:00:23 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -68,7 +68,7 @@ class LieGroupCore(nn.Module):
 
 
 @persistence.persistent_class
-class GroupProjector(nn.Module):
+class FlattenProjector(nn.Module):
     def __init__(self,
                  mat_dim,                 # Lie algebra (group) matrix dimension.
                  feat_size=128,              # Output feature map size.
@@ -92,6 +92,33 @@ class GroupProjector(nn.Module):
         feats = self.net(g) # [b, c*f*f]
         # feats = feats.view(-1, 1, self.feat_size, self.feat_size).repeat(1, self.feat_ch, 1, 1)
         return feats.view(-1, self.feat_ch, self.feat_size, self.feat_size) # [b, ch, f, f]
+
+@persistence.persistent_class
+class ActionProjector(nn.Module):
+    def __init__(self,
+                 mat_dim,                 # Lie algebra (group) matrix dimension.
+                 feat_size=128,              # Output feature map size.
+                 feat_ch=32,                 # Output feature map channel.
+    ):
+        super().__init__()
+        self.mat_dim = mat_dim
+        self.feat_size = feat_size
+        self.feat_ch = feat_ch
+        self.const = torch.nn.Parameter(torch.randn([self.mat_dim]))
+        self.net = FullyConnectedLayer(mat_dim, feat_size * feat_size * feat_ch,
+                                       activation='linear')
+
+    def forward(self, g):
+        '''
+        g: [b, mat_dim, mat_dim]
+        return [b, c, fh, fw]
+        '''
+        b = g.shape[0]
+        const = self.const[np.newaxis, :, np.newaxis].repeat([b, 1, 1]) # [b, mat_dim, 1]
+        feats = torch.bmm(g, const).view(b, self.mat_dim) # [b, mat_dim]
+        feats = self.net(feats) # [b, c*f*f]
+        # feats = feats.view(-1, 1, self.feat_size, self.feat_size).repeat(1, self.feat_ch, 1, 1)
+        return F.relu(feats.view(-1, self.feat_ch, self.feat_size, self.feat_size)) # [b, ch, f, f]
 
 def build_conv_layers(feat_size, feat_ch, img_resolution, img_channels, feat_base=32):
     feat_log2 = int(np.log2(feat_size)) # e.g. 128 -> 7
@@ -123,6 +150,7 @@ class LieGroupGenerator(nn.Module):
                  liegroup_kwargs={},         # Args for LieGroupCore.
                  proj_kwargs={},             # Args for GroupProjector.
                  conv_kwargs={},             # Args for post-group conv layers.
+                 projector_type='flatten',   # Projector to map group to feat_map.
     ):
         super().__init__()
         self.c_dim = c_dim # We currently only model unconditional GANs and ignore labels.
@@ -131,7 +159,13 @@ class LieGroupGenerator(nn.Module):
         self.img_channels = img_channels
         self.use_noise = use_noise
         self.core = LieGroupCore(z_dim=z_dim, **liegroup_kwargs)
-        self.projector = GroupProjector(mat_dim=self.core.mat_dim, **proj_kwargs)
+        self.projector_type = projector_type
+        if self.projector_type == 'flatten':
+            self.projector = FlattenProjector(mat_dim=self.core.mat_dim, **proj_kwargs)
+        elif self.projector_type == 'action':
+            self.projector = ActionProjector(mat_dim=self.core.mat_dim, **proj_kwargs)
+        else:
+            raise ValueError('Unknown projector_type:', projector_type)
         convs_up, noises_strength, self.conv_before_final, self.conv_final, extra_noises_strength = \
             build_conv_layers(feat_size=self.projector.feat_size,
                               feat_ch=self.projector.feat_ch,

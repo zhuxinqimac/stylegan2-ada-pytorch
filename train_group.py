@@ -8,7 +8,7 @@
 
 # --- File Name: train_group.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Tue 24 Aug 2021 03:13:06 AEST
+# --- Last Modified: Thu 26 Aug 2021 22:04:59 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -161,21 +161,15 @@ def setup_training_loop_kwargs(
         'auto':      dict(ref_gpus=-1, kimg=25000,  mb=-1, mbstd=-1, fmaps=-1,  lrate=-1, gamma=-1, ema=-1, ramp=0.05, n_samples_per=7,
                           z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=10, proj_feat_size=128, proj_feat_ch=32,
                           post_exp_conv_feat_base=32, commute_lamb=0, hessian_lamb=0), # Populated dynamically based on resolution and GPU count.
-        'celeba-basic': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
-                             z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=10, proj_feat_size=128, proj_feat_ch=32,
-                             post_exp_conv_feat_base=32, commute_lamb=0, hessian_lamb=0), # Populated dynamically based on resolution and GPU count.
-        'celeba-efficient': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
-                             z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=128, proj_feat_ch=16,
-                             post_exp_conv_feat_base=16, commute_lamb=0, hessian_lamb=0), # Populated dynamically based on resolution and GPU count.
         'celeba-experiment': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
                              z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=128, proj_feat_ch=4,
                              post_exp_conv_feat_base=4, commute_lamb=0, hessian_lamb=10), # Populated dynamically based on resolution and GPU count.
         'celeba-experiment-hpc': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
-                             z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=128, proj_feat_ch=4,
-                             post_exp_conv_feat_base=4, commute_lamb=0, hessian_lamb=0), # Populated dynamically based on resolution and GPU count.
-        'celeba-hessian-hpc': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=3,
-                             z_dim=128, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=128, proj_feat_ch=8,
-                             post_exp_conv_feat_base=8, commute_lamb=0, hessian_lamb=10), # Populated dynamically based on resolution and GPU count.
+                             z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=128, proj_feat_ch=64, projector_type='action',
+                             post_exp_conv_feat_base=64, commute_lamb=0, hessian_lamb=0), # Populated dynamically based on resolution and GPU count.
+        'celeba-hessian-hpc': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
+                             z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=128, proj_feat_ch=64, projector_type='action',
+                             post_exp_conv_feat_base=64, commute_lamb=0, hessian_lamb=1000), # Populated dynamically based on resolution and GPU count.
         # 'stylegan2': dict(ref_gpus=8,  kimg=25000,  mb=32, mbstd=4,  fmaps=1,   lrate=0.002,  gamma=10,   ema=10,  ramp=None), # Uses mixed-precision, unlike the original StyleGAN2.
         # 'paper256':  dict(ref_gpus=8,  kimg=25000,  mb=64, mbstd=8,  fmaps=0.5, lrate=0.0025, gamma=1,    ema=20,  ramp=None),
         # 'paper512':  dict(ref_gpus=8,  kimg=25000,  mb=64, mbstd=8,  fmaps=1,   lrate=0.0025, gamma=0.5,  ema=20,  ramp=None),
@@ -440,7 +434,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--mirror', help='Enable dataset x-flips [default: false]', type=bool, metavar='BOOL')
 
 # Base config.
-@click.option('--cfg', help='Base config [default: auto]', type=click.Choice(['auto', 'celeba-basic', 'celeba-efficient', 'celeba-experiment', 'celeba-experiment-hpc', 'celeba-hessian-hpc']))
+@click.option('--cfg', help='Base config [default: auto]', type=str, metavar='STR')
 @click.option('--gamma', help='Override R1 gamma', type=float)
 @click.option('--kimg', help='Override training duration', type=int, metavar='INT')
 @click.option('--batch', help='Override batch size', type=int, metavar='INT')
