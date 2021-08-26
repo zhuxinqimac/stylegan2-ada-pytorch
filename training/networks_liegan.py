@@ -8,7 +8,7 @@
 
 # --- File Name: networks_liegan.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Fri 27 Aug 2021 00:44:41 AEST
+# --- Last Modified: Fri 27 Aug 2021 02:22:39 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -230,6 +230,7 @@ class DiscriminatorEpilogueI(torch.nn.Module):
         z_dim,                          # Dimensionality of latents.
         resolution,                     # Resolution of this block.
         img_channels,                   # Number of input color channels.
+        mat_dim             = None,     # Group matrix dimension.
         architecture        = 'resnet', # Architecture: 'orig', 'skip', 'resnet'.
         mbstd_group_size    = 4,        # Group size for the minibatch standard deviation layer, None = entire minibatch.
         mbstd_num_channels  = 1,        # Number of features for the minibatch standard deviation layer, 0 = disable.
@@ -240,6 +241,7 @@ class DiscriminatorEpilogueI(torch.nn.Module):
         super().__init__()
         self.in_channels = in_channels
         self.z_dim = z_dim
+        self.mat_dim = mat_dim
         self.resolution = resolution
         self.img_channels = img_channels
         self.architecture = architecture
@@ -250,6 +252,8 @@ class DiscriminatorEpilogueI(torch.nn.Module):
         self.conv = Conv2dLayer(in_channels + mbstd_num_channels, in_channels, kernel_size=3, activation=activation, conv_clamp=conv_clamp)
         self.fc = FullyConnectedLayer(in_channels * (resolution ** 2), in_channels, activation=activation)
         self.out = FullyConnectedLayer(in_channels, z_dim)
+        if mat_dim is not None:
+            self.out_2 = FullyConnectedLayer(in_channels, mat_dim * mat_dim)
 
     def forward(self, x, img, force_fp32=False):
         misc.assert_shape(x, [None, self.in_channels, self.resolution, self.resolution]) # [NCHW]
@@ -269,10 +273,13 @@ class DiscriminatorEpilogueI(torch.nn.Module):
             x = self.mbstd(x)
         x = self.conv(x)
         x = self.fc(x.flatten(1))
-        x = self.out(x)
+        out_z = self.out(x)
+        if self.mat_dim is not None:
+            out_g = self.out_2(x)
+            return out_z, out_g
 
-        assert x.dtype == dtype
-        return x
+        assert out_z.dtype == dtype
+        return out_z, None
 
 
 @persistence.persistent_class
@@ -293,6 +300,7 @@ class Recognizer(torch.nn.Module):
         block_kwargs        = {},       # Arguments for DiscriminatorBlock.
         mapping_kwargs      = {},       # Arguments for MappingNetwork.
         epilogue_kwargs     = {},       # Arguments for DiscriminatorEpilogue.
+        mat_dim             = None,     # Group matrix dimension.
     ):
         super().__init__()
         self.z_dim = z_dim
@@ -301,6 +309,7 @@ class Recognizer(torch.nn.Module):
         self.img_resolution_log2 = int(np.log2(img_resolution))
         self.img_channels = img_channels
         self.block_resolutions = [2 ** i for i in range(self.img_resolution_log2, 2, -1)]
+        self.mat_dim = mat_dim
         channels_dict = {res: min(channel_base // res, channel_max) for res in self.block_resolutions + [4]}
         fp16_resolution = max(2 ** (self.img_resolution_log2 + 1 - num_fp16_res), 8)
 
@@ -315,7 +324,7 @@ class Recognizer(torch.nn.Module):
                 first_layer_idx=cur_layer_idx, use_fp16=use_fp16, **block_kwargs, **common_kwargs)
             setattr(self, f'b{res}', block)
             cur_layer_idx += block.num_layers
-        self.b4 = DiscriminatorEpilogueI(channels_dict[4], z_dim=z_dim, resolution=4, **epilogue_kwargs, **common_kwargs)
+        self.b4 = DiscriminatorEpilogueI(channels_dict[4], z_dim=z_dim, resolution=4, mat_dim=mat_dim, **epilogue_kwargs, **common_kwargs)
 
     def forward(self, img, c, **block_kwargs):
         x = None
@@ -324,7 +333,7 @@ class Recognizer(torch.nn.Module):
             block = getattr(self, f'b{res}')
             x, img = block(x, img, **block_kwargs)
 
-        x = self.b4(x, img)
-        return x
+        x, out_g = self.b4(x, img)
+        return x, out_g
 
 #----------------------------------------------------------------------------

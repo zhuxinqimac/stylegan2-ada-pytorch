@@ -8,7 +8,7 @@
 
 # --- File Name: loss_group.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Fri 27 Aug 2021 00:40:22 AEST
+# --- Last Modified: Fri 27 Aug 2021 02:19:56 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -57,7 +57,7 @@ def calc_latent_recons(out_z, gen_z):
 #----------------------------------------------------------------------------
 
 class GroupGANLoss(Loss):
-    def __init__(self, device, G, D, I=None, augment_pipe=None, r1_gamma=10, commute_lamb=0., hessian_lamb=0., I_lambda=0.):
+    def __init__(self, device, G, D, I=None, augment_pipe=None, r1_gamma=10, commute_lamb=0., hessian_lamb=0., I_lambda=0., I_g_lambda=0.):
         super().__init__()
         self.device = device
         self.G = G
@@ -69,6 +69,7 @@ class GroupGANLoss(Loss):
         self.commute_lamb = commute_lamb
         self.hessian_lamb = hessian_lamb
         self.I_lambda = I_lambda
+        self.I_g_lambda = I_g_lambda
 
     def run_G(self, z, c, sync):
         with misc.ddp_sync(self.G, sync):
@@ -128,10 +129,18 @@ class GroupGANLoss(Loss):
                 with torch.autograd.profiler.record_function('G_forward_in_regI'):
                     gen_img = self.run_G(gen_z, gen_c, sync=sync)
             with torch.autograd.profiler.record_function('I_forward'):
-                out_z = self.run_I(gen_img, gen_c, sync=sync)
-            I_loss = self.I_lambda * calc_latent_recons(out_z, gen_z)
+                out_z, out_g = self.run_I(gen_img, gen_c, sync=sync)
+            with torch.autograd.profiler.record_function('Compute_regI_loss'):
+                I_loss = 0
+                if self.I_lambda > 0:
+                    I_loss = self.I_lambda * calc_latent_recons(out_z, gen_z)
+                    training_stats.report('Loss/GregI/I_loss', I_loss)
+                I_g_loss = 0
+                if (self.I_g_lambda > 0) and (out_g is not None):
+                    I_g_loss = self.I_g_lambda * calc_latent_recons(out_g, gen_z)
+                    training_stats.report('Loss/GregI/I_g_loss', I_g_loss)
             with torch.autograd.profiler.record_function('RegI_backward'):
-                I_loss.mean().mul(gain).backward()
+                (I_loss + I_g_loss).mean().mul(gain).backward()
 
         # Dmain: Minimize logits for generated images.
         loss_Dgen = 0
