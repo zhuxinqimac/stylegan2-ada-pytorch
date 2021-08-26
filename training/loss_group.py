@@ -8,7 +8,7 @@
 
 # --- File Name: loss_group.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Fri 27 Aug 2021 02:19:56 AEST
+# --- Last Modified: Fri 27 Aug 2021 02:29:37 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -51,7 +51,7 @@ def calc_commute_loss(lie_alg_basis_mul_ij):
     return commute_loss
 
 def calc_latent_recons(out_z, gen_z):
-    loss = torch.sum((out_z - gen_z).square(), dim=[1]) # [b]
+    loss = torch.mean((out_z - gen_z).square(), dim=[1]) # [b]
     return loss
 
 #----------------------------------------------------------------------------
