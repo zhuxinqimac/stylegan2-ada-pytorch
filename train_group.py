@@ -8,7 +8,7 @@
 
 # --- File Name: train_group.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Thu 26 Aug 2021 22:04:59 AEST
+# --- Last Modified: Thu 26 Aug 2021 22:08:51 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -191,6 +191,7 @@ def setup_training_loop_kwargs(
         spec.ema = spec.mb * 10 / 32
 
     args.G_kwargs = dnnlib.EasyDict(class_name='training.networks_liegan.LieGroupGenerator', z_dim=spec.z_dim, use_noise=spec.use_noise,
+                                    projector_type=spec.projector_type,
                                     liegroup_kwargs=dnnlib.EasyDict(), proj_kwargs=dnnlib.EasyDict(), conv_kwargs=dnnlib.EasyDict())
     args.G_kwargs.liegroup_kwargs.lie_alg_init_scale = spec.lie_alg_init_scale
     args.G_kwargs.liegroup_kwargs.mat_dim = spec.group_mat_dim
