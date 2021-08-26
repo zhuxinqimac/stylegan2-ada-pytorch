@@ -8,7 +8,7 @@
 
 # --- File Name: networks_liegan.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Thu 26 Aug 2021 22:28:12 AEST
+# --- Last Modified: Thu 26 Aug 2021 22:29:39 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -107,7 +107,6 @@ class ActionProjector(nn.Module):
         self.const = torch.nn.Parameter(torch.randn([self.mat_dim]))
         self.net = FullyConnectedLayer(mat_dim, feat_size * feat_size * feat_ch,
                                        activation='linear')
-        print('using action projector')
 
     def forward(self, g):
         '''
