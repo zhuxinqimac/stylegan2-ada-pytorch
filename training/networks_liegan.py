@@ -8,7 +8,7 @@
 
 # --- File Name: networks_liegan.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Fri 27 Aug 2021 15:19:05 AEST
+# --- Last Modified: Fri 27 Aug 2021 15:56:39 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -97,7 +97,7 @@ class FlattenProjector(nn.Module):
 @persistence.persistent_class
 class ActionProjector(nn.Module):
     def __init__(self,
-                 mat_dim,                 # Lie algebra (group) matrix dimension.
+                 mat_dim,                    # Lie algebra (group) matrix dimension.
                  feat_size=128,              # Output feature map size.
                  feat_ch=32,                 # Output feature map channel.
     ):
@@ -118,7 +118,31 @@ class ActionProjector(nn.Module):
         const = self.const[np.newaxis, :, np.newaxis].repeat([b, 1, 1]) # [b, mat_dim, 1]
         feats = torch.bmm(g, const).view(b, self.mat_dim) # [b, mat_dim]
         feats = self.net(feats) # [b, c*f*f]
-        # feats = feats.view(-1, 1, self.feat_size, self.feat_size).repeat(1, self.feat_ch, 1, 1)
+        return F.relu(feats.view(-1, self.feat_ch, self.feat_size, self.feat_size)) # [b, ch, f, f]
+
+@persistence.persistent_class
+class NoiseActionProjector(ActionProjector):
+    def __init__(self,
+                 mat_dim,                    # Lie algebra (group) matrix dimension.
+                 feat_size=128,              # Output feature map size.
+                 feat_ch=32,                 # Output feature map channel.
+    ):
+        super().__init__(mat_dim, feat_size, feat_ch)
+        self.noise_strength = nn.Parameter(torch.zeros([]))
+
+    def forward(self, g):
+        '''
+        g: [b, mat_dim, mat_dim]
+        return [b, c, fh, fw]
+        '''
+        b = g.shape[0]
+
+        const = self.const[np.newaxis, :, np.newaxis].repeat([b, 1, 1]) # [b, mat_dim, 1]
+        noise = torch.randn([const.shape[0], const.shape[1], 1], device=const.device) * self.noise_strength
+        const = noise + const
+
+        feats = torch.bmm(g, const).view(b, self.mat_dim) # [b, mat_dim]
+        feats = self.net(feats) # [b, c*f*f]
         return F.relu(feats.view(-1, self.feat_ch, self.feat_size, self.feat_size)) # [b, ch, f, f]
 
 def build_conv_layers(feat_size, feat_ch, img_resolution, img_channels, feat_base=32):
@@ -165,6 +189,8 @@ class LieGroupGenerator(nn.Module):
             self.projector = FlattenProjector(mat_dim=self.core.mat_dim, **proj_kwargs)
         elif self.projector_type == 'action':
             self.projector = ActionProjector(mat_dim=self.core.mat_dim, **proj_kwargs)
+        elif self.projector_type == 'noise_action':
+            self.projector = NoiseActionProjector(mat_dim=self.core.mat_dim, **proj_kwargs)
         else:
             raise ValueError('Unknown projector_type:', projector_type)
         convs_up, noises_strength, self.conv_before_final, self.conv_final, extra_noises_strength = \
