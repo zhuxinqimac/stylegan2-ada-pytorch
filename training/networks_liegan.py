@@ -8,7 +8,7 @@
 
 # --- File Name: networks_liegan.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Fri 27 Aug 2021 02:22:39 AEST
+# --- Last Modified: Fri 27 Aug 2021 14:33:34 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -227,9 +227,9 @@ class LieGroupGenerator(nn.Module):
 class DiscriminatorEpilogueI(torch.nn.Module):
     def __init__(self,
         in_channels,                    # Number of input channels.
-        z_dim,                          # Dimensionality of latents.
         resolution,                     # Resolution of this block.
         img_channels,                   # Number of input color channels.
+        z_dim               = None ,    # Dimensionality of latents.
         mat_dim             = None,     # Group matrix dimension.
         architecture        = 'resnet', # Architecture: 'orig', 'skip', 'resnet'.
         mbstd_group_size    = 4,        # Group size for the minibatch standard deviation layer, None = entire minibatch.
@@ -251,7 +251,8 @@ class DiscriminatorEpilogueI(torch.nn.Module):
         self.mbstd = MinibatchStdLayer(group_size=mbstd_group_size, num_channels=mbstd_num_channels) if mbstd_num_channels > 0 else None
         self.conv = Conv2dLayer(in_channels + mbstd_num_channels, in_channels, kernel_size=3, activation=activation, conv_clamp=conv_clamp)
         self.fc = FullyConnectedLayer(in_channels * (resolution ** 2), in_channels, activation=activation)
-        self.out = FullyConnectedLayer(in_channels, z_dim)
+        if z_dim is not None:
+            self.out = FullyConnectedLayer(in_channels, z_dim)
         if mat_dim is not None:
             self.out_2 = FullyConnectedLayer(in_channels, mat_dim * mat_dim)
 
@@ -273,13 +274,14 @@ class DiscriminatorEpilogueI(torch.nn.Module):
             x = self.mbstd(x)
         x = self.conv(x)
         x = self.fc(x.flatten(1))
-        out_z = self.out(x)
+
+        out_z, out_g = None, None
+        if self.z_dim is not None:
+            out_z = self.out(x)
         if self.mat_dim is not None:
             out_g = self.out_2(x)
-            return out_z, out_g
 
-        assert out_z.dtype == dtype
-        return out_z, None
+        return out_z, out_g
 
 
 @persistence.persistent_class
@@ -288,10 +290,11 @@ class Recognizer(torch.nn.Module):
     Same architecture as Discriminator.
     '''
     def __init__(self,
-        z_dim,                          # Dimensionality of latents.
         c_dim,                          # Conditioning label (C) dimensionality.
         img_resolution,                 # Input resolution.
         img_channels,                   # Number of input color channels.
+        z_dim               = None,     # Dimensionality of latents.
+        mat_dim             = None,     # Group matrix dimension.
         architecture        = 'resnet', # Architecture: 'orig', 'skip', 'resnet'.
         channel_base        = 32768,    # Overall multiplier for the number of channels.
         channel_max         = 512,      # Maximum number of channels in any layer.
@@ -300,16 +303,16 @@ class Recognizer(torch.nn.Module):
         block_kwargs        = {},       # Arguments for DiscriminatorBlock.
         mapping_kwargs      = {},       # Arguments for MappingNetwork.
         epilogue_kwargs     = {},       # Arguments for DiscriminatorEpilogue.
-        mat_dim             = None,     # Group matrix dimension.
     ):
         super().__init__()
         self.z_dim = z_dim
+        self.mat_dim = mat_dim
+        assert not (z_dim is None and mat_dim is None)
         self.c_dim = c_dim # Ignore
         self.img_resolution = img_resolution
         self.img_resolution_log2 = int(np.log2(img_resolution))
         self.img_channels = img_channels
         self.block_resolutions = [2 ** i for i in range(self.img_resolution_log2, 2, -1)]
-        self.mat_dim = mat_dim
         channels_dict = {res: min(channel_base // res, channel_max) for res in self.block_resolutions + [4]}
         fp16_resolution = max(2 ** (self.img_resolution_log2 + 1 - num_fp16_res), 8)
 
@@ -324,7 +327,7 @@ class Recognizer(torch.nn.Module):
                 first_layer_idx=cur_layer_idx, use_fp16=use_fp16, **block_kwargs, **common_kwargs)
             setattr(self, f'b{res}', block)
             cur_layer_idx += block.num_layers
-        self.b4 = DiscriminatorEpilogueI(channels_dict[4], z_dim=z_dim, resolution=4, mat_dim=mat_dim, **epilogue_kwargs, **common_kwargs)
+        self.b4 = DiscriminatorEpilogueI(channels_dict[4], z_dim=z_dim, mat_dim=mat_dim, resolution=4, **epilogue_kwargs, **common_kwargs)
 
     def forward(self, img, c, **block_kwargs):
         x = None

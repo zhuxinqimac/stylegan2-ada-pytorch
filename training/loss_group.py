@@ -8,7 +8,7 @@
 
 # --- File Name: loss_group.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Fri 27 Aug 2021 02:29:37 AEST
+# --- Last Modified: Fri 27 Aug 2021 14:24:01 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -132,7 +132,7 @@ class GroupGANLoss(Loss):
                 out_z, out_g = self.run_I(gen_img, gen_c, sync=sync)
             with torch.autograd.profiler.record_function('Compute_regI_loss'):
                 I_loss = 0
-                if self.I_lambda > 0:
+                if (self.I_lambda > 0) and (out_z is not None):
                     I_loss = self.I_lambda * calc_latent_recons(out_z, gen_z)
                     training_stats.report('Loss/GregI/I_loss', I_loss)
                 I_g_loss = 0
