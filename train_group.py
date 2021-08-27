@@ -8,7 +8,7 @@
 
 # --- File Name: train_group.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Fri 27 Aug 2021 14:53:05 AEST
+# --- Last Modified: Fri 27 Aug 2021 15:12:11 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """

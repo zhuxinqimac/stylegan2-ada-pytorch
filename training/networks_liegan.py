@@ -8,7 +8,7 @@
 
 # --- File Name: networks_liegan.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Fri 27 Aug 2021 14:33:34 AEST
+# --- Last Modified: Fri 27 Aug 2021 15:19:05 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -179,7 +179,7 @@ class LieGroupGenerator(nn.Module):
         assert len(self.noises_strength) == len(self.convs_up)
         # del self.conv_before_final
 
-    def forward(self, z, c, use_noise=True, force_noise=False):
+    def forward(self, z, c, use_noise=True, force_noise=False, return_gfeats=False):
         '''
         z: [b, z_dim]
         c: ignore
@@ -219,6 +219,8 @@ class LieGroupGenerator(nn.Module):
 
         img = self.conv_final(feat_maps) # [b, c, h, w]
         # print(f'output img.size:', img.size())
+        if return_gfeats:
+            return img, lie_group
         return img
 
 #----------------------------------------------------------------------------
