@@ -8,7 +8,7 @@
 
 # --- File Name: train_group.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Fri 27 Aug 2021 20:26:06 AEST
+# --- Last Modified: Fri 27 Aug 2021 23:34:18 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -170,6 +170,9 @@ def setup_training_loop_kwargs(
         'celeba-hessian-I-hpc': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
                              z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=128, proj_feat_ch=4, projector_type='flatten',
                              post_exp_conv_feat_base=4, commute_lamb=0, hessian_lamb=0.01, I_lambda=0, I_g_lambda=1.),
+        'celeba-hessian01-I-hpc': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
+                             z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=128, proj_feat_ch=4, projector_type='flatten',
+                             post_exp_conv_feat_base=4, commute_lamb=0, hessian_lamb=0.1, I_lambda=0, I_g_lambda=1.),
         'celeba-hessian-noise-I-g-hpc': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
                              z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=128, proj_feat_ch=64, projector_type='noise_action',
                              post_exp_conv_feat_base=64, commute_lamb=0, hessian_lamb=10, I_lambda=0, I_g_lambda=1.),
