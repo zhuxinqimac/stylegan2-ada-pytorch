@@ -8,7 +8,7 @@
 
 # --- File Name: networks_liegan.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Fri 27 Aug 2021 15:56:39 AEST
+# --- Last Modified: Sat 28 Aug 2021 01:47:44 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -214,6 +214,7 @@ class LieGroupGenerator(nn.Module):
         _ = c
         lie_group = self.core(z) # [b, mat_dim, mat_dim]
         feat_maps = self.projector(lie_group) # [b, f, fh, fw]
+        # print('lie_group:', lie_group)
 
         # Pre-conv noise
         # _, ch, res, _ = feat_maps.size()
