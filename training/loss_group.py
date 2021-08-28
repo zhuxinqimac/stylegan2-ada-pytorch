@@ -8,7 +8,7 @@
 
 # --- File Name: loss_group.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Fri 27 Aug 2021 15:22:23 AEST
+# --- Last Modified: Sun 29 Aug 2021 00:20:59 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -24,31 +24,53 @@ from training.loss import Loss
 
 #----------------------------------------------------------------------------
 
-def calc_basis_mul_ij(lie_alg_basis):
+def calc_basis_outer(lie_alg_basis):
     lie_alg_basis = lie_alg_basis[np.newaxis, ...]  # [1, z_dim, mat_dim, mat_dim]
     _, lat_dim, mat_dim, _ = list(lie_alg_basis.size())
     lie_alg_basis_col = lie_alg_basis.view(lat_dim, 1, mat_dim, mat_dim)
-    lie_alg_basis_outer_mul = torch.matmul(
+    lie_alg_basis_outer = torch.matmul(
         lie_alg_basis,
         lie_alg_basis_col)  # [lat_dim, lat_dim, mat_dim, mat_dim]
-    hessian_mask = 1. - torch.eye(
-        lat_dim, dtype=lie_alg_basis_outer_mul.dtype
-    )[:, :, np.newaxis, np.newaxis].to(lie_alg_basis_outer_mul.device)
-    lie_alg_basis_mul_ij = lie_alg_basis_outer_mul * hessian_mask  # XY
-    return lie_alg_basis_mul_ij
+    return lie_alg_basis_outer
 
-def calc_hessian_loss(lie_alg_basis_mul_ij):
-    # lie_alg_basis_mul_ij [lat_dim, lat_dim, mat_dim, mat_dim]
+def calc_outer_sub(lie_alg_basis_outer, otype='ij'):
+    _, lat_dim, _, _ = list(lie_alg_basis_outer.size())
+    if otype == 'ij':
+        mask = 1. - torch.eye(
+            lat_dim, dtype=lie_alg_basis_outer.dtype
+        )[:, :, np.newaxis, np.newaxis].to(lie_alg_basis_outer.device)
+    elif otype == 'ii':
+        mask = torch.eye(
+            lat_dim, dtype=lie_alg_basis_outer.dtype
+        )[:, :, np.newaxis, np.newaxis].to(lie_alg_basis_outer.device)
+    else:
+        raise ValueError('Unknown otype:', otype)
+    lie_alg_basis_outer_sub = lie_alg_basis_outer * mask  # XY
+    return lie_alg_basis_outer_sub
+
+def calc_hessian_loss(lie_alg_basis_outer):
+    ''' lie_alg_basis_outer [lat_dim, lat_dim, mat_dim, mat_dim] '''
+    lie_alg_basis_outer_ij = calc_outer_sub(lie_alg_basis_outer, 'ij')
     hessian_loss = torch.mean(
-        torch.sum(torch.square(lie_alg_basis_mul_ij), dim=[2, 3]))
+        torch.sum(torch.square(lie_alg_basis_outer_ij), dim=[2, 3]))
     return hessian_loss
 
-def calc_commute_loss(lie_alg_basis_mul_ij):
-    lie_alg_commutator = lie_alg_basis_mul_ij - lie_alg_basis_mul_ij.permute(
+def calc_commute_loss(lie_alg_basis_outer):
+    ''' lie_alg_basis_outer [lat_dim, lat_dim, mat_dim, mat_dim] '''
+    lie_alg_basis_outer_ij = calc_outer_sub(lie_alg_basis_outer, 'ij')
+    lie_alg_commutator = lie_alg_basis_outer_ij - lie_alg_basis_outer_ij.permute(
         0, 1, 3, 2)
     commute_loss = torch.mean(
         torch.sum(torch.square(lie_alg_commutator), dim=[2, 3]))
     return commute_loss
+
+def calc_anisotropy_loss(lie_alg_basis_outer):
+    ''' lie_alg_basis_outer [lat_dim, lat_dim, mat_dim, mat_dim] '''
+    lie_alg_basis_outer_ii = calc_outer_sub(lie_alg_basis_outer, 'ii')
+    _, _, mat_dim, _ = lie_alg_basis_outer_ii.size()
+    anisotropy_loss = float(mat_dim) - torch.mean(
+        torch.sum(torch.square(lie_alg_basis_outer_ii), dim=[2, 3]))
+    return anisotropy_loss
 
 def calc_latent_recons(out_z, gen_z):
     loss = torch.mean((out_z.flatten(1) - gen_z.flatten(1)).square(), dim=[1]) # [b]
@@ -57,7 +79,8 @@ def calc_latent_recons(out_z, gen_z):
 #----------------------------------------------------------------------------
 
 class GroupGANLoss(Loss):
-    def __init__(self, device, G, D, I=None, augment_pipe=None, r1_gamma=10, commute_lamb=0., hessian_lamb=0., I_lambda=0., I_g_lambda=0.):
+    def __init__(self, device, G, D, I=None, augment_pipe=None, r1_gamma=10,
+                 commute_lamb=0., hessian_lamb=0., anisotropy_lamb=0., I_lambda=0., I_g_lambda=0.):
         super().__init__()
         self.device = device
         self.G = G
@@ -68,6 +91,7 @@ class GroupGANLoss(Loss):
         self.pl_mean = torch.zeros([], device=device)
         self.commute_lamb = commute_lamb
         self.hessian_lamb = hessian_lamb
+        self.anisotropy_lamb = anisotropy_lamb
         self.I_lambda = I_lambda
         self.I_g_lambda = I_g_lambda
 
@@ -91,7 +115,7 @@ class GroupGANLoss(Loss):
     def accumulate_gradients(self, phase, real_img, real_c, gen_z, gen_c, sync, gain):
         assert phase in ['Gmain', 'Greg', 'Gboth', 'Dmain', 'Dreg', 'Dboth']
         do_Gmain = (phase in ['Gmain', 'Gboth'])
-        do_Galg = (phase in ['Greg', 'Gboth']) and (self.commute_lamb != 0 or self.hessian_lamb != 0)
+        do_Galg = (phase in ['Greg', 'Gboth']) and (self.commute_lamb != 0 or self.hessian_lamb != 0 or self.anisotropy_lamb != 0)
         do_GregI = (phase in ['Greg', 'Gboth']) and ((self.I_lambda != 0) or (self.I_g_lambda != 0)) and (self.I is not None)
         do_Dmain = (phase in ['Dmain', 'Dboth'])
         do_Dr1   = (phase in ['Dreg', 'Dboth']) and (self.r1_gamma != 0)
@@ -108,20 +132,24 @@ class GroupGANLoss(Loss):
             with torch.autograd.profiler.record_function('Gmain_backward'):
                 loss_Gmain.mean().mul(gain).backward()
 
-        # Galg: Enforce commute or Hessian loss.
+        # Galg: Enforce commute or Hessian or anisotropy loss.
         if do_Galg:
             with torch.autograd.profiler.record_function('Compute_regalg_loss'):
-                lie_alg_basis_mul_ij = calc_basis_mul_ij(self.G.module.core.lie_alg_basis)
+                lie_alg_basis_outer = calc_basis_outer(self.G.module.core.lie_alg_basis)
                 hessian_loss = 0.
                 if self.hessian_lamb > 0:
-                    hessian_loss = self.hessian_lamb * calc_hessian_loss(lie_alg_basis_mul_ij)
+                    hessian_loss = self.hessian_lamb * calc_hessian_loss(lie_alg_basis_outer)
                     training_stats.report('Loss/liealg/hessian_loss', hessian_loss)
                 commute_loss = 0.
                 if self.commute_lamb > 0:
-                    commute_loss = self.commute_lamb * calc_commute_loss(lie_alg_basis_mul_ij)
+                    commute_loss = self.commute_lamb * calc_commute_loss(lie_alg_basis_outer)
                     training_stats.report('Loss/liealg/commute_loss', commute_loss)
+                anisotropy_loss = 0.
+                if self.anisotropy_lamb > 0:
+                    anisotropy_loss = self.anisotropy_lamb * calc_anisotropy_loss(lie_alg_basis_outer)
+                    training_stats.report('Loss/liealg/anisotropy_loss', anisotropy_loss)
             with torch.autograd.profiler.record_function('Regalg_backward'):
-                (hessian_loss + commute_loss).mean().mul(gain).backward()
+                (hessian_loss + commute_loss + anisotropy_loss).mean().mul(gain).backward()
 
         # GregI: Enforce InfoGAN loss.
         if do_GregI:
