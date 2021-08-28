@@ -8,7 +8,7 @@
 
 # --- File Name: loss_group.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Sun 29 Aug 2021 01:13:01 AEST
+# --- Last Modified: Sun 29 Aug 2021 01:17:09 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -70,7 +70,8 @@ def calc_anisotropy_loss(lie_alg_basis_outer):
     _, _, mat_dim, _ = lie_alg_basis_outer_ii.size()
     anisotropy_loss = float(mat_dim) - torch.mean(
         torch.sum(torch.abs(lie_alg_basis_outer_ii), dim=[2, 3]))
-    return anisotropy_loss
+    coef = float(mat_dim - 1)
+    return anisotropy_loss * coef
 
 def calc_latent_recons(out_z, gen_z):
     loss = torch.mean((out_z.flatten(1) - gen_z.flatten(1)).square(), dim=[1]) # [b]
