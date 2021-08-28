@@ -8,7 +8,7 @@
 
 # --- File Name: train_group.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Sat 28 Aug 2021 14:03:47 AEST
+# --- Last Modified: Sat 28 Aug 2021 15:18:30 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -161,13 +161,13 @@ def setup_training_loop_kwargs(
         'auto':      dict(ref_gpus=-1, kimg=25000,  mb=-1, mbstd=-1, fmaps=-1,  lrate=-1, gamma=-1, ema=-1, ramp=0.05, n_samples_per=7,
                           z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=10, proj_feat_size=128, proj_feat_ch=32,
                           post_exp_conv_feat_base=32, commute_lamb=0, hessian_lamb=0),
-        'celeba-experiment': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
+        'celeba-act': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
                              z_dim=10, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=128, proj_feat_ch=64, projector_type='action',
-                             post_exp_conv_feat_base=64, commute_lamb=0, hessian_lamb=100),
-        'celeba-experiment-I-g10': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
+                             post_exp_conv_feat_base=64, commute_lamb=0, hessian_lamb=0),
+        'celeba-I-g1-flat': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
                              z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=64, proj_feat_ch=8, projector_type='flatten',
-                             post_exp_conv_feat_base=8, commute_lamb=0, hessian_lamb=0.01, I_lambda=0, I_g_lambda=10),
-        'celeba-experiment-I1': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
+                             post_exp_conv_feat_base=8, commute_lamb=0, hessian_lamb=0.01, I_lambda=0, I_g_lambda=1),
+        'celeba-I1-flat': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
                              z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=64, proj_feat_ch=8, projector_type='flatten',
                              post_exp_conv_feat_base=8, commute_lamb=0, hessian_lamb=0.01, I_lambda=1, I_g_lambda=0),
         'celeba-hessian-I1-hpc': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
