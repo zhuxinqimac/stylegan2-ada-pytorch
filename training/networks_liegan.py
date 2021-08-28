@@ -8,7 +8,7 @@
 
 # --- File Name: networks_liegan.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Sat 28 Aug 2021 01:47:44 AEST
+# --- Last Modified: Sat 28 Aug 2021 20:49:02 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -185,11 +185,11 @@ class LieGroupGenerator(nn.Module):
         self.use_noise = use_noise
         self.core = LieGroupCore(z_dim=z_dim, **liegroup_kwargs)
         self.projector_type = projector_type
-        if self.projector_type == 'flatten':
+        if self.projector_type == 'flat':
             self.projector = FlattenProjector(mat_dim=self.core.mat_dim, **proj_kwargs)
-        elif self.projector_type == 'action':
+        elif self.projector_type == 'act':
             self.projector = ActionProjector(mat_dim=self.core.mat_dim, **proj_kwargs)
-        elif self.projector_type == 'noise_action':
+        elif self.projector_type == 'noise':
             self.projector = NoiseActionProjector(mat_dim=self.core.mat_dim, **proj_kwargs)
         else:
             raise ValueError('Unknown projector_type:', projector_type)

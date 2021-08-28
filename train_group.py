@@ -8,7 +8,7 @@
 
 # --- File Name: train_group.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Sat 28 Aug 2021 18:07:40 AEST
+# --- Last Modified: Sat 28 Aug 2021 20:59:45 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -32,6 +32,34 @@ from torch_utils import custom_ops
 
 class UserError(Exception):
     pass
+
+#----------------------------------------------------------------------------
+KEY_BRIEF_NAMES = {'z': 'z_dim', 'gnoi': 'use_noise', 'pfs': 'proj_feat_size', 'pfc': 'proj_feat_ch', 'lies': 'lie_alg_init_scale',
+                   'gmat': 'group_mat_dim', 'ptype': 'projector_type', 'com': 'commute_lamb', 'hes': 'hessian_lamb',
+                   'pbase': 'post_exp_conv_feat_base', 'I': 'I_lambda', 'Ig': 'I_g_lambda',
+                   'mb': 'mb', 'mbstd': 'mbstd', 'fm': 'fmaps', 'lr': 'lrate', 'gm': 'gamma', 'ema': 'ema', 'nper': 'n_samples_per'}
+KEY_DTYPES = {'z_dim': int, 'use_noise': bool, 'proj_feat_size': int, 'proj_feat_ch': int, 'lie_alg_init_scale': float,
+              'group_mat_dim': int, 'projector_type': str, 'commute_lamb': float, 'hessian_lamb': float,
+              'post_exp_conv_feat_base': int, 'I_lambda': float, 'I_g_lambda': float,
+              'mb': int, 'mbstd': int, 'fmaps': float, 'lrate': float, 'gamma': float, 'ema': int, 'n_samples_per': int}
+
+def parse_cfg(cfg):
+    '''
+    cfg: '-'.join(bkey_value)
+    return: {'long_key': dtye(value)}
+    '''
+    bk_v_ls = cfg.strip().split('-')[1:] # Discard dataset name.
+    cfg_dict = {}
+    for bk_v in bk_v_ls:
+        bk, v = bk_v.strip().split('_')
+        assert bk in KEY_BRIEF_NAMES
+        cfg_dict[KEY_BRIEF_NAMES[bk]] = KEY_DTYPES[KEY_BRIEF_NAMES[bk]](v)
+    return cfg_dict
+
+def construct_specs(basic_dict, cfg):
+    cfg_dict = parse_cfg(cfg)
+    basic_dict.update(cfg_dict)
+    return basic_dict
 
 #----------------------------------------------------------------------------
 
@@ -161,24 +189,18 @@ def setup_training_loop_kwargs(
         'auto':      dict(ref_gpus=-1, kimg=25000,  mb=-1, mbstd=-1, fmaps=-1,  lrate=-1, gamma=-1, ema=-1, ramp=0.05, n_samples_per=7,
                           z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=10, proj_feat_size=128, proj_feat_ch=32,
                           post_exp_conv_feat_base=32, commute_lamb=0, hessian_lamb=0),
-        'celeba-act': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
-                             z_dim=10, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=128, proj_feat_ch=64, projector_type='action',
-                             post_exp_conv_feat_base=64, commute_lamb=0, hessian_lamb=0),
-        'celeba-I-g1-flat': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
-                             z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=64, proj_feat_ch=8, projector_type='flatten',
-                             post_exp_conv_feat_base=8, commute_lamb=0, hessian_lamb=0.01, I_lambda=0, I_g_lambda=1),
-        'celeba-hes01-I1-flat': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
-                             z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=64, proj_feat_ch=8, projector_type='flatten',
-                             post_exp_conv_feat_base=8, commute_lamb=0, hessian_lamb=0.1, I_lambda=1, I_g_lambda=0),
-        'celeba-g1-hpc': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
-                             z_dim=32, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=128, proj_feat_ch=8, projector_type='flatten',
+        'basic': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
+                             z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=128, proj_feat_ch=4, projector_type='flat',
+                             post_exp_conv_feat_base=4, commute_lamb=0, hessian_lamb=0, I_lambda=0, I_g_lambda=0),
+        'celeba-pfs_4-pfc_256-pbase_256-hes_0.1-Ig_1': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
+                             z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=4, proj_feat_ch=256, projector_type='flat',
+                             post_exp_conv_feat_base=256, commute_lamb=0, hessian_lamb=0.1, I_lambda=0, I_g_lambda=1),
+        'celeba-z_32-pfc_8-pbase_8-Ig_1': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
+                             z_dim=32, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=128, proj_feat_ch=8, projector_type='flat',
                              post_exp_conv_feat_base=8, commute_lamb=0, hessian_lamb=0, I_lambda=0, I_g_lambda=1),
-        'celeba-hes1-I1-hpc': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
-                             z_dim=32, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=128, proj_feat_ch=8, projector_type='flatten',
+        'celeba-z_32-pfc_8-pbase_8-hes_1-I_1': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
+                             z_dim=32, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=128, proj_feat_ch=8, projector_type='flat',
                              post_exp_conv_feat_base=8, commute_lamb=0, hessian_lamb=1, I_lambda=1, I_g_lambda=0),
-        'celeba-hes1-noise-I1-hpc': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
-                             z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, proj_feat_size=128, proj_feat_ch=64, projector_type='noise_action',
-                             post_exp_conv_feat_base=64, commute_lamb=0, hessian_lamb=1, I_lambda=1, I_g_lambda=0.),
         # 'stylegan2': dict(ref_gpus=8,  kimg=25000,  mb=32, mbstd=4,  fmaps=1,   lrate=0.002,  gamma=10,   ema=10,  ramp=None), # Uses mixed-precision, unlike the original StyleGAN2.
         # 'paper256':  dict(ref_gpus=8,  kimg=25000,  mb=64, mbstd=8,  fmaps=0.5, lrate=0.0025, gamma=1,    ema=20,  ramp=None),
         # 'paper512':  dict(ref_gpus=8,  kimg=25000,  mb=64, mbstd=8,  fmaps=1,   lrate=0.0025, gamma=0.5,  ema=20,  ramp=None),
@@ -186,7 +208,9 @@ def setup_training_loop_kwargs(
         # 'cifar':     dict(ref_gpus=2,  kimg=100000, mb=64, mbstd=32, fmaps=1,   lrate=0.0025, gamma=0.01, ema=500, ramp=0.05),
     }
 
-    assert cfg in cfg_specs
+    # assert cfg in cfg_specs
+    if cfg not in cfg_specs:
+        cfg_specs[cfg] = construct_specs(dnnlib.EasyDict(cfg_specs['basic']), cfg)
     spec = dnnlib.EasyDict(cfg_specs[cfg])
     if cfg == 'auto':
         desc += f'{gpus:d}'
