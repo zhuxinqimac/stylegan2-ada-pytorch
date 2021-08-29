@@ -8,7 +8,7 @@
 
 # --- File Name: loss_group.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Sun 29 Aug 2021 22:42:47 AEST
+# --- Last Modified: Mon 30 Aug 2021 00:19:26 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -51,8 +51,10 @@ def calc_outer_sub(lie_alg_basis_outer, otype='ij'):
 def calc_hessian_loss(lie_alg_basis_outer):
     ''' lie_alg_basis_outer [lat_dim, lat_dim, mat_dim, mat_dim] '''
     lie_alg_basis_outer_ij = calc_outer_sub(lie_alg_basis_outer, 'ij')
-    hessian_loss = torch.mean(
-        torch.sum(torch.square(lie_alg_basis_outer_ij), dim=[2, 3]))
+    # hessian_loss = torch.mean(
+        # torch.sum(torch.square(lie_alg_basis_outer_ij), dim=[2, 3]))
+    matrix_norm = torch.linalg.norm(lie_alg_basis_outer_ij, dim=[2, 3]) # [mat_dim, mat_dim]
+    hessian_loss = torch.mean(matrix_norm)
     return hessian_loss
 
 def calc_commute_loss(lie_alg_basis_outer):
@@ -60,8 +62,10 @@ def calc_commute_loss(lie_alg_basis_outer):
     lie_alg_basis_outer_ij = calc_outer_sub(lie_alg_basis_outer, 'ij')
     lie_alg_commutator = lie_alg_basis_outer_ij - lie_alg_basis_outer_ij.permute(
         0, 1, 3, 2)
-    commute_loss = torch.mean(
-        torch.sum(torch.square(lie_alg_commutator), dim=[2, 3]))
+    # commute_loss = torch.mean(
+        # torch.sum(torch.square(lie_alg_commutator), dim=[2, 3]))
+    matrix_norm = torch.linalg.norm(lie_alg_commutator, dim=[2, 3]) # [mat_dim, mat_dim]
+    commute_loss = torch.mean(matrix_norm)
     return commute_loss
 
 def calc_anisotropy_loss(lie_alg_basis_outer):
