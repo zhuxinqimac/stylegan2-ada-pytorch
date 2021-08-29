@@ -8,7 +8,7 @@
 
 # --- File Name: networks_liegan.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Sat 28 Aug 2021 20:49:02 AEST
+# --- Last Modified: Sun 29 Aug 2021 23:36:34 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -80,9 +80,9 @@ class FlattenProjector(nn.Module):
         self.feat_size = feat_size
         self.feat_ch = feat_ch
         self.net = FullyConnectedLayer(mat_dim * mat_dim, feat_size * feat_size * feat_ch,
-                                       activation='linear')
+                                       activation='linear', lr_multiplier=1)
         # self.net = FullyConnectedLayer(mat_dim * mat_dim, feat_size * feat_size,
-                                       # activation='linear')
+                                       # activation='linear', lr_multiplier=1)
 
     def forward(self, g):
         '''
@@ -107,7 +107,7 @@ class ActionProjector(nn.Module):
         self.feat_ch = feat_ch
         self.const = torch.nn.Parameter(torch.randn([self.mat_dim]))
         self.net = FullyConnectedLayer(mat_dim, feat_size * feat_size * feat_ch,
-                                       activation='linear')
+                                       activation='linear', lr_multiplier=1)
 
     def forward(self, g):
         '''
@@ -164,6 +164,12 @@ def build_conv_layers(feat_size, feat_ch, img_resolution, img_channels, feat_bas
     # extra_noises_strength = [nn.Parameter(torch.zeros([])), nn.Parameter(torch.zeros([]))]
     return convs_up, noises_strength, conv_before_final, conv_final, extra_noises_strength
 
+def xavier_init(module_list):
+    for p in module_list:
+        if isinstance(p, nn.Conv2d) or isinstance(p, nn.Linear):
+            torch.nn.init.xavier_uniform_(p.weight)
+    return module_list
+
 @persistence.persistent_class
 class LieGroupGenerator(nn.Module):
     def __init__(self,
@@ -193,12 +199,18 @@ class LieGroupGenerator(nn.Module):
             self.projector = NoiseActionProjector(mat_dim=self.core.mat_dim, **proj_kwargs)
         else:
             raise ValueError('Unknown projector_type:', projector_type)
-        convs_up, noises_strength, self.conv_before_final, self.conv_final, extra_noises_strength = \
+        convs_up, noises_strength, conv_before_final, conv_final, extra_noises_strength = \
             build_conv_layers(feat_size=self.projector.feat_size,
                               feat_ch=self.projector.feat_ch,
                               img_resolution=self.img_resolution,
                               img_channels=self.img_channels,
                               **conv_kwargs)
+        # outs = xavier_init(convs_up + [conv_before_final, conv_final])
+        outs = convs_up + [conv_before_final, conv_final]
+        convs_up = outs[:-2]
+        self.conv_before_final = outs[-2]
+        self.conv_final = outs[-1]
+
         self.convs_up = nn.ModuleList(convs_up)
         self.noises_strength = nn.ParameterList(noises_strength)
         self.extra_noises_strength = nn.ParameterList(extra_noises_strength)

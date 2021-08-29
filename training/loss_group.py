@@ -8,7 +8,7 @@
 
 # --- File Name: loss_group.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Sun 29 Aug 2021 13:56:16 AEST
+# --- Last Modified: Sun 29 Aug 2021 22:42:47 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -68,8 +68,10 @@ def calc_anisotropy_loss(lie_alg_basis_outer):
     ''' lie_alg_basis_outer [lat_dim, lat_dim, mat_dim, mat_dim] '''
     lie_alg_basis_outer_ii = calc_outer_sub(lie_alg_basis_outer, 'ii')
     _, _, mat_dim, _ = lie_alg_basis_outer_ii.size()
-    anisotropy_loss = (float(mat_dim) - torch.mean(
-        torch.sum(torch.square(lie_alg_basis_outer_ii), dim=[2, 3]))).square()
+    # anisotropy_loss = (float(mat_dim) - torch.mean(
+        # torch.sum(torch.square(lie_alg_basis_outer_ii), dim=[2, 3]))).square()
+    matrix_norm = torch.sum(torch.linalg.norm(lie_alg_basis_outer_ii, dim=[2, 3]), dim=0) # [mat_dim], the sum removes the eye mask.
+    anisotropy_loss = torch.mean((1. - matrix_norm).square())
     coef = float(mat_dim - 1)
     return anisotropy_loss * coef
 
