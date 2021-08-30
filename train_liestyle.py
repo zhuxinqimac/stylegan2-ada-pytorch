@@ -8,7 +8,7 @@
 
 # --- File Name: train_liestyle.py
 # --- Creation Date: 24-08-2021
-# --- Last Modified: Mon 30 Aug 2021 22:38:31 AEST
+# --- Last Modified: Mon 30 Aug 2021 22:50:24 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -477,8 +477,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--mirror', help='Enable dataset x-flips [default: false]', type=bool, metavar='BOOL')
 
 # Base config.
-@click.option('--cfg', help='Base config [default: auto]', type=click.Choice(['auto', 'stylegan2', 'liestylegan-celeba', 'liestylegan-celeba-hessian', 'liestylegan-celeba-hessian200',
-                                                                              'liestylegan-celeba-commute']))
+@click.option('--cfg', help='Base config [default: auto]', type=str, metavar='STR')
 @click.option('--gamma', help='Override R1 gamma', type=float)
 @click.option('--kimg', help='Override training duration', type=int, metavar='INT')
 @click.option('--batch', help='Override batch size', type=int, metavar='INT')
