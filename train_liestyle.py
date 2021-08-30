@@ -8,7 +8,7 @@
 
 # --- File Name: train_liestyle.py
 # --- Creation Date: 24-08-2021
-# --- Last Modified: Thu 26 Aug 2021 15:29:41 AEST
+# --- Last Modified: Mon 30 Aug 2021 22:38:31 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -32,6 +32,34 @@ from torch_utils import custom_ops
 
 class UserError(Exception):
     pass
+
+#----------------------------------------------------------------------------
+KEY_BRIEF_NAMES = {'z': 'z_dim', 'gnoi': 'use_noise', 'pfs': 'proj_feat_size', 'pfc': 'proj_feat_ch', 'lies': 'lie_alg_init_scale',
+                   'gmat': 'group_mat_dim', 'ptype': 'projector_type', 'com': 'commute_lamb', 'hes': 'hessian_lamb', 'ani': 'anisotropy_lamb',
+                   'pbase': 'post_exp_conv_feat_base', 'I': 'I_lambda', 'Ig': 'I_g_lambda', 'gncut': 'group_ncut',
+                   'mb': 'mb', 'mbstd': 'mbstd', 'fm': 'fmaps', 'lr': 'lrate', 'gm': 'gamma', 'ema': 'ema', 'nper': 'n_samples_per'}
+KEY_DTYPES = {'z_dim': int, 'use_noise': bool, 'proj_feat_size': int, 'proj_feat_ch': int, 'lie_alg_init_scale': float,
+              'group_mat_dim': int, 'projector_type': str, 'commute_lamb': float, 'hessian_lamb': float, 'anisotropy_lamb': float,
+              'post_exp_conv_feat_base': int, 'I_lambda': float, 'I_g_lambda': float, 'group_ncut': int,
+              'mb': int, 'mbstd': int, 'fmaps': float, 'lrate': float, 'gamma': float, 'ema': int, 'n_samples_per': int}
+
+def parse_cfg(cfg):
+    '''
+    cfg: '-'.join(bkey_value)
+    return: {'long_key': dtye(value)}
+    '''
+    bk_v_ls = cfg.strip().split('-')[1:] # Discard dataset name.
+    cfg_dict = {}
+    for bk_v in bk_v_ls:
+        bk, v = bk_v.strip().split('_')
+        assert bk in KEY_BRIEF_NAMES
+        cfg_dict[KEY_BRIEF_NAMES[bk]] = KEY_DTYPES[KEY_BRIEF_NAMES[bk]](v)
+    return cfg_dict
+
+def construct_specs(basic_dict, cfg):
+    cfg_dict = parse_cfg(cfg)
+    basic_dict.update(cfg_dict)
+    return basic_dict
 
 #----------------------------------------------------------------------------
 
@@ -159,15 +187,14 @@ def setup_training_loop_kwargs(
 
     cfg_specs = {
         'auto':      dict(ref_gpus=-1, kimg=25000, mb=-1, mbstd=-1, fmaps=-1, lrate=-1, gamma=-1, ema=-1, ramp=0.05, n_samples_per=7,
-                          z_dim=64, group_mat_dim=20, lie_alg_init_scale=0.001, commute_lamb=0, hessian_lamb=0), # Populated dynamically based on resolution and GPU count.
-        'liestylegan-celeba': dict(ref_gpus=2,  kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10, ramp=0.05, n_samples_per=7,
-                          z_dim=64, group_mat_dim=20, lie_alg_init_scale=0.001, commute_lamb=0, hessian_lamb=0),
-        'liestylegan-celeba-commute': dict(ref_gpus=2,  kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10, ramp=0.05, n_samples_per=7,
-                          z_dim=64, group_mat_dim=20, lie_alg_init_scale=0.001, commute_lamb=100, hessian_lamb=0),
-        'liestylegan-celeba-hessian': dict(ref_gpus=2,  kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10, ramp=0.05, n_samples_per=7,
-                          z_dim=64, group_mat_dim=20, lie_alg_init_scale=0.001, commute_lamb=0, hessian_lamb=100),
-        'liestylegan-celeba-hessian200': dict(ref_gpus=2,  kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10, ramp=0.05, n_samples_per=7,
-                          z_dim=64, group_mat_dim=20, lie_alg_init_scale=0.001, commute_lamb=0, hessian_lamb=200),
+                          z_dim=64, lie_alg_init_scale=0.001, group_mat_dim=20,
+                          commute_lamb=0, hessian_lamb=0, anisotropy_lamb=0, I_lambda=0, I_g_lambda=0, group_ncut=0), # Populated dynamically based on resolution and GPU count.
+        'basic': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
+                      z_dim=64, lie_alg_init_scale=0.001, group_mat_dim=20,
+                      commute_lamb=0, hessian_lamb=0, anisotropy_lamb=0, I_lambda=0, I_g_lambda=0, group_ncut=0),
+        'celeba-hes_0.1-Ig_1': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
+                             z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20,
+                             commute_lamb=0, hessian_lamb=0.1, anisotropy_lamb=0, I_lambda=0, I_g_lambda=1, group_ncut=0),
         'stylegan2': dict(ref_gpus=8, kimg=25000, mb=32, mbstd=4, fmaps=1, lrate=0.002, gamma=10, ema=10, ramp=None, n_samples_per=7,
                           z_dim=64, group_mat_dim=20, lie_alg_init_scale=0.001, commute_lamb=0, hessian_lamb=0), # Uses mixed-precision, unlike the original StyleGAN2.
     }
@@ -193,19 +220,40 @@ def setup_training_loop_kwargs(
     args.G_kwargs.mapping_kwargs.liegroup_kwargs = dnnlib.EasyDict()
     args.G_kwargs.mapping_kwargs.liegroup_kwargs.lie_alg_init_scale = spec.lie_alg_init_scale
     args.G_kwargs.mapping_kwargs.liegroup_kwargs.mat_dim = spec.group_mat_dim
+    args.G_kwargs.mapping_kwargs.liegroup_kwargs.ncut = spec.group_ncut
 
     args.G_kwargs.synthesis_kwargs.channel_base = args.D_kwargs.channel_base = int(spec.fmaps * 32768)
     args.G_kwargs.synthesis_kwargs.channel_max = args.D_kwargs.channel_max = 512
     args.G_kwargs.synthesis_kwargs.num_fp16_res = args.D_kwargs.num_fp16_res = 4 # enable mixed-precision training
     args.G_kwargs.synthesis_kwargs.conv_clamp = args.D_kwargs.conv_clamp = 256 # clamp activations to avoid float16 overflow
+
     args.D_kwargs.epilogue_kwargs.mbstd_group_size = spec.mbstd
 
     args.G_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', lr=spec.lrate, betas=[0,0.99], eps=1e-8)
     args.D_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', lr=spec.lrate, betas=[0,0.99], eps=1e-8)
-    args.loss_kwargs = dnnlib.EasyDict(class_name='training.loss_liestylegan.LieStyleGANLoss', r1_gamma=spec.gamma,
-                                       commute_lamb=spec.commute_lamb, hessian_lamb=spec.hessian_lamb)
-    args.loss_kwargs.pl_weight = 0 # disable path length regularization
-    args.loss_kwargs.style_mixing_prob = 0 # disable style mixing
+
+    if ('I_lambda' in spec and spec.I_lambda > 0) or ('I_g_lambda' in spec and spec.I_g_lambda > 0):
+        args.I_kwargs = dnnlib.EasyDict(class_name='training.networks_liegan.Recognizer',  block_kwargs=dnnlib.EasyDict(),
+                                        mapping_kwargs=dnnlib.EasyDict(), epilogue_kwargs=dnnlib.EasyDict())
+        args.I_kwargs.channel_base = int(spec.fmaps * 32768)
+        args.I_kwargs.channel_max = 512
+        args.I_kwargs.num_fp16_res = 4 # enable mixed-precision training
+        args.I_kwargs.conv_clamp = 256 # clamp activations to avoid float16 overflow
+        args.I_kwargs.epilogue_kwargs.mbstd_group_size = spec.mbstd
+        args.I_kwargs.z_dim = spec.z_dim if spec.I_lambda > 0 else None
+        args.I_kwargs.mat_dim = spec.group_mat_dim if spec.I_g_lambda > 0 else None
+        args.loss_kwargs = dnnlib.EasyDict(class_name='training.loss_liestylegan.LieStyleGANLoss', r1_gamma=spec.gamma,
+                                           commute_lamb=spec.commute_lamb, hessian_lamb=spec.hessian_lamb, anisotropy_lamb=spec.anisotropy_lamb,
+                                           I_lambda=spec.I_lambda, I_g_lambda=spec.I_g_lambda, group_split=spec.group_ncut>0)
+    else:
+        args.loss_kwargs = dnnlib.EasyDict(class_name='training.loss_liestylegan.LieStyleGANLoss', r1_gamma=spec.gamma,
+                                           commute_lamb=spec.commute_lamb, hessian_lamb=spec.hessian_lamb, anisotropy_lamb=spec.anisotropy_lamb,
+                                           group_split=spec.group_ncut>0)
+
+    # args.loss_kwargs = dnnlib.EasyDict(class_name='training.loss_liestylegan.LieStyleGANLoss', r1_gamma=spec.gamma,
+                                       # commute_lamb=spec.commute_lamb, hessian_lamb=spec.hessian_lamb)
+    # args.loss_kwargs.pl_weight = 0 # disable path length regularization
+    # args.loss_kwargs.style_mixing_prob = 0 # disable style mixing
 
     args.total_kimg = spec.kimg
     args.batch_size = spec.mb

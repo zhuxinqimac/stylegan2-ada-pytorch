@@ -8,7 +8,7 @@
 
 # --- File Name: networks_liegan.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Sun 29 Aug 2021 23:36:34 AEST
+# --- Last Modified: Mon 30 Aug 2021 16:55:22 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -43,6 +43,27 @@ def lat_to_group(z, lie_alg_basis):
     lie_group = torch.matrix_exp(lie_alg)  # [b, mat_dim, mat_dim]
     return lie_group
 
+@misc.profiled_function
+def split_latents(x, ncut):
+    # x: [b, lat_dim]
+    if ncut == 0:
+        return [x]
+    b, lat_dim = list(x.size())
+    split_idx = torch.randint(0, lat_dim + 1, size=[b, ncut])
+    split_idx, _ = torch.sort(split_idx, dim=-1)
+
+    idx_range = torch.arange(lat_dim).repeat(b, 1) # [b, lat_dim]
+    masks = []
+    mask_last = torch.zeros(b, lat_dim, dtype=x.dtype).to(x.device)
+    for i in range(ncut):
+        mask_tmp = (idx_range < split_idx[:, i:i + 1]).to(x)  # change dtype
+        masks.append(mask_tmp - mask_last)
+        masks_last = mask_tmp
+    mask_tmp = (idx_range < split_idx[:, -1:]).to(x)
+    masks.append(1. - mask_tmp)
+    x_split_ls = [x * mask for mask in masks]
+    # print('x_split_ls:', x_split_ls)
+    return x_split_ls
 
 @persistence.persistent_class
 class LieGroupCore(nn.Module):
@@ -50,21 +71,32 @@ class LieGroupCore(nn.Module):
                  z_dim,                      # Input latent (Z) dimensionality.
                  lie_alg_init_scale=0.001,   # Lie algebra basis initialization scale.
                  mat_dim=10,                 # Lie algebra (group) matrix dimension.
+                 ncut=0,                     # Number of cuts in latents if performing split.
     ):
         super().__init__()
         self.z_dim = z_dim
         self.mat_dim = mat_dim
         self.lie_alg_init_scale = lie_alg_init_scale
+        self.ncut = ncut
 
         self.lie_alg_basis = init_alg_basis(self.z_dim, self.mat_dim, self.lie_alg_init_scale) # [z_dim, mat_dim, mat_dim]
 
-    def forward(self, z, c=None):
+    def forward(self, z, c=None, group_split=False):
         '''
         z: [b, z_dim]
         return [b, mat_dim, mat_dim]
         '''
         _ = c # Ignore c
-        lie_group = lat_to_group(z, self.lie_alg_basis)
+        if group_split:
+            # print('Splitting group...')
+            masked_z_ls = split_latents(z, self.ncut) # [(b, z_dim), (b, z_dim), ...] len==ncut+1
+            lie_group = torch.eye(self.mat_dim, dtype=z.dtype).to(z.device)[np.newaxis, ...]  # [1, mat_dim, mat_dim]
+            for masked_z in masked_z_ls:
+                lie_group_tmp = lat_to_group(masked_z, self.lie_alg_basis)
+                lie_group = torch.matmul(lie_group, lie_group_tmp)  # [b, mat_dim, mat_dim]
+        else:
+            # print('Not splitting group...')
+            lie_group = lat_to_group(z, self.lie_alg_basis)
         return lie_group
 
 
@@ -217,25 +249,15 @@ class LieGroupGenerator(nn.Module):
         assert len(self.noises_strength) == len(self.convs_up)
         # del self.conv_before_final
 
-    def forward(self, z, c, use_noise=True, force_noise=False, return_gfeats=False):
+    def forward(self, z, c, use_noise=True, force_noise=False, return_gfeats=False, **core_kwargs):
         '''
         z: [b, z_dim]
         c: ignore
         return: [b, c, h, w]
         '''
         _ = c
-        lie_group = self.core(z) # [b, mat_dim, mat_dim]
+        lie_group = self.core(z, **core_kwargs) # [b, mat_dim, mat_dim]
         feat_maps = self.projector(lie_group) # [b, f, fh, fw]
-        # print('lie_group:', lie_group)
-
-        # Pre-conv noise
-        # _, ch, res, _ = feat_maps.size()
-        # if (use_noise and self.use_noise) or force_noise:
-            # noise = torch.randn([feat_maps.shape[0], 1, res, res], device=feat_maps.device) * self.extra_noises_strength[0]
-        # else:
-            # noise = 0
-        # # feat_maps = feat_maps + noise
-        # feat_maps = F.relu(feat_maps + noise)
 
         for i, conv in enumerate(self.convs_up):
             feat_maps = conv(feat_maps) # [b, c_i, h_i, w_i]
@@ -245,7 +267,6 @@ class LieGroupGenerator(nn.Module):
             else:
                 noise = 0
             feat_maps = F.relu(feat_maps + noise)
-            # print(f'feat_maps_{i}:', feat_maps.size())
 
         # Post-conv noise
         feat_maps = self.conv_before_final(feat_maps)
@@ -257,7 +278,6 @@ class LieGroupGenerator(nn.Module):
         feat_maps = F.relu(feat_maps + noise)
 
         img = self.conv_final(feat_maps) # [b, c, h, w]
-        # print(f'output img.size:', img.size())
         if return_gfeats:
             return img, lie_group
         return img

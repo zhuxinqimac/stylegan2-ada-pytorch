@@ -8,7 +8,7 @@
 
 # --- File Name: networks_liestylegan.py
 # --- Creation Date: 24-08-2021
-# --- Last Modified: Tue 24 Aug 2021 13:57:44 AEST
+# --- Last Modified: Mon 30 Aug 2021 22:08:28 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -51,15 +51,18 @@ class LieMappingNetwork(torch.nn.Module):
         assert self.w_dim == self.core.mat_dim * self.core.mat_dim
         self.num_ws = num_ws
 
-    def forward(self, z, c=None, truncation_psi=1, truncation_cutoff=None, skip_w_avg_update=False):
+    def forward(self, z, c=None, truncation_psi=1, truncation_cutoff=None, skip_w_avg_update=False, return_gfeats=False, **core_kwargs):
         _ = c
         misc.assert_shape(z, [None, self.z_dim])
-        x = self.core(z).view(-1, self.w_dim) # [b, mat_dims * mat_dim]
+        lie_group = self.core(z, **core_kwargs) # [b, mat_dim, mat_dim]
+        x = lie_group.view(-1, self.w_dim) # [b, mat_dims * mat_dim]
 
         if self.num_ws is not None:
             with torch.autograd.profiler.record_function('broadcast'):
                 x = x.unsqueeze(1).repeat([1, self.num_ws, 1])
 
+        if return_gfeats:
+            return x, lie_group
         return x
 
 #----------------------------------------------------------------------------
@@ -86,7 +89,15 @@ class LieStyleGenerator(torch.nn.Module):
         # self.mapping = MappingNetwork(z_dim=z_dim, c_dim=c_dim, w_dim=w_dim, num_ws=self.num_ws, **mapping_kwargs)
         self.mapping = LieMappingNetwork(z_dim=z_dim, c_dim=c_dim, w_dim=w_dim, num_ws=self.num_ws, **mapping_kwargs)
 
-    def forward(self, z, c, truncation_psi=1, truncation_cutoff=None, **synthesis_kwargs):
-        ws = self.mapping(z, c, truncation_psi=truncation_psi, truncation_cutoff=truncation_cutoff)
+    def forward(self, z, c, truncation_psi=1, truncation_cutoff=None, return_gfeats=False, group_split=False, **synthesis_kwargs):
+        outs = self.mapping(z, c, truncation_psi=truncation_psi, truncation_cutoff=truncation_cutoff,
+                            return_gfeats=return_gfeats, group_split=group_split)
+        if return_gfeats:
+            ws, lie_group = outs
+        else:
+            ws = outs
         img = self.synthesis(ws, **synthesis_kwargs)
+
+        if return_gfeats:
+            return img, lie_group
         return img

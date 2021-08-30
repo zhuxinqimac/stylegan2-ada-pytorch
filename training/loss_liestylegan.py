@@ -8,7 +8,7 @@
 
 # --- File Name: loss_liestylegan.py
 # --- Creation Date: 26-08-2021
-# --- Last Modified: Thu 26 Aug 2021 01:22:44 AEST
+# --- Last Modified: Mon 30 Aug 2021 22:21:24 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -20,7 +20,7 @@ import torch
 from torch_utils import training_stats
 from torch_utils import misc
 from torch_utils.ops import conv2d_gradfix
-from training.loss_group import calc_basis_mul_ij, calc_hessian_loss, calc_commute_loss
+from training.loss_group import calc_basis_outer, calc_hessian_loss, calc_commute_loss, calc_anisotropy_loss, calc_latent_recons
 
 #----------------------------------------------------------------------------
 
@@ -31,13 +31,15 @@ class Loss:
 #----------------------------------------------------------------------------
 
 class LieStyleGANLoss(Loss):
-    def __init__(self, device, G_mapping, G_synthesis, D, augment_pipe=None, style_mixing_prob=0.9, r1_gamma=10,
-                 pl_batch_shrink=2, pl_decay=0.01, pl_weight=2, commute_lamb=0., hessian_lamb=0.):
+    def __init__(self, device, G_mapping, G_synthesis, D, I=None, augment_pipe=None, style_mixing_prob=0.9, r1_gamma=10,
+                 pl_batch_shrink=2, pl_decay=0.01, pl_weight=2, commute_lamb=0., hessian_lamb=0.,
+                 anisotropy_lamb=0., I_lambda=0., I_g_lambda=0., group_split=False):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
         self.G_synthesis = G_synthesis
         self.D = D
+        self.I = I
         self.augment_pipe = augment_pipe
         self.style_mixing_prob = style_mixing_prob
         self.r1_gamma = r1_gamma
@@ -47,10 +49,17 @@ class LieStyleGANLoss(Loss):
         self.pl_mean = torch.zeros([], device=device)
         self.commute_lamb = commute_lamb
         self.hessian_lamb = hessian_lamb
+        self.anisotropy_lamb = anisotropy_lamb
+        self.I_lambda = I_lambda
+        self.I_g_lambda = I_g_lambda
+        self.group_split = group_split
 
-    def run_G(self, z, c, sync):
+    def run_G(self, z, c, sync, return_gfeats=False, **G_kwargs):
         with misc.ddp_sync(self.G_mapping, sync):
-            ws = self.G_mapping(z, c)
+            if return_gfeats:
+                ws, lie_group = self.G_mapping(z, c, return_gfeats=return_gfeats, **G_kwargs)
+            else:
+                ws = self.G_mapping(z, c, return_gfeats=return_gfeats, **G_kwargs)
             if self.style_mixing_prob > 0:
                 with torch.autograd.profiler.record_function('style_mixing'):
                     cutoff = torch.empty([], dtype=torch.int64, device=ws.device).random_(1, ws.shape[1])
@@ -58,6 +67,8 @@ class LieStyleGANLoss(Loss):
                     ws[:, cutoff:] = self.G_mapping(torch.randn_like(z), c, skip_w_avg_update=True)[:, cutoff:]
         with misc.ddp_sync(self.G_synthesis, sync):
             img = self.G_synthesis(ws)
+        if return_gfeats:
+            return img, ws, lie_group
         return img, ws
 
     def run_D(self, img, c, sync):
@@ -67,12 +78,18 @@ class LieStyleGANLoss(Loss):
             logits = self.D(img, c)
         return logits
 
+    def run_I(self, img, c, sync):
+        with misc.ddp_sync(self.I, sync):
+            logits = self.I(img, c)
+        return logits
+
     def accumulate_gradients(self, phase, real_img, real_c, gen_z, gen_c, sync, gain):
         assert phase in ['Gmain', 'Greg', 'Gboth', 'Dmain', 'Dreg', 'Dboth']
         do_Gmain = (phase in ['Gmain', 'Gboth'])
         do_Dmain = (phase in ['Dmain', 'Dboth'])
         do_Gpl   = (phase in ['Greg', 'Gboth']) and (self.pl_weight != 0)
-        do_Gdis   = (phase in ['Greg', 'Gboth']) and (self.commute_lamb != 0 or self.hessian_lamb != 0)
+        do_Galg   = (phase in ['Greg', 'Gboth']) and (self.commute_lamb != 0 or self.hessian_lamb != 0 or self.anisotropy_lamb != 0)
+        do_GregI = (phase in ['Greg', 'Gboth']) and ((self.I_lambda != 0) or (self.I_g_lambda != 0)) and (self.I is not None)
         do_Dr1   = (phase in ['Dreg', 'Dboth']) and (self.r1_gamma != 0)
 
         # Gmain: Maximize logits for generated images.
@@ -87,20 +104,43 @@ class LieStyleGANLoss(Loss):
             with torch.autograd.profiler.record_function('Gmain_backward'):
                 loss_Gmain.mean().mul(gain).backward()
 
-        # Gdis: Enforce commute or Hessian loss.
-        if do_Gdis:
+        # Galg: Enforce commute or Hessian or anisotropy loss.
+        if do_Galg:
             with torch.autograd.profiler.record_function('Compute_regalg_loss'):
-                lie_alg_basis_mul_ij = calc_basis_mul_ij(self.G_mapping.module.core.lie_alg_basis)
+                lie_alg_basis_outer = calc_basis_outer(self.G_mapping.module.core.lie_alg_basis)
                 hessian_loss = 0.
                 if self.hessian_lamb > 0:
-                    hessian_loss = self.hessian_lamb * calc_hessian_loss(lie_alg_basis_mul_ij)
+                    hessian_loss = self.hessian_lamb * calc_hessian_loss(lie_alg_basis_outer)
                     training_stats.report('Loss/liealg/hessian_loss', hessian_loss)
                 commute_loss = 0.
                 if self.commute_lamb > 0:
-                    commute_loss = self.commute_lamb * calc_commute_loss(lie_alg_basis_mul_ij)
+                    commute_loss = self.commute_lamb * calc_commute_loss(lie_alg_basis_outer)
                     training_stats.report('Loss/liealg/commute_loss', commute_loss)
+                anisotropy_loss = 0.
+                if self.anisotropy_lamb > 0:
+                    anisotropy_loss = self.anisotropy_lamb * calc_anisotropy_loss(lie_alg_basis_outer)
+                    training_stats.report('Loss/liealg/anisotropy_loss', anisotropy_loss)
             with torch.autograd.profiler.record_function('Regalg_backward'):
-                (hessian_loss + commute_loss).mean().mul(gain).backward()
+                (hessian_loss + commute_loss + anisotropy_loss).mean().mul(gain).backward()
+
+        # GregI: Enforce InfoGAN loss.
+        if do_GregI:
+            if not do_Gmain:
+                with torch.autograd.profiler.record_function('G_forward_in_regI'):
+                    gen_img, lie_group = self.run_G(gen_z, gen_c, sync=sync, return_gfeats=True, group_split=self.group_split)
+            with torch.autograd.profiler.record_function('I_forward'):
+                out_z, out_g = self.run_I(gen_img, gen_c, sync=sync)
+            with torch.autograd.profiler.record_function('Compute_regI_loss'):
+                I_loss = 0
+                if (self.I_lambda > 0) and (out_z is not None):
+                    I_loss = self.I_lambda * calc_latent_recons(out_z, gen_z)
+                    training_stats.report('Loss/GregI/I_loss', I_loss)
+                I_g_loss = 0
+                if (self.I_g_lambda > 0) and (out_g is not None):
+                    I_g_loss = self.I_g_lambda * calc_latent_recons(out_g, lie_group)
+                    training_stats.report('Loss/GregI/I_g_loss', I_g_loss)
+            with torch.autograd.profiler.record_function('RegI_backward'):
+                (I_loss + I_g_loss).mean().mul(gain).backward()
 
         # Gpl: Apply path length regularization.
         if do_Gpl:

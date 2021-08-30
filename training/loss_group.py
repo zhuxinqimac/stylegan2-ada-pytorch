@@ -8,7 +8,7 @@
 
 # --- File Name: loss_group.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Mon 30 Aug 2021 00:19:26 AEST
+# --- Last Modified: Mon 30 Aug 2021 18:35:05 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -51,10 +51,10 @@ def calc_outer_sub(lie_alg_basis_outer, otype='ij'):
 def calc_hessian_loss(lie_alg_basis_outer):
     ''' lie_alg_basis_outer [lat_dim, lat_dim, mat_dim, mat_dim] '''
     lie_alg_basis_outer_ij = calc_outer_sub(lie_alg_basis_outer, 'ij')
-    # hessian_loss = torch.mean(
-        # torch.sum(torch.square(lie_alg_basis_outer_ij), dim=[2, 3]))
-    matrix_norm = torch.linalg.norm(lie_alg_basis_outer_ij, dim=[2, 3]) # [mat_dim, mat_dim]
-    hessian_loss = torch.mean(matrix_norm)
+    hessian_loss = torch.mean(
+        torch.sum(torch.square(lie_alg_basis_outer_ij), dim=[2, 3]))
+    # matrix_norm = torch.linalg.norm(lie_alg_basis_outer_ij, dim=[2, 3]) # [mat_dim, mat_dim]
+    # hessian_loss = torch.mean(matrix_norm)
     return hessian_loss
 
 def calc_commute_loss(lie_alg_basis_outer):
@@ -62,10 +62,10 @@ def calc_commute_loss(lie_alg_basis_outer):
     lie_alg_basis_outer_ij = calc_outer_sub(lie_alg_basis_outer, 'ij')
     lie_alg_commutator = lie_alg_basis_outer_ij - lie_alg_basis_outer_ij.permute(
         0, 1, 3, 2)
-    # commute_loss = torch.mean(
-        # torch.sum(torch.square(lie_alg_commutator), dim=[2, 3]))
-    matrix_norm = torch.linalg.norm(lie_alg_commutator, dim=[2, 3]) # [mat_dim, mat_dim]
-    commute_loss = torch.mean(matrix_norm)
+    commute_loss = torch.mean(
+        torch.sum(torch.square(lie_alg_commutator), dim=[2, 3]))
+    # matrix_norm = torch.linalg.norm(lie_alg_commutator, dim=[2, 3]) # [mat_dim, mat_dim]
+    # commute_loss = torch.mean(matrix_norm)
     return commute_loss
 
 def calc_anisotropy_loss(lie_alg_basis_outer):
@@ -75,7 +75,7 @@ def calc_anisotropy_loss(lie_alg_basis_outer):
     # anisotropy_loss = (float(mat_dim) - torch.mean(
         # torch.sum(torch.square(lie_alg_basis_outer_ii), dim=[2, 3]))).square()
     matrix_norm = torch.sum(torch.linalg.norm(lie_alg_basis_outer_ii, dim=[2, 3]), dim=0) # [mat_dim], the sum removes the eye mask.
-    anisotropy_loss = torch.mean((1. - matrix_norm).square())
+    anisotropy_loss = (1. - torch.mean(matrix_norm)).square()
     coef = float(mat_dim - 1)
     return anisotropy_loss * coef
 
@@ -86,8 +86,8 @@ def calc_latent_recons(out_z, gen_z):
 #----------------------------------------------------------------------------
 
 class GroupGANLoss(Loss):
-    def __init__(self, device, G, D, I=None, augment_pipe=None, r1_gamma=10,
-                 commute_lamb=0., hessian_lamb=0., anisotropy_lamb=0., I_lambda=0., I_g_lambda=0.):
+    def __init__(self, device, G, D, I=None, augment_pipe=None, r1_gamma=10, commute_lamb=0., hessian_lamb=0.,
+                 anisotropy_lamb=0., I_lambda=0., I_g_lambda=0., group_split=False):
         super().__init__()
         self.device = device
         self.G = G
@@ -101,10 +101,11 @@ class GroupGANLoss(Loss):
         self.anisotropy_lamb = anisotropy_lamb
         self.I_lambda = I_lambda
         self.I_g_lambda = I_g_lambda
+        self.group_split = group_split
 
-    def run_G(self, z, c, sync, return_gfeats=False):
+    def run_G(self, z, c, sync, **G_kwargs):
         with misc.ddp_sync(self.G, sync):
-            out = self.G(z, c, return_gfeats=return_gfeats)
+            out = self.G(z, c, **G_kwargs)
         return out
 
     def run_D(self, img, c, sync):
@@ -130,7 +131,7 @@ class GroupGANLoss(Loss):
         # Gmain: Maximize logits for generated images.
         if do_Gmain:
             with torch.autograd.profiler.record_function('Gmain_forward'):
-                gen_img, lie_group = self.run_G(gen_z, gen_c, sync=sync and not do_GregI, return_gfeats=True)
+                gen_img, lie_group = self.run_G(gen_z, gen_c, sync=sync and not do_GregI, return_gfeats=True, group_split=self.group_split)
                 gen_logits = self.run_D(gen_img, gen_c, sync=False)
                 training_stats.report('Loss/scores/fake', gen_logits)
                 training_stats.report('Loss/signs/fake', gen_logits.sign())
@@ -162,7 +163,7 @@ class GroupGANLoss(Loss):
         if do_GregI:
             if not do_Gmain:
                 with torch.autograd.profiler.record_function('G_forward_in_regI'):
-                    gen_img, lie_group = self.run_G(gen_z, gen_c, sync=sync, return_gfeats=True)
+                    gen_img, lie_group = self.run_G(gen_z, gen_c, sync=sync, return_gfeats=True, group_split=self.group_split)
             with torch.autograd.profiler.record_function('I_forward'):
                 out_z, out_g = self.run_I(gen_img, gen_c, sync=sync)
             with torch.autograd.profiler.record_function('Compute_regI_loss'):
@@ -181,7 +182,7 @@ class GroupGANLoss(Loss):
         loss_Dgen = 0
         if do_Dmain:
             with torch.autograd.profiler.record_function('Dgen_forward'):
-                gen_img = self.run_G(gen_z, gen_c, sync=False)
+                gen_img = self.run_G(gen_z, gen_c, sync=False, group_split=self.group_split)
                 gen_logits = self.run_D(gen_img, gen_c, sync=False) # Gets synced by loss_Dreal.
                 training_stats.report('Loss/scores/fake', gen_logits)
                 training_stats.report('Loss/signs/fake', gen_logits.sign())

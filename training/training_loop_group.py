@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_group.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Sat 28 Aug 2021 15:22:52 AEST
+# --- Last Modified: Mon 30 Aug 2021 16:50:47 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -174,7 +174,8 @@ def training_loop(
     for name, module, opt_kwargs, reg_interval in [('G', [G, I], G_opt_kwargs, G_reg_interval), ('D', D, D_opt_kwargs, D_reg_interval)]:
         module_param = []
         for subm in module if isinstance(module, list) else [module]:
-            module_param += list(subm.parameters())
+            if subm is not None:
+                module_param += list(subm.parameters())
 
         if reg_interval is None:
             opt = dnnlib.util.construct_class_by_name(params=module_param, **opt_kwargs) # subclass of torch.optim.Optimizer
@@ -260,7 +261,8 @@ def training_loop(
             phase.opt.zero_grad(set_to_none=True)
             
             for subm in phase.module if isinstance(phase.module, list) else [phase.module]:
-                subm.requires_grad_(True)
+                if subm is not None:
+                    subm.requires_grad_(True)
 
             # Accumulate gradients over multiple rounds.
             for round_idx, (real_img, real_c, gen_z, gen_c) in enumerate(zip(phase_real_img, phase_real_c, phase_gen_z, phase_gen_c)):
@@ -270,7 +272,8 @@ def training_loop(
 
             # Update weights.
             for subm in phase.module if isinstance(phase.module, list) else [phase.module]:
-                subm.requires_grad_(False)
+                if subm is not None:
+                    subm.requires_grad_(False)
 
             with torch.autograd.profiler.record_function(phase.name + '_opt'):
                 def param_nan_to_num(mod):
@@ -278,7 +281,8 @@ def training_loop(
                         if param.grad is not None:
                             misc.nan_to_num(param.grad, nan=0, posinf=1e5, neginf=-1e5, out=param.grad)
                 for subm in phase.module if isinstance(phase.module, list) else [phase.module]:
-                    param_nan_to_num(subm)
+                    if subm is not None:
+                        param_nan_to_num(subm)
                 phase.opt.step()
             if phase.end_event is not None:
                 phase.end_event.record(torch.cuda.current_stream(device))
