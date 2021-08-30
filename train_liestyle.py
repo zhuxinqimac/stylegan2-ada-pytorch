@@ -8,7 +8,7 @@
 
 # --- File Name: train_liestyle.py
 # --- Creation Date: 24-08-2021
-# --- Last Modified: Mon 30 Aug 2021 22:50:24 AEST
+# --- Last Modified: Mon 30 Aug 2021 22:51:43 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -199,7 +199,9 @@ def setup_training_loop_kwargs(
                           z_dim=64, group_mat_dim=20, lie_alg_init_scale=0.001, commute_lamb=0, hessian_lamb=0), # Uses mixed-precision, unlike the original StyleGAN2.
     }
 
-    assert cfg in cfg_specs
+    # assert cfg in cfg_specs
+    if cfg not in cfg_specs:
+        cfg_specs[cfg] = construct_specs(dnnlib.EasyDict(cfg_specs['basic']), cfg)
     spec = dnnlib.EasyDict(cfg_specs[cfg])
     if cfg == 'auto':
         desc += f'{gpus:d}'
