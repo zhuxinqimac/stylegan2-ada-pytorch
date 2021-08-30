@@ -8,7 +8,7 @@
 
 # --- File Name: loss_liestylegan.py
 # --- Creation Date: 26-08-2021
-# --- Last Modified: Mon 30 Aug 2021 22:21:24 AEST
+# --- Last Modified: Mon 30 Aug 2021 22:57:21 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -127,7 +127,7 @@ class LieStyleGANLoss(Loss):
         if do_GregI:
             if not do_Gmain:
                 with torch.autograd.profiler.record_function('G_forward_in_regI'):
-                    gen_img, lie_group = self.run_G(gen_z, gen_c, sync=sync, return_gfeats=True, group_split=self.group_split)
+                    gen_img, _gen_ws, lie_group = self.run_G(gen_z, gen_c, sync=sync, return_gfeats=True, group_split=self.group_split)
             with torch.autograd.profiler.record_function('I_forward'):
                 out_z, out_g = self.run_I(gen_img, gen_c, sync=sync)
             with torch.autograd.profiler.record_function('Compute_regI_loss'):
