@@ -8,7 +8,7 @@
 
 # --- File Name: train_liestyle.py
 # --- Creation Date: 24-08-2021
-# --- Last Modified: Mon 30 Aug 2021 22:51:43 AEST
+# --- Last Modified: Tue 31 Aug 2021 15:37:04 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -37,11 +37,13 @@ class UserError(Exception):
 KEY_BRIEF_NAMES = {'z': 'z_dim', 'gnoi': 'use_noise', 'pfs': 'proj_feat_size', 'pfc': 'proj_feat_ch', 'lies': 'lie_alg_init_scale',
                    'gmat': 'group_mat_dim', 'ptype': 'projector_type', 'com': 'commute_lamb', 'hes': 'hessian_lamb', 'ani': 'anisotropy_lamb',
                    'pbase': 'post_exp_conv_feat_base', 'I': 'I_lambda', 'Ig': 'I_g_lambda', 'gncut': 'group_ncut',
-                   'mb': 'mb', 'mbstd': 'mbstd', 'fm': 'fmaps', 'lr': 'lrate', 'gm': 'gamma', 'ema': 'ema', 'nper': 'n_samples_per'}
+                   'mb': 'mb', 'mbstd': 'mbstd', 'fm': 'fmaps', 'lr': 'lrate', 'gm': 'gamma', 'ema': 'ema', 'nper': 'n_samples_per',
+                   'plw': 'pl_weight', 'mixp': 'style_mixing_prob', 'grin': 'G_reg_interval'}
 KEY_DTYPES = {'z_dim': int, 'use_noise': bool, 'proj_feat_size': int, 'proj_feat_ch': int, 'lie_alg_init_scale': float,
               'group_mat_dim': int, 'projector_type': str, 'commute_lamb': float, 'hessian_lamb': float, 'anisotropy_lamb': float,
               'post_exp_conv_feat_base': int, 'I_lambda': float, 'I_g_lambda': float, 'group_ncut': int,
-              'mb': int, 'mbstd': int, 'fmaps': float, 'lrate': float, 'gamma': float, 'ema': int, 'n_samples_per': int}
+              'mb': int, 'mbstd': int, 'fmaps': float, 'lrate': float, 'gamma': float, 'ema': int, 'n_samples_per': int,
+              'pl_weight': float, 'style_mixing_prob': float, 'G_reg_interval': int}
 
 def parse_cfg(cfg):
     '''
@@ -187,16 +189,14 @@ def setup_training_loop_kwargs(
 
     cfg_specs = {
         'auto':      dict(ref_gpus=-1, kimg=25000, mb=-1, mbstd=-1, fmaps=-1, lrate=-1, gamma=-1, ema=-1, ramp=0.05, n_samples_per=7,
-                          z_dim=64, lie_alg_init_scale=0.001, group_mat_dim=20,
+                          z_dim=64, lie_alg_init_scale=0.001, group_mat_dim=20, pl_weight=2, style_mixing_prob=0.9, G_reg_interval=4,
                           commute_lamb=0, hessian_lamb=0, anisotropy_lamb=0, I_lambda=0, I_g_lambda=0, group_ncut=0), # Populated dynamically based on resolution and GPU count.
         'basic': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
-                      z_dim=64, lie_alg_init_scale=0.001, group_mat_dim=20,
+                      z_dim=64, lie_alg_init_scale=0.001, group_mat_dim=20, pl_weight=2, style_mixing_prob=0.9, G_reg_interval=4,
                       commute_lamb=0, hessian_lamb=0, anisotropy_lamb=0, I_lambda=0, I_g_lambda=0, group_ncut=0),
         'celeba-hes_0.1-Ig_1': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
-                             z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20,
+                             z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, pl_weight=2, style_mixing_prob=0.9, G_reg_interval=4,
                              commute_lamb=0, hessian_lamb=0.1, anisotropy_lamb=0, I_lambda=0, I_g_lambda=1, group_ncut=0),
-        'stylegan2': dict(ref_gpus=8, kimg=25000, mb=32, mbstd=4, fmaps=1, lrate=0.002, gamma=10, ema=10, ramp=None, n_samples_per=7,
-                          z_dim=64, group_mat_dim=20, lie_alg_init_scale=0.001, commute_lamb=0, hessian_lamb=0), # Uses mixed-precision, unlike the original StyleGAN2.
     }
 
     # assert cfg in cfg_specs
@@ -254,14 +254,15 @@ def setup_training_loop_kwargs(
 
     # args.loss_kwargs = dnnlib.EasyDict(class_name='training.loss_liestylegan.LieStyleGANLoss', r1_gamma=spec.gamma,
                                        # commute_lamb=spec.commute_lamb, hessian_lamb=spec.hessian_lamb)
-    # args.loss_kwargs.pl_weight = 0 # disable path length regularization
-    # args.loss_kwargs.style_mixing_prob = 0 # disable style mixing
+    args.loss_kwargs.pl_weight = spec.pl_weight # disable path length regularization
+    args.loss_kwargs.style_mixing_prob = spec.style_mixing_prob # disable style mixing
 
     args.total_kimg = spec.kimg
     args.batch_size = spec.mb
     args.batch_gpu = spec.mb // spec.ref_gpus
     args.ema_kimg = spec.ema
     args.ema_rampup = spec.ramp
+    args.G_reg_interval = None if spec.G_reg_interval == 0 else spec.G_reg_interval
 
     if gamma is not None:
         assert isinstance(gamma, float)

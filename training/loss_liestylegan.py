@@ -8,7 +8,7 @@
 
 # --- File Name: loss_liestylegan.py
 # --- Creation Date: 26-08-2021
-# --- Last Modified: Mon 30 Aug 2021 22:57:21 AEST
+# --- Last Modified: Tue 31 Aug 2021 16:14:02 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -95,7 +95,7 @@ class LieStyleGANLoss(Loss):
         # Gmain: Maximize logits for generated images.
         if do_Gmain:
             with torch.autograd.profiler.record_function('Gmain_forward'):
-                gen_img, _gen_ws = self.run_G(gen_z, gen_c, sync=(sync and not do_Gpl)) # May get synced by Gpl.
+                gen_img, _gen_ws = self.run_G(gen_z, gen_c, sync=(sync and (not do_Gpl) and (not do_GregI))) # May get synced by Gpl.
                 gen_logits = self.run_D(gen_img, gen_c, sync=False)
                 training_stats.report('Loss/scores/fake', gen_logits)
                 training_stats.report('Loss/signs/fake', gen_logits.sign())
@@ -121,13 +121,12 @@ class LieStyleGANLoss(Loss):
                     anisotropy_loss = self.anisotropy_lamb * calc_anisotropy_loss(lie_alg_basis_outer)
                     training_stats.report('Loss/liealg/anisotropy_loss', anisotropy_loss)
             with torch.autograd.profiler.record_function('Regalg_backward'):
-                (hessian_loss + commute_loss + anisotropy_loss).mean().mul(gain).backward()
+                (gen_z[:, 0] * 0 + hessian_loss + commute_loss + anisotropy_loss).mean().mul(gain).backward()
 
         # GregI: Enforce InfoGAN loss.
         if do_GregI:
-            if not do_Gmain:
-                with torch.autograd.profiler.record_function('G_forward_in_regI'):
-                    gen_img, _gen_ws, lie_group = self.run_G(gen_z, gen_c, sync=sync, return_gfeats=True, group_split=self.group_split)
+            with torch.autograd.profiler.record_function('G_forward_in_regI'):
+                gen_img, _gen_ws, lie_group = self.run_G(gen_z, gen_c, sync=sync, return_gfeats=True, group_split=self.group_split)
             with torch.autograd.profiler.record_function('I_forward'):
                 out_z, out_g = self.run_I(gen_img, gen_c, sync=sync)
             with torch.autograd.profiler.record_function('Compute_regI_loss'):
@@ -140,7 +139,7 @@ class LieStyleGANLoss(Loss):
                     I_g_loss = self.I_g_lambda * calc_latent_recons(out_g, lie_group)
                     training_stats.report('Loss/GregI/I_g_loss', I_g_loss)
             with torch.autograd.profiler.record_function('RegI_backward'):
-                (I_loss + I_g_loss).mean().mul(gain).backward()
+                (gen_img[:, 0, 0, 0] * 0 + I_loss + I_g_loss).mean().mul(gain).backward()
 
         # Gpl: Apply path length regularization.
         if do_Gpl:
