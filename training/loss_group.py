@@ -8,7 +8,7 @@
 
 # --- File Name: loss_group.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Mon 30 Aug 2021 18:35:05 AEST
+# --- Last Modified: Tue 31 Aug 2021 16:21:11 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -157,7 +157,7 @@ class GroupGANLoss(Loss):
                     anisotropy_loss = self.anisotropy_lamb * calc_anisotropy_loss(lie_alg_basis_outer)
                     training_stats.report('Loss/liealg/anisotropy_loss', anisotropy_loss)
             with torch.autograd.profiler.record_function('Regalg_backward'):
-                (hessian_loss + commute_loss + anisotropy_loss).mean().mul(gain).backward()
+                (gen_z[:, 0] * 0 + hessian_loss + commute_loss + anisotropy_loss).mean().mul(gain).backward()
 
         # GregI: Enforce InfoGAN loss.
         if do_GregI:
@@ -176,7 +176,7 @@ class GroupGANLoss(Loss):
                     I_g_loss = self.I_g_lambda * calc_latent_recons(out_g, lie_group)
                     training_stats.report('Loss/GregI/I_g_loss', I_g_loss)
             with torch.autograd.profiler.record_function('RegI_backward'):
-                (I_loss + I_g_loss).mean().mul(gain).backward()
+                (gen_img[:, 0, 0, 0] * 0 + I_loss + I_g_loss).mean().mul(gain).backward()
 
         # Dmain: Minimize logits for generated images.
         loss_Dgen = 0
