@@ -8,7 +8,7 @@
 
 # --- File Name: networks_liegan.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Mon 30 Aug 2021 16:55:22 AEST
+# --- Last Modified: Tue 31 Aug 2021 14:45:36 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -312,10 +312,13 @@ class DiscriminatorEpilogueI(torch.nn.Module):
         self.mbstd = MinibatchStdLayer(group_size=mbstd_group_size, num_channels=mbstd_num_channels) if mbstd_num_channels > 0 else None
         self.conv = Conv2dLayer(in_channels + mbstd_num_channels, in_channels, kernel_size=3, activation=activation, conv_clamp=conv_clamp)
         self.fc = FullyConnectedLayer(in_channels * (resolution ** 2), in_channels, activation=activation)
-        if z_dim is not None:
-            self.out = FullyConnectedLayer(in_channels, z_dim)
         if mat_dim is not None:
-            self.out_2 = FullyConnectedLayer(in_channels, mat_dim * mat_dim)
+            self.out_gfeat = FullyConnectedLayer(in_channels, mat_dim * mat_dim)
+        if (mat_dim is not None) and (z_dim is not None):
+            self.out = nn.Sequential([FullyConnectedLayer(mat_dim * mat_dim, mat_dim * mat_dim),
+                                      FullyConnectedLayer(mat_dim * mat_dim, z_dim)])
+        elif z_dim is not None:
+            self.out = FullyConnectedLayer(mat_dim * mat_dim, z_dim)
 
     def forward(self, x, img, force_fp32=False):
         misc.assert_shape(x, [None, self.in_channels, self.resolution, self.resolution]) # [NCHW]
@@ -337,10 +340,12 @@ class DiscriminatorEpilogueI(torch.nn.Module):
         x = self.fc(x.flatten(1))
 
         out_z, out_g = None, None
-        if self.z_dim is not None:
-            out_z = self.out(x)
         if self.mat_dim is not None:
-            out_g = self.out_2(x)
+            out_g = self.out_gfeat(x)
+        if (self.mat_dim is not None) and (self.z_dim is not None):
+            out_z = self.out(out_g)
+        elif self.z_dim is not None:
+            out_z = self.out(x)
 
         return out_z, out_g
 
