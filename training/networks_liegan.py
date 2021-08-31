@@ -8,7 +8,7 @@
 
 # --- File Name: networks_liegan.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Tue 31 Aug 2021 20:46:28 AEST
+# --- Last Modified: Tue 31 Aug 2021 23:39:23 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -327,7 +327,7 @@ class DiscriminatorEpilogueI(torch.nn.Module):
                                      nn.ReLU(True),
                                      FullyConnectedLayer(mat_dim * mat_dim, z_dim))
         elif z_dim is not None:
-            self.out = FullyConnectedLayer(mat_dim * mat_dim, z_dim)
+            self.out = FullyConnectedLayer(in_channels, z_dim)
 
     def forward(self, x, img, force_fp32=False):
         misc.assert_shape(x, [None, self.in_channels, self.resolution, self.resolution]) # [NCHW]
