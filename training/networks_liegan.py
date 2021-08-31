@@ -8,7 +8,7 @@
 
 # --- File Name: networks_liegan.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Tue 31 Aug 2021 14:55:41 AEST
+# --- Last Modified: Tue 31 Aug 2021 19:33:54 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -316,6 +316,7 @@ class DiscriminatorEpilogueI(torch.nn.Module):
             self.out_gfeat = FullyConnectedLayer(in_channels, mat_dim * mat_dim)
         if (mat_dim is not None) and (z_dim is not None):
             self.out = nn.Sequential(FullyConnectedLayer(mat_dim * mat_dim, mat_dim * mat_dim),
+                                     nn.ReLU(True),
                                      FullyConnectedLayer(mat_dim * mat_dim, z_dim))
         elif z_dim is not None:
             self.out = FullyConnectedLayer(mat_dim * mat_dim, z_dim)
