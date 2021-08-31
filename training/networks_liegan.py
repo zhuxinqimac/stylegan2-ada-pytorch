@@ -8,7 +8,7 @@
 
 # --- File Name: networks_liegan.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Tue 31 Aug 2021 19:33:54 AEST
+# --- Last Modified: Tue 31 Aug 2021 20:46:28 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -72,6 +72,7 @@ class LieGroupCore(nn.Module):
                  lie_alg_init_scale=0.001,   # Lie algebra basis initialization scale.
                  mat_dim=10,                 # Lie algebra (group) matrix dimension.
                  ncut=0,                     # Number of cuts in latents if performing split.
+                 use_code_mask=False,        # If use a mask to separate activated and inactivated codes.
     ):
         super().__init__()
         self.z_dim = z_dim
@@ -80,13 +81,20 @@ class LieGroupCore(nn.Module):
         self.ncut = ncut
 
         self.lie_alg_basis = init_alg_basis(self.z_dim, self.mat_dim, self.lie_alg_init_scale) # [z_dim, mat_dim, mat_dim]
+        self.use_code_mask = use_code_mask
+        if use_code_mask:
+            self.code_mask_logits = nn.Parameter(torch.normal(mean=torch.zeros([z_dim]), std=1), requires_grad=True)
 
-    def forward(self, z, c=None, group_split=False):
+    def forward(self, z, c=None, group_split=False, remove_code_mask=False):
         '''
         z: [b, z_dim]
         return [b, mat_dim, mat_dim]
         '''
         _ = c # Ignore c
+        if self.use_code_mask and not remove_code_mask:
+            code_mask = torch.cumsum(torch.softmax(self.code_mask_logits[np.newaxis, ...], dim=1), dim=1) # [1, z_dim]
+            z = z * code_mask # [b, z_dim]
+
         if group_split:
             # print('Splitting group...')
             masked_z_ls = split_latents(z, self.ncut) # [(b, z_dim), (b, z_dim), ...] len==ncut+1
