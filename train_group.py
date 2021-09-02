@@ -8,7 +8,7 @@
 
 # --- File Name: train_group.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Tue 31 Aug 2021 20:45:09 AEST
+# --- Last Modified: Thu 02 Sep 2021 23:21:35 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -209,7 +209,7 @@ def setup_training_loop_kwargs(
     }
 
     # assert cfg in cfg_specs
-    if cfg not in cfg_specs:
+    if cfg != 'basic':
         cfg_specs[cfg] = construct_specs(dnnlib.EasyDict(cfg_specs['basic']), cfg)
     spec = dnnlib.EasyDict(cfg_specs[cfg])
     if cfg == 'auto':

@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 03 Sep 2021 02:50:22 AEST
+# --- Last Modified: Fri 28 May 2021 00:29:39 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -34,7 +34,8 @@ from torch_utils.ops import conv2d_gradfix
 from torch_utils.ops import grid_sample_gradfix
 from training.training_loop import setup_snapshot_image_grid, save_image_grid
 from training.training_loop_uneven import get_traversal
-from training.w_walk_utils import get_w_walk, add_outline
+from training.walk_utils import run_M, get_walk_wfixed, get_walk, get_walk_on_z
+from training.walk_utils import get_diff_masks, get_vae_walk, add_outline
 
 import legacy
 from metrics import metric_main
@@ -43,6 +44,7 @@ from metrics import metric_main
 
 def training_loop(
     run_dir                 = '.',      # Output directory.
+    training_set_kwargs     = {},       # Options for training set.
     data_loader_kwargs      = {},       # Options for torch.utils.data.DataLoader.
     M_kwargs                = {},       # Options for navigator network.
     M_opt_kwargs            = {},       # Options for navigator optimizer.
@@ -69,6 +71,7 @@ def training_loop(
     trav_walk_scale         = 0.01,     # Traversal walking scale.
     recursive_walk          = True,     # If recursive walk.
     show_normD              = False,    # If normD when show heatmap.
+    use_heat_max            = False,    # If use the max of heat in trav.
 ):
     # Initialize.
     start_time = time.time()
@@ -76,7 +79,8 @@ def training_loop(
     np.random.seed(random_seed * num_gpus + rank)
     torch.manual_seed(random_seed * num_gpus + rank)
     torch.backends.cudnn.benchmark = cudnn_benchmark    # Improves training speed.
-    torch.backends.cuda.matmul.allow_tf32 = allow_tf32  # Allow PyTorch to internally use tf32 for matmul
+    if any(torch.__version__.startswith(x) for x in ['1.7.', '1.8.', '1.9']):
+        torch.backends.cuda.matmul.allow_tf32 = allow_tf32  # Allow PyTorch to internally use tf32 for matmul
     torch.backends.cudnn.allow_tf32 = allow_tf32        # Allow PyTorch to internally use tf32 for convolutions
     conv2d_gradfix.enabled = True                       # Improves training speed.
     grid_sample_gradfix.enabled = True                  # Avoids errors with the augmentation pipe.
@@ -97,7 +101,7 @@ def training_loop(
     # Construct Navigator networks.
     if rank == 0:
         print('Constructing navigator networks...')
-    common_kwargs = dict(c_dim=G.c_dim, w_dim=G.w_dim, num_ws=G.num_ws)
+    common_kwargs = dict(c_dim=G.c_dim, w_dim=G.w_dim, num_ws=G.num_ws, g_z_dim=G.z_dim, resolution=G.img_resolution, nc=G.img_channels)
     M = dnnlib.util.construct_class_by_name(**M_kwargs, **common_kwargs).train().requires_grad_(False).to(device) # subclass of torch.nn.Module
 
     # Resume from existing pickle.
@@ -113,13 +117,19 @@ def training_loop(
     if rank == 0:
         print('Passed resume')
 
+    print('M.post_vae_lambda:', M.post_vae_lambda)
     # Print network summary tables.
     if rank == 0:
         z = torch.empty([batch_gpu, G.z_dim], device=device)
+        m_z = torch.empty([batch_gpu, M.z_dim], device=device)
         c = torch.empty([batch_gpu, G.c_dim], device=device)
         img = misc.print_module_summary(G, [z, c])
-        w = torch.empty([batch_gpu, M.num_ws, M.w_dim], device=device)
+        w = torch.empty([batch_gpu, M.w_dim], device=device)
         misc.print_module_summary(M, [w])
+        if M.post_vae_lambda != 0:
+            v = torch.empty([batch_gpu, M.z_dim], device=device)
+            misc.print_module_summary(M.post_enc, [img])
+            misc.print_module_summary(M.post_dec, [v])
 
     # Distribute across GPUs.
     if rank == 0:
@@ -144,7 +154,7 @@ def training_loop(
     phases = []
     for name, module, opt_kwargs in [('M', M, M_opt_kwargs)]:
         opt = dnnlib.util.construct_class_by_name(params=module.parameters(), **opt_kwargs) # subclass of torch.optim.Optimizer
-        phases += [dnnlib.EasyDict(name=name+'all', module=module, opt=opt, interval=1)]
+        phases += [dnnlib.EasyDict(name=name+'both', module=module, opt=opt, interval=1)]
 
     for phase in phases:
         phase.start_event = None
@@ -159,12 +169,46 @@ def training_loop(
     grid_c = None
     if rank == 0:
         print('Exporting sample images...')
-        walk_grid_size = (n_samples_per, M.nv_dim) # (gw, gh)
+        walk_grid_size = (n_samples_per, M.z_dim) # (gw, gh)
         z_origin = torch.randn([1, G.z_dim], device=device)
         c_origin = torch.randn([1, G.c_dim], device=device)
-        w_origin = G.mapping(z_origin, c_origin, truncation_psi=0.7) # (1, num_ws, w_dim)
-        w_walk = get_w_walk(w_origin, M, n_samples_per, trav_walk_scale, recursive_walk=recursive_walk).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
-        images = torch.cat([G.synthesis(w, noise_mode='const') for w in w_walk]) # (gh * gw, c, h, w)
+        if not M.apply_M_on_z:
+            w_origin = G.mapping(z_origin, c_origin, truncation_psi=0.7) # (1, num_ws, w_dim)
+            if recursive_walk:
+                w_walk = get_walk(w_origin, M, n_samples_per, trav_walk_scale, use_heat_max).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
+            else:
+                w_var = run_M(M, w_origin[:, 0]) # (1, M.z_dim, w_dim+num_ws)
+                w_walk = get_walk_wfixed(w_origin, w_var, M, n_samples_per, trav_walk_scale, use_heat_max).split(batch_gpu)
+            images = torch.cat([G.synthesis(w, noise_mode='const') for w in w_walk]) # (gh * gw, c, h, w)
+        else:
+            z_walk = get_walk_on_z(z_origin, M, n_samples_per, trav_walk_scale).split(batch_gpu)
+            images = torch.cat([G.synthesis(G.mapping(z, c_origin.repeat(z.size(0), 1), truncation_psi=0.7), noise_mode='const') for z in z_walk])
+
+        if M.post_vae_lambda != 0:
+            v_origin = torch.randn([1, M.z_dim], device=device)
+            v_walk = get_vae_walk(v_origin, M, n_samples_per).split(batch_gpu)
+            v_images = torch.cat([M.post_dec(v).sigmoid() for v in v_walk])
+            if save_size < v_images.size(-1):
+                v_images = F.adaptive_avg_pool2d(v_images, (save_size, save_size)).cpu().numpy()
+            else:
+                v_images = v_images.cpu().numpy()
+            v_images = add_outline(v_images)
+            save_image_grid(v_images, os.path.join(run_dir, 'vae_trav_init.png'), drange=[0,1], grid_size=walk_grid_size)
+        else:
+            masks = get_diff_masks(images, n_samples_per, M.z_dim, S, save_size, normD=show_normD).cpu().numpy()
+            masks = add_outline(masks)
+            save_image_grid(masks, os.path.join(run_dir, 'diff_init.png'), drange=[0,1], grid_size=(loss_kwargs.S_L, M.z_dim))
+
+        if M.wvae_lambda != 0:
+            v_origin = torch.randn([1, M.z_dim], device=device)
+            v_walk = get_vae_walk(v_origin, M, n_samples_per).split(batch_gpu)
+            v_images = torch.cat([G.synthesis(M.vae_dec(v).unsqueeze(1).repeat(1, M.num_ws, 1), noise_mode='const') for v in v_walk])
+            if save_size < v_images.size(-1):
+                v_images = F.adaptive_avg_pool2d(v_images, (save_size, save_size)).cpu().numpy()
+            else:
+                v_images = v_images.cpu().numpy()
+            v_images = add_outline(v_images)
+            save_image_grid(v_images, os.path.join(run_dir, 'wvae_trav_init.png'), drange=[-1,1], grid_size=walk_grid_size)
 
         if save_size < images.size(-1):
             images = F.adaptive_avg_pool2d(images, (save_size, save_size)).cpu().numpy()
@@ -199,12 +243,19 @@ def training_loop(
     tick_start_time = time.time()
     maintenance_time = tick_start_time - start_time
     batch_idx = 0
-    n_round = batch_size // (batch_gpu * num_gpus)
     if progress_fn is not None:
         progress_fn(0, total_kimg)
     while True:
+
+        # Fetch training data.
+        with torch.autograd.profiler.record_function('data_fetch'):
+            all_gen_z = torch.randn([len(phases) * batch_size, G.z_dim], device=device)
+            all_gen_z = [phase_gen_z.split(batch_gpu) for phase_gen_z in all_gen_z.split(batch_size)]
+            all_gen_c = torch.randn([len(phases) * batch_size, G.c_dim], device=device)
+            all_gen_c = [phase_gen_c.split(batch_gpu) for phase_gen_c in all_gen_c.split(batch_size)]
+
         # Execute training phases.
-        for phase in phases:
+        for phase, phase_gen_z, phase_gen_c in zip(phases, all_gen_z, all_gen_c):
             if batch_idx % phase.interval != 0:
                 continue
 
@@ -212,14 +263,17 @@ def training_loop(
             if phase.start_event is not None:
                 phase.start_event.record(torch.cuda.current_stream(device))
             
-            phase.opt.zero_grad(set_to_none=True)
+            if any(torch.__version__.startswith(x) for x in ['1.7.', '1.8.', '1.9']):
+                phase.opt.zero_grad(set_to_none=True)
+            else:
+                phase.opt.zero_grad() # Remove set_to_none to support pytorch 1.4
             phase.module.requires_grad_(True)
 
             # Accumulate gradients over multiple rounds.
-            for round_idx in range(n_round):
+            for round_idx, (gen_z, gen_c) in enumerate(zip(phase_gen_z, phase_gen_c)):
                 sync = (round_idx == batch_size // (batch_gpu * num_gpus) - 1)
                 gain = phase.interval
-                loss.accumulate_gradients(phase=phase.name, sync=sync, gain=gain)
+                loss.accumulate_gradients(phase=phase.name, gen_z=gen_z, gen_c=gen_c, sync=sync, gain=gain)
 
             # Update weights.
             phase.module.requires_grad_(False)
@@ -269,9 +323,43 @@ def training_loop(
         if (rank == 0) and (image_snapshot_ticks is not None) and (done or cur_tick % image_snapshot_ticks == 0):
             z_origin = torch.randn([1, G.z_dim], device=device)
             c_origin = torch.randn([1, G.c_dim], device=device)
-            w_origin = G.mapping(z_origin, c_origin, truncation_psi=0.7) # (1, num_ws, w_dim)
-            w_walk = get_w_walk(w_origin, M, n_samples_per, trav_walk_scale, recursive_walk=recursive_walk).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
-            images = torch.cat([G.synthesis(w, noise_mode='const') for w in w_walk]) # (gh * gw, c, h, w)
+            if not M.apply_M_on_z:
+                w_origin = G.mapping(z_origin, c_origin, truncation_psi=0.7) # (1, num_ws, w_dim)
+                if recursive_walk:
+                    w_walk = get_walk(w_origin, M, n_samples_per, trav_walk_scale, use_heat_max).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
+                else:
+                    w_var = run_M(M, w_origin[:, 0]) # (1, M.z_dim, w_dim+num_ws)
+                    w_walk = get_walk_wfixed(w_origin, w_var, M, n_samples_per, trav_walk_scale, use_heat_max).split(batch_gpu)
+                images = torch.cat([G.synthesis(w, noise_mode='const') for w in w_walk]) # (gh * gw, c, h, w)
+            else:
+                z_walk = get_walk_on_z(z_origin, M, n_samples_per, trav_walk_scale).split(batch_gpu)
+                images = torch.cat([G.synthesis(G.mapping(z, c_origin.repeat(z.size(0), 1), truncation_psi=0.7), noise_mode='const') for z in z_walk])
+
+            if M.post_vae_lambda != 0:
+                v_origin = torch.randn([1, M.z_dim], device=device)
+                v_walk = get_vae_walk(v_origin, M, n_samples_per).split(batch_gpu)
+                v_images = torch.cat([M.post_dec(v).sigmoid() for v in v_walk])
+                if save_size < v_images.size(-1):
+                    v_images = F.adaptive_avg_pool2d(v_images, (save_size, save_size)).cpu().numpy()
+                else:
+                    v_images = v_images.cpu().numpy()
+                v_images = add_outline(v_images)
+                save_image_grid(v_images, os.path.join(run_dir, f'vae_trav_{cur_nimg//1000:06d}.png'), drange=[0,1], grid_size=walk_grid_size)
+            else:
+                masks = get_diff_masks(images, n_samples_per, M.z_dim, S, save_size, normD=show_normD).cpu().numpy()
+                masks = add_outline(masks)
+                save_image_grid(masks, os.path.join(run_dir, f'diff_{cur_nimg//1000:06d}.png'), drange=[0,1], grid_size=(loss_kwargs.S_L, M.z_dim))
+
+            if M.wvae_lambda != 0:
+                v_origin = torch.randn([1, M.z_dim], device=device)
+                v_walk = get_vae_walk(v_origin, M, n_samples_per).split(batch_gpu)
+                v_images = torch.cat([G.synthesis(M.vae_dec(v).unsqueeze(1).repeat(1, M.num_ws, 1), noise_mode='const') for v in v_walk])
+                if save_size < v_images.size(-1):
+                    v_images = F.adaptive_avg_pool2d(v_images, (save_size, save_size)).cpu().numpy()
+                else:
+                    v_images = v_images.cpu().numpy()
+                v_images = add_outline(v_images)
+                save_image_grid(v_images, os.path.join(run_dir, f'wvae_trav_{cur_nimg//1000:06d}.png'), drange=[-1,1], grid_size=walk_grid_size)
 
             if save_size < images.size(-1):
                 images = F.adaptive_avg_pool2d(images, (save_size, save_size)).cpu().numpy()
@@ -284,7 +372,7 @@ def training_loop(
         snapshot_pkl = None
         snapshot_data = None
         if (network_snapshot_ticks is not None) and (done or cur_tick % network_snapshot_ticks == 0):
-            snapshot_data = dict()
+            snapshot_data = dict(training_set_kwargs=dict(training_set_kwargs))
             for name, module in [('M', M)]:
                 if module is not None:
                     if num_gpus > 1:
@@ -296,6 +384,18 @@ def training_loop(
             if rank == 0:
                 with open(snapshot_pkl, 'wb') as f:
                     pickle.dump(snapshot_data, f)
+
+        # Evaluate metrics.
+        # if (snapshot_data is not None) and (len(metrics) > 0):
+            # if rank == 0:
+                # print('Evaluating metrics...')
+            # for metric in metrics:
+                # result_dict = metric_main.calc_metric(metric=metric, G=snapshot_data['G_ema'],
+                    # dataset_kwargs=training_set_kwargs, num_gpus=num_gpus, rank=rank, device=device)
+                # if rank == 0:
+                    # metric_main.report_metric(result_dict, run_dir=run_dir, snapshot_pkl=snapshot_pkl)
+                # stats_metrics.update(result_dict.results)
+        # del snapshot_data # conserve memory
 
         # Collect statistics.
         for phase in phases:

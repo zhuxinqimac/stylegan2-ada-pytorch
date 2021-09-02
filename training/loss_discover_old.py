@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 03 Sep 2021 03:39:11 AEST
+# --- Last Modified: Thu 02 Sep 2021 22:28:38 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -24,68 +24,43 @@ from torch_utils import misc
 from torch_utils.ops import conv2d_gradfix
 from training.loss import Loss
 
-def get_color_cuts(n_segs, len_v):
-    '''
-    Generate an n_segs+1 array with 0 min and len_v max.
-    e.g. n_segs = 5, len_v = 8: return [0,1,3,4,6,8]
-    '''
-    np_cuts = np.linspace(0, len_v, num=n_segs+1, dtype=np.int)
-    return np_cuts
 
-# loss_compose = extract_compose_loss(diff_1, diff_2, diff_1p2)
-def get_diff(orig, end):
-    if isinstance(orig, torch.Tensor):
-        return end - orig
-    else:
-        diff = []
-        for i, orig_f in enumerate(orig):
-            diff.append(end[i] - orig_f)
-        return diff
+def fuse_hat(x_orig, x, avg_x, onehot_mask):
+    x_orig_hat = onehot_mask * x_orig + (1 - onehot_mask) * avg_x
+    x_hat = onehot_mask * x + (1 - onehot_mask) * avg_x
+    return x_orig_hat, x_hat
 
-def square_loss(diff_1, diff_2, diff_1p2):
-    return ((diff_1 + diff_2) - diff_1p2).square().flatten(1).mean(1) # [b]
+def reparametrise_gaussian(mu, lv):
+    std = torch.exp(0.5 * lv)
+    eps = torch.randn_like(std)
+    return mu + std * eps
 
-def extract_compose_loss(diff_1, diff_2, diff_1p2):
-    if isinstance(diff_1, torch.Tensor):
-        return square_loss(diff_1, diff_2, diff_1p2)
-    else:
-        # diff_x is a list of feature maps.
-        loss_ls = [square_loss(df_1, diff_2[i], diff_1p2[i])[:, np.newaxis] for i, df_1 in enumerate(diff_1)]
-        return torch.cat(loss_ls, dim=1).mean(1)
+def gaussian_kl(mu, logvar):
+    kld = -0.5*(1 + logvar - mu.pow(2) - logvar.exp())
+    kld_mean = kld.sum(dim=-1).mean()
+    return kld_mean
 
 #----------------------------------------------------------------------------
 class DiscoverLoss(Loss):
     def __init__(self, device, G_mapping, G_synthesis, M, S, S_L, norm_on_depth,
-                 compose_lamb=0., contrast_lamb=1., batch_gpu=4, n_colors=1,
-                 div_lamb=0., norm_lamb=0., var_sample_scale=1.,
+                 div_lambda=0., div_heat_lambda=0., norm_lambda=0., var_sample_scale=1.,
                  var_sample_mean=0., sensor_used_layers=5, use_norm_mask=True,
                  divide_mask_sum=True, use_dynamic_scale=True, use_norm_as_mask=False,
-                 diff_avg_lerp_rate=0.01, lerp_lamb=0., lerp_norm=False,
-                 neg_lamb=1., pos_lamb=1., neg_on_self=False, use_catdiff=False):
+                 diff_avg_lerp_rate=0.01, lerp_lambda=0., lerp_norm=False,
+                 neg_lambda=1., pos_lambda=1., neg_on_self=False, use_catdiff=False):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
         self.G_synthesis = G_synthesis
         self.M = M
-        if isinstance(self.M, torch.nn.parallel.DistributedDataParallel):
-            self.nv_dim = self.M.module.nv_dim
-            self.num_ws = self.M.module.num_ws
-            self.w_dim = self.M.module.w_dim
-        else:
-            self.nv_dim = self.M.nv_dim
-            self.num_ws = self.M.num_ws
-            self.w_dim = self.M.w_dim
         self.S = S
         self.S_L = S_L
-        self.n_colors = n_colors
-        self.batch_gpu = batch_gpu
-        self.compose_lamb = compose_lamb
-        self.contrast_lamb = contrast_lamb
         self.norm_on_depth = norm_on_depth
         self.use_norm_mask = use_norm_mask
         self.divide_mask_sum = divide_mask_sum
-        self.div_lamb = div_lamb
-        self.norm_lamb = norm_lamb
+        self.div_lambda = div_lambda
+        self.div_heat_lambda = div_heat_lambda
+        self.norm_lambda = norm_lambda
         self.use_dynamic_scale = use_dynamic_scale
         self.var_sample_scale = var_sample_scale
         self.var_sample_mean = var_sample_mean
@@ -93,65 +68,53 @@ class DiscoverLoss(Loss):
         self.cos_fn_diversity = nn.CosineSimilarity(dim=3)
         self.sensor_used_layers = sensor_used_layers
         self.use_norm_as_mask = use_norm_as_mask
-        self.neg_lamb = neg_lamb
-        self.pos_lamb = pos_lamb
+        self.neg_lambda = neg_lambda
+        self.pos_lambda = pos_lambda
         self.neg_on_self = neg_on_self
         self.use_catdiff = use_catdiff
         assert self.sensor_used_layers <= self.S_L
 
         self.diff_avg_lerp_rate = diff_avg_lerp_rate
-        self.lerp_lamb = lerp_lamb
+        self.lerp_lambda = lerp_lambda
         self.lerp_norm = lerp_norm
-        if self.lerp_lamb != 0:
+        if self.lerp_lambda != 0:
             with torch.no_grad():
                 outs = self.run_S(torch.zeros(1, G_synthesis.img_channels, G_synthesis.img_resolution, G_synthesis.img_resolution, device=self.device))
             if self.lerp_norm:
                 outs = [torch.norm(x, dim=1, keepdim=True) for x in outs] # list of (1, hi, wi)
             if not self.use_catdiff:
-                self.M.diff_mask_avg_ls = [torch.zeros_like(x, device=self.device).repeat(self.nv_dim, 1, 1, 1) for x in outs] # list of (z_dim, ci, hi, wi)
+                self.M.diff_mask_avg_ls = [torch.zeros_like(x, device=self.device).repeat(self.M.z_dim, 1, 1, 1) for x in outs] # list of (z_dim, ci, hi, wi)
             else:
                 feat_len = sum([x.size(1) for x in outs])
-                self.M.diff_mask_avg_ls = [torch.zeros((self.nv_dim, feat_len, 32, 32), device=self.device)] # list of (z_dim, c_sum, h, w)
+                self.M.diff_mask_avg_ls = [torch.zeros((self.M.z_dim, feat_len, 32, 32), device=self.device)] # list of (z_dim, c_sum, h, w)
 
-    def run_G_mapping(self, all_z, all_c):
+    def run_G_mapping(self, z, c):
         # with misc.ddp_sync(self.G_mapping, sync):
-        ws = [self.G_mapping(z, c) for z, c in zip(all_z.split(self.batch_gpu), all_z.split(self.batch_gpu))] # (b, num_ws, w_dim)
-        ws = torch.cat(ws, dim=0)
+        ws = self.G_mapping(z, c) # (b, num_ws, w_dim)
         return ws
 
-    def run_G_synthesis(self, all_ws):
+    def run_G_synthesis(self, ws):
         # ws: (b, num_ws, w_dim)
         # with misc.ddp_sync(self.G_synthesis, sync):
-        imgs = [self.G_synthesis(ws) for ws in all_ws.split(self.batch_gpu)] # (b, c, h, w)
-        imgs = torch.cat(imgs, dim=0)
-        return imgs
+        img = self.G_synthesis(ws)
+        return img
 
-    def run_M(self, all_ws, sync):
+    def run_M(self, ws, sync):
         with misc.ddp_sync(self.M, sync):
-            delta = [self.M(ws) for ws in all_ws.split(self.batch_gpu)] # (b, c, h, w)
-        delta = torch.cat(delta, dim=0)
+            delta = self.M(ws)
         return delta
 
-    def run_S(self, all_imgs):
+    def run_S(self, imgs):
         # with misc.ddp_sync(self.S, sync):
-        if all_imgs.size(1) == 1:
-            all_imgs = all_imgs.repeat(1, 3, 1, 1)
-        for i, imgs in enumerate(all_imgs.split(self.batch_gpu)):
-            feats_tmp_ls = self.S.forward(imgs) # [f1, f2, f3]
-            if i == 0:
-                feats_ls = feats_tmp_ls
-            else:
-                feats_ls = [torch.cat([feats, feats_tmp_ls[j]]) for j, feats in enumerate(feats_ls)]
-        return feats_ls
+        if imgs.size(1) == 1:
+            imgs = imgs.repeat(1, 3, 1, 1)
+        outs = self.S.forward(imgs)
+        return outs
 
-    def sample_batch_pos_neg_dirs(self, batch, z_dim, without_repeat=True):
-        if without_repeat:
-            rand = torch.rand(batch, z_dim)
-            z_dim_perm = rand.argsort(dim=1) # (b, z_dim)
-            return z_dim_perm[:, :2]
-        else:
-            rand = torch.randint(z_dim, size=[batch, 2])
-            return rand
+    def sample_batch_pos_neg_dirs(self, batch, z_dim):
+        rand = torch.rand(batch, z_dim)
+        z_dim_perm = rand.argsort(dim=1) # (b, z_dim)
+        return z_dim_perm[:, :2]
 
     def get_norm_mask(self, diff):
         # norm = torch.linalg.norm(diff, dim=1) # (0.5batch, h, w)
@@ -204,7 +167,7 @@ class DiscoverLoss(Loss):
             loss_neg = (cos_sim_neg**2).mean(dim=[1,2])
         training_stats.report('Loss/M/loss_diff_pos_{}'.format(idx), loss_pos)
         training_stats.report('Loss/M/loss_diff_neg_{}'.format(idx), loss_neg)
-        loss = self.pos_lamb * loss_pos + self.neg_lamb * loss_neg # (0.5batch)
+        loss = self.pos_lambda * loss_pos + self.neg_lambda * loss_neg # (0.5batch)
         return loss
 
     def extract_loss_L(self, diff_q, diff_pos, diff_neg, idx, pos_neg_idx):
@@ -230,7 +193,7 @@ class DiscoverLoss(Loss):
         # Norm mask moving avg loss:
         loss_lerp = self.compute_lerp_loss(diff_q, diff_pos, diff_neg, pos_neg_idx, idx)
 
-        return loss_diff + self.norm_lamb * loss_norm + self.lerp_lamb * loss_lerp
+        return loss_diff + self.norm_lambda * loss_norm + self.lerp_lambda * loss_lerp
 
     def extract_norm_mask_wdepth(self, diff_ls):
         norm_mask_ls, norm_ls, max_ls, min_ls = [], [], [], []
@@ -259,7 +222,7 @@ class DiscoverLoss(Loss):
 
     def compute_lerp_loss(self, diff_q, diff_pos, diff_neg, pos_neg_idx, feats_idx):
         loss_lerp = 0.
-        if self.lerp_lamb != 0:
+        if self.lerp_lambda != 0:
             # print('using lerp loss')
             b_half = pos_neg_idx.size(0)
             norm_size = self.M.diff_mask_avg_ls[feats_idx].size() # (z_dim, ci, hi, wi)
@@ -285,7 +248,7 @@ class DiscoverLoss(Loss):
 
             # Norm mask moving avg loss:
             loss_lerp = self.compute_lerp_loss(diff_q_i, diff_pos_ls[i], diff_neg_ls[i], pos_neg_idx, i)
-            loss += loss_i + self.lerp_lamb * loss_lerp
+            loss += loss_i + self.lerp_lambda * loss_lerp
 
         return loss
 
@@ -325,7 +288,7 @@ class DiscoverLoss(Loss):
             training_stats.report('Loss/M/loss_diff', loss_diff)
             loss_norm = self.extract_depth_norm_loss(norm_q_ls, norm_pos_ls, norm_neg_ls, mask_q_ls, mask_pos_ls, mask_neg_ls)
             training_stats.report('Loss/M/loss_norm', loss_norm)
-            loss = loss_diff + self.norm_lamb * loss_norm
+            loss = loss_diff + self.norm_lambda * loss_norm
         return loss
 
     def extract_catdiff_loss(self, outs, pos_neg_idx):
@@ -361,129 +324,174 @@ class DiscoverLoss(Loss):
         # norm = torch.norm(diff, dim=1) # (0.5batch, h, w)
         cos_div = self.cos_fn_diversity(delta1, delta2) # (b/1, z_dim, z_dim)
         # print('cos_div:', cos_div)
-        div_mask = 1. - torch.eye(self.nv_dim, device=delta.device).view(1, self.nv_dim, self.nv_dim)
+        div_mask = 1. - torch.eye(self.M.z_dim, device=delta.device).view(1, self.M.z_dim, self.M.z_dim)
         loss = (cos_div * div_mask)**2
         return loss.sum(dim=[1,2]).mean()
 
-    def get_multicolor_ws(self, n_colors):
-        all_gen_z = torch.randn([n_colors*self.batch_gpu, self.G_mapping.z_dim], device=self.device)
-        all_gen_z = list(all_gen_z.split(self.batch_gpu))
-        all_gen_c = torch.randn([n_colors*self.batch_gpu, self.G_mapping.c_dim], device=self.device)
-        all_gen_c = list(all_gen_c.split(self.batch_gpu))
+    def get_wvae_loss(self, ws, ws_q, ws_pos, pos_neg_idx):
+        '''
+        ws: (b, w_dim)
+        ws_q, ws_pos: (b//2, w_dim)
+        pos_neg_idx: (b//2, 2)
+        '''
+        b_size = ws.size(0)
+        w_all = torch.cat([ws, ws_q, ws_pos], dim=0) # (2b, w_dim)
+        mu_all, logvar_all = torch.split(self.M.vae_enc(w_all), self.M.z_dim+self.M.wvae_noise, dim=1) # (2b, z_dim+noise)
+        mu_noise, logvar_noise = mu_all[:, self.M.z_dim:], logvar_all[:, self.M.z_dim:] # (2b, noise)
+        mu_q_orig, mu_pos_orig, mu_q, mu_pos = torch.split(mu_all[:, :self.M.z_dim], b_size//2, dim=0) # (b//2, z_dim)
+        logvar_q_orig, logvar_pos_orig, logvar_q, logvar_pos = torch.split(logvar_all[:, :self.M.z_dim], b_size//2, dim=0) # (b//2, z_dim)
 
-        ws_orig = self.G_mapping.w_avg.clone().view(1, 1, self.G_mapping.w_dim).repeat(self.batch_gpu, self.G_mapping.num_ws, 1)
-        cut_iter = iter(get_color_cuts(n_colors, self.G_mapping.num_ws))
-        cb = next(cut_iter)
-        for gen_z, gen_c in zip(all_gen_z, all_gen_c):
-            ce = next(cut_iter)
-            ws_tmp = self.run_G_mapping(gen_z, gen_c) # [b, num_ws, w_dim]
-            ws_orig[:, cb:ce] = ws_tmp[:, cb:ce]
-            cb = ce
-        ws_orig.detach() # [b, num_ws, w_dim]
-        return ws_orig
+        # Get mean of z
+        avg_mu_q, avg_mu_pos = (mu_q_orig + mu_q) / 2., (mu_pos_orig + mu_pos) / 2.
+        avg_logvar_q, avg_logvar_pos = (logvar_q_orig + logvar_q) / 2., (logvar_pos_orig + logvar_pos) / 2.
 
-    def accumulate_gradients(self, phase, sync, gain):
-        assert phase in ['Mall', 'Mcompose', 'Mdiverse', 'Mcontrast']
-        do_Mcompose = (phase in ['Mall', 'Mcompose']) and (self.compose_lamb != 0)
-        do_Mdiverse = (phase in ['Mall', 'Mdiverse']) and (self.div_lamb != 0)
-        do_Mcontrast = (phase in ['Mall', 'Mcontrast']) and (self.contrast_lamb != 0)
+        # Get varied onehot mask
+        pos_idx = pos_neg_idx[:, 0] # (b//2)
+        onehot_mask = F.one_hot(pos_idx, self.M.z_dim).float() # (b//2, z_dim)
 
-        with torch.autograd.profiler.record_function('M_run'):
-            ws_orig = self.get_multicolor_ws(self.n_colors) # [b(_gpu), num_ws, w_dim]
+        # Fuse varied and avg dimensions
+        mu_q_orig_hat, mu_q_hat = fuse_hat(mu_q_orig, mu_q, avg_mu_q, onehot_mask) # (b//2, z_dim)
+        mu_pos_orig_hat, mu_pos_hat = fuse_hat(mu_pos_orig, mu_pos, avg_mu_pos, onehot_mask)
+        logvar_q_orig_hat, logvar_q_hat = fuse_hat(logvar_q_orig, logvar_q, avg_logvar_q, onehot_mask)
+        logvar_pos_orig_hat, logvar_pos_hat = fuse_hat(logvar_pos_orig, logvar_pos, avg_logvar_pos, onehot_mask)
 
-            # Predict delta for every direction at every input point.
-            delta = self.run_M(ws_orig, sync) # [b, nv_dim, num_ws, w_dim]
+        mu_hat_z = torch.cat([mu_q_orig_hat, mu_pos_orig_hat, mu_q_hat, mu_pos_hat], dim=0)
+        logvar_hat_z = torch.cat([logvar_q_orig_hat, logvar_pos_orig_hat, logvar_q_hat, logvar_pos_hat], dim=0)
+        mu_hat = torch.cat([mu_hat_z, mu_noise], dim=1) # (2b, z_dim+noise)
+        logvar_hat = torch.cat([logvar_hat_z, logvar_noise], dim=1)
 
-        b = self.batch_gpu
-        loss_all = 0.
-        # Mcontrast: Maximize cos_sim between same-var pairs and minimize between orth-var pairs.
-        if do_Mcontrast:
-            # print('Using contrast loss...')
-            with torch.autograd.profiler.record_function('Mcontrast_sample_qpn'):
+        loss_kl = gaussian_kl(mu_hat, logvar_hat)
+        training_stats.report('Loss/M/loss_kl', loss_kl)
+        mu_sample = reparametrise_gaussian(mu_hat, logvar_hat) # (2b, z_dim+noise)
+
+        w_hat = self.M.vae_dec(mu_sample) # (2b, w_dim)
+        loss_mse = (w_all - w_hat).pow(2).sum() / w_all.size(0)
+        training_stats.report('Loss/M/loss_mse', loss_mse)
+
+        loss_wvae = loss_mse + self.M.kl_lambda * loss_kl
+        training_stats.report('Loss/M/loss_wvae', loss_wvae)
+
+        return loss_wvae
+
+
+    def accumulate_gradients(self, phase, gen_z, gen_c, sync, gain):
+        assert phase in ['Mboth']
+        do_Mmain = (phase in ['Mboth'])
+
+        # Mmain: Maximize cos_sim between same-var pairs and minimize between orth-var pairs.
+        if do_Mmain:
+            with torch.autograd.profiler.record_function('Mmain_forward'):
+                batch = gen_z.size(0)
+                ws_orig = self.run_G_mapping(gen_z, gen_c)
+                ws = ws_orig[:, 0] # remove broadcast
+
+                # Predict delta for every direction at every input point.
+                out_M = self.run_M(ws, sync)
+                delta = out_M[:, :, :self.M.w_dim]
+
+                # Dir diversity loss.
+                if self.div_lambda != 0:
+                    loss_diversity = self.calc_loss_diversity(delta) # (b/1)
+
                 # Sample directions for q, pos, neg.
-                pos_neg_idx = self.sample_batch_pos_neg_dirs(b // 2, self.nv_dim).to(delta.device) # (b//2, 2)
-                delta_q = torch.gather(delta[:b//2], 1, pos_neg_idx[:, 0].view(b//2, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim)).squeeze() # [b//2, num_ws, w_dim]
-                delta_pos = torch.gather(delta[b//2:], 1, pos_neg_idx[:, 0].view(b//2, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim)).squeeze() # [b//2, num_ws, w_dim]
+                if delta.size(0) == 1:
+                    delta = delta.repeat(batch, 1, 1) # (b, M.z_dim, w_dim)
+                pos_neg_idx = self.sample_batch_pos_neg_dirs(batch // 2, self.M.z_dim).to(delta.device) # (b//2, 2)
+                delta_q = torch.gather(delta[:batch//2], 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(1, 1, self.M.w_dim)).squeeze()
+                delta_pos = torch.gather(delta[batch//2:], 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(1, 1, self.M.w_dim)).squeeze()
                 if self.neg_on_self:
-                    delta_neg = torch.gather(delta[:b//2], 1, pos_neg_idx[:, 1].view(b//2, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim)).squeeze() # [b//2, num_ws, w_dim]
+                    delta_neg = torch.gather(delta[:batch//2], 1, pos_neg_idx[:, 1].view(batch//2, 1, 1).repeat(1, 1, self.M.w_dim)).squeeze() # (b//2, w_dim)
                 else:
-                    delta_neg = torch.gather(delta[b//2:], 1, pos_neg_idx[:, 1].view(b//2, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim)).squeeze() # [b//2, num_ws, w_dim]
+                    delta_neg = torch.gather(delta[batch//2:], 1, pos_neg_idx[:, 1].view(batch//2, 1, 1).repeat(1, 1, self.M.w_dim)).squeeze() # (b//2, w_dim)
 
-                # Sample variation scales.
+                # Predict heatmap on each layer for G_synthesis.
+                if self.M.use_global_layer_heat:
+                    heat_logits = self.M.heat_logits.repeat(batch//2, 1, 1) # (b//2, M.z_dim, num_ws)
+                    layer_heat_q = self.M.heat_fn(torch.gather(heat_logits, 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(
+                        1, 1, self.G_mapping.num_ws)).squeeze()).unsqueeze(2)
+                    # layer_heat_pos = layer_heat_q
+                    layer_heat_pos = self.M.heat_fn(torch.gather(heat_logits, 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(
+                        1, 1, self.G_mapping.num_ws)).squeeze()).unsqueeze(2)
+                    layer_heat_neg = self.M.heat_fn(torch.gather(heat_logits, 1, pos_neg_idx[:, 1].view(batch//2, 1, 1).repeat(
+                        1, 1, self.G_mapping.num_ws)).squeeze()).unsqueeze(2) # (b//2, num_ws, 1)
+                    loss_heat_diversity = self.calc_loss_diversity(heat_logits)
+                elif self.M.use_local_layer_heat:
+                    heat_logits = out_M[:, :, self.M.w_dim:] # (b, M.z_dim, num_ws)
+                    layer_heat_q = self.M.heat_fn(torch.gather(heat_logits[:batch//2], 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(
+                        1, 1, self.G_mapping.num_ws)).squeeze()).unsqueeze(2)
+                    # layer_heat_pos = layer_heat_q
+                    layer_heat_pos = self.M.heat_fn(torch.gather(heat_logits[batch//2:], 1, pos_neg_idx[:, 0].view(batch//2, 1, 1).repeat(
+                        1, 1, self.G_mapping.num_ws)).squeeze()).unsqueeze(2)
+                    if self.neg_on_self:
+                        layer_heat_neg = self.M.heat_fn(torch.gather(heat_logits[:batch//2], 1, pos_neg_idx[:, 1].view(batch//2, 1, 1).repeat(
+                            1, 1, self.G_mapping.num_ws)).squeeze()).unsqueeze(2) # (b//2, num_ws, 1)
+                    else:
+                        layer_heat_neg = self.M.heat_fn(torch.gather(heat_logits[batch//2:], 1, pos_neg_idx[:, 1].view(batch//2, 1, 1).repeat(
+                            1, 1, self.G_mapping.num_ws)).squeeze()).unsqueeze(2) # (b//2, num_ws, 1)
+                    loss_heat_diversity = self.calc_loss_diversity(heat_logits)
+                else:
+                    layer_heat_q = layer_heat_pos = layer_heat_neg = 1.
+
                 if self.use_dynamic_scale:
-                    scale = (torch.randn(b//2, device=delta.device) * self.var_sample_scale + self.var_sample_mean).view(b//2, 1)
+                    scale = torch.abs(torch.randn(batch//2, device=delta.device) * self.var_sample_scale + self.var_sample_mean).view(batch//2, 1)
                 else:
                     scale = self.var_sample_scale
 
-                # Apply both positive and negative variations to ws.
-                ws_q = ws_orig[:b//2] + (delta_q * scale) # (b//2, num_ws, w_dim)
-                ws_pos = ws_orig[b//2:] + (delta_pos * scale) # (b//2, num_ws, w_dim)
-                if self.neg_on_self:
-                    ws_neg = ws_orig[:b//2] + (delta_neg * scale) # (b//2, num_ws, w_dim)
+                if (not self.M.use_local_layer_heat) and (not self.M.use_global_layer_heat):
+                    ws_q = ws[:batch//2] + (delta_q * scale) # (batch//2, w_dim)
+                    ws_pos = ws[batch//2:] + (delta_pos * scale)
+                    if self.neg_on_self:
+                        ws_neg = ws[:batch//2] + (delta_neg * scale)
+                    else:
+                        ws_neg = ws[batch//2:] + (delta_neg * scale)
+                    if self.M.wvae_lambda != 0:
+                        loss_wvae = self.get_wvae_loss(ws, ws_q, ws_pos, pos_neg_idx)
+                        training_stats.report('Loss/M/loss_wvae', loss_wvae)
+                    ws_q = ws_q.unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) * layer_heat_q
+                    ws_pos = ws_pos.unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) * layer_heat_pos
+                    ws_neg = ws_neg.unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) * layer_heat_neg
                 else:
-                    ws_neg = ws_orig[b//2:] + (delta_neg * scale) # (b//2, num_ws, w_dim)
+                    ws_q = ws[:batch//2].unsqueeze(1) + (delta_q * scale).unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) * layer_heat_q
+                    ws_pos = ws[batch//2:].unsqueeze(1) + (delta_pos * scale).unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) * layer_heat_pos
+                    if self.neg_on_self:
+                        ws_neg = ws[:batch//2].unsqueeze(1) + (delta_neg * scale).unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) * layer_heat_neg
+                    else:
+                        ws_neg = ws[batch//2:].unsqueeze(1) + (delta_neg * scale).unsqueeze(1).repeat(1, self.G_mapping.num_ws, 1) * layer_heat_neg
 
-            with torch.autograd.profiler.record_function('Mcontrast_generate_imgs'):
-                # Generate images.
-                ws_all = torch.cat([ws_orig, ws_q, ws_pos, ws_neg], dim=0) # (2.5 * b, num_ws, w_dim)
+                ws_all = torch.cat([ws_orig, ws_q, ws_pos, ws_neg], dim=0) # (2.5 * batch, num_ws, w_dim)
                 imgs_all = self.run_G_synthesis(ws_all)
 
-            with torch.autograd.profiler.record_function('Mcontrast_loss'):
-                # Contrast loss
-                outs_all = self.run_S(imgs_all)
-                if self.use_catdiff:
-                    loss_contrast = self.extract_catdiff_loss(outs_all, pos_neg_idx)
+                # Main loss
+                if self.M.post_vae_lambda == 0:
+                    outs_all = self.run_S(imgs_all)
+                    if self.use_catdiff:
+                        loss_Mmain = self.extract_catdiff_loss(outs_all, pos_neg_idx)
+                    else:
+                        loss_Mmain = self.extract_diff_loss(outs_all, pos_neg_idx)
                 else:
-                    loss_contrast = self.extract_diff_loss(outs_all, pos_neg_idx)
-            loss_all += self.contrast_lamb * loss_contrast
+                    loss_Mmain = self.M.post_vae_loss(imgs_all, pos_neg_idx)
 
-        if do_Mcompose:
-            # print('Using compose loss...')
-            with torch.autograd.profiler.record_function('Mcompose_sample_2dirs'):
-                dirs_idx = self.sample_batch_pos_neg_dirs(b, self.nv_dim, without_repeat=False).to(delta.device) # (b, 2)
-                delta_1 = torch.gather(delta, 1, dirs_idx[:, 0].view(b, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim)).squeeze() # [b, num_ws, w_dim]
-                delta_2 = torch.gather(delta, 1, dirs_idx[:, 1].view(b, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim)).squeeze() # [b, num_ws, w_dim]
+                if self.div_lambda != 0:
+                    training_stats.report('Loss/M/loss_diversity', loss_diversity)
+                    loss_Mmain += self.div_lambda * loss_diversity
 
-                # Sample variation scales.
-                if self.use_dynamic_scale:
-                    scale_1 = (torch.randn(b, device=delta.device) * self.var_sample_scale + self.var_sample_mean).view(b, 1, 1)
-                    scale_2 = (torch.randn(b, device=delta.device) * self.var_sample_scale + self.var_sample_mean).view(b, 1, 1)
-                else:
-                    scale_1 = self.var_sample_scale
-                    scale_2 = self.var_sample_scale
+                if self.M.use_local_layer_heat or self.M.use_global_layer_heat:
+                    loss_Mmain += self.div_heat_lambda * loss_heat_diversity
+                    training_stats.report('Loss/M/loss_heat_diversity', loss_heat_diversity)
 
-                # Apply all variations to ws.
-                ws_1 = ws_orig + (delta_1 * scale_1) # (b, num_ws, w_dim)
-                ws_2 = ws_orig + (delta_2 * scale_2) # (b, num_ws, w_dim)
-                ws_1p2 = ws_orig + (delta_1 * scale_1 + delta_2 * scale_2) # (b, num_ws, w_dim)
+                if (not self.M.use_local_layer_heat) and (not self.M.use_global_layer_heat) and (self.M.wvae_lambda != 0):
+                    loss_Mmain += self.M.wvae_lambda * loss_wvae
 
-            with torch.autograd.profiler.record_function('Mcompose_generate_imgs'):
-                # Generate images.
-                ws_all = torch.cat([ws_orig, ws_1, ws_2, ws_1p2], dim=0) # (4 * b, num_ws, w_dim)
-                imgs_all = self.run_G_synthesis(ws_all)
+                training_stats.report('Loss/M/loss_all', loss_Mmain)
 
-            with torch.autograd.profiler.record_function('Mcompose_loss'):
-                # Compose loss
-                # outs_all = self.run_S(imgs_all) # list [f1, f2, f3, ...]
-                if imgs_all.size(1) == 1:
-                    imgs_all = imgs_all.repeat(1, 3, 1, 1)
-                imgs_orig, imgs_1, imgs_2, imgs_1p2 = imgs_all.split(b)
-                outs_orig, outs_1, outs_2, outs_1p2 \
-                    = self.S.forward(imgs_orig), self.S.forward(imgs_1), self.S.forward(imgs_2), self.S.forward(imgs_1p2) # list [f1, f2, f3, ...]
-                diff_1, diff_2, diff_1p2 = get_diff(outs_orig, outs_1), get_diff(outs_orig, outs_2), get_diff(outs_orig, outs_1p2)
-                loss_compose = extract_compose_loss(diff_1, diff_2, diff_1p2)
-                training_stats.report('Loss/M/loss_compose', loss_compose)
-                loss_all += self.compose_lamb * loss_compose
-
-        if do_Mdiverse:
-            # print('Using diverse loss...')
-            with torch.autograd.profiler.record_function('Mdiverse_loss'):
-                # Dir diversity loss.
-                loss_diversity = self.calc_loss_diversity(delta) # (b/1)
-                training_stats.report('Loss/M/loss_diversity', loss_diversity)
-                loss_all += self.div_lamb * loss_diversity
-
-        with torch.autograd.profiler.record_function('M_backward'):
-            loss_all.mean().mul(gain).backward()
+                # # Weight regularization.
+                # for i in range(self.M.num_layers):
+                    # w_i = getattr(self.M, f'fc{i}').weight
+                    # print(f'w_{i}.max:', w_i.max().data)
+                    # print(f'w_{i}.min:', w_i.min().data)
+                # print('epsilon_dir:', self.M.epsilon_dir.data)
+                # loss_Mmain += 0.1 * (self.M.epsilon_dir**2).sum()
+            with torch.autograd.profiler.record_function('Mmain_backward'):
+                loss_Mmain.mean().mul(gain).backward()
 
 #----------------------------------------------------------------------------

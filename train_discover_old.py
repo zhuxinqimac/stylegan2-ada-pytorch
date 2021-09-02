@@ -6,14 +6,12 @@
 # You may obtain a copy of the License at
 # http://www.apache.org/licenses/LICENSE-2.0
 
-# --- File Name: train_liestyle.py
-# --- Creation Date: 24-08-2021
-# --- Last Modified: Thu 02 Sep 2021 23:21:15 AEST
+# --- File Name: train_discover.py
+# --- Creation Date: 27-04-2021
+# --- Last Modified: Fri 28 May 2021 00:30:28 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
-"""
-LieStyleGAN training code. Code borrowed from train.py
-"""
+"""Train networks to discover the interpretable directions in the W space."""
 
 import os
 import click
@@ -23,7 +21,7 @@ import tempfile
 import torch
 import dnnlib
 
-from training import training_loop_liestyle
+from training import training_loop_discover
 from metrics import metric_main
 from torch_utils import training_stats
 from torch_utils import custom_ops
@@ -32,36 +30,6 @@ from torch_utils import custom_ops
 
 class UserError(Exception):
     pass
-
-#----------------------------------------------------------------------------
-KEY_BRIEF_NAMES = {'z': 'z_dim', 'gnoi': 'use_noise', 'pfs': 'proj_feat_size', 'pfc': 'proj_feat_ch', 'lies': 'lie_alg_init_scale',
-                   'gmat': 'group_mat_dim', 'ptype': 'projector_type', 'com': 'commute_lamb', 'hes': 'hessian_lamb', 'ani': 'anisotropy_lamb',
-                   'pbase': 'post_exp_conv_feat_base', 'I': 'I_lambda', 'Ig': 'I_g_lambda', 'gncut': 'group_ncut', 'cmask': 'use_code_mask',
-                   'mb': 'mb', 'mbstd': 'mbstd', 'fm': 'fmaps', 'lr': 'lrate', 'gm': 'gamma', 'ema': 'ema', 'nper': 'n_samples_per',
-                   'plw': 'pl_weight', 'mixp': 'style_mixing_prob', 'grin': 'G_reg_interval'}
-KEY_DTYPES = {'z_dim': int, 'use_noise': bool, 'proj_feat_size': int, 'proj_feat_ch': int, 'lie_alg_init_scale': float,
-              'group_mat_dim': int, 'projector_type': str, 'commute_lamb': float, 'hessian_lamb': float, 'anisotropy_lamb': float,
-              'post_exp_conv_feat_base': int, 'I_lambda': float, 'I_g_lambda': float, 'group_ncut': int, 'use_code_mask': bool,
-              'mb': int, 'mbstd': int, 'fmaps': float, 'lrate': float, 'gamma': float, 'ema': int, 'n_samples_per': int,
-              'pl_weight': float, 'style_mixing_prob': float, 'G_reg_interval': int}
-
-def parse_cfg(cfg):
-    '''
-    cfg: '-'.join(bkey_value)
-    return: {'long_key': dtye(value)}
-    '''
-    bk_v_ls = cfg.strip().split('-')[1:] # Discard dataset name.
-    cfg_dict = {}
-    for bk_v in bk_v_ls:
-        bk, v = bk_v.strip().split('_')
-        assert bk in KEY_BRIEF_NAMES
-        cfg_dict[KEY_BRIEF_NAMES[bk]] = KEY_DTYPES[KEY_BRIEF_NAMES[bk]](v)
-    return cfg_dict
-
-def construct_specs(basic_dict, cfg):
-    cfg_dict = parse_cfg(cfg)
-    basic_dict.update(cfg_dict)
-    return basic_dict
 
 #----------------------------------------------------------------------------
 
@@ -100,12 +68,60 @@ def setup_training_loop_kwargs(
     allow_tf32 = None, # Allow PyTorch to use TF32 for matmul and convolutions: <bool>, default = False
     nobench    = None, # Disable cuDNN benchmarking: <bool>, default = False
     workers    = None, # Override number of DataLoader workers: <int>, default = 3
+
+    # Discover network.
+    n_samples_per = None, # Number of steps in traversal.
+    m_z_dim = None, # Number of z_dim in navigator network.
+    nav_type = None, # Navigator type.
+    num_layers = None, # Number of layers in Navigator.
+    sensor_type = None, # The Sensor net type.
+    norm_on_depth = None, # If normalize diff vectors taking depth in to account.
+    use_norm_mask = None, # If use norm_mask.
+    divide_mask_sum = None, # If divide the loss with mask_sum.
+    use_dynamic_scale = None, # If dynamic scale in loss.
+    use_norm_as_mask = None, # If use norm as mask.
+    gan_network_pkl = None, # The pretrained GAN network pkl.
+    div_lambda = None, # The W-space cos_fn lambda.
+    div_heat_lambda = None, # The heat cos_fn lambda.
+    norm_lambda = None, # The norm lambda of diff features.
+    var_sample_scale = None, # The sampling scale for variation.
+    var_sample_mean = None, # The sampling mean for variation.
+    sensor_used_layers = None, # The number of used layers in S.
+    lr_multiplier = None, # The lr_multiplier in M net.
+    use_local_layer_heat = None, # If use local layer_heat in discover loss.
+    use_global_layer_heat = None, # If use global layer_heat in discover loss.
+    heat_fn = None, # If use layer_heat, the heat_fn .
+    wvae_lambda = None, # The wvae lambda in M.
+    kl_lambda = None, # The kl lambda in M wvae.
+    wvae_noise = None, # The noise dim in wvae.
+    apply_m_on_z = None, # If apply M on z of G.
+    save_size = None, # The size to save per image in traversal.
+    recursive_walk = None, # If recurse walk.
+    trav_walk_scale = None, # The traversal walking scale.
+    post_vae_lambda = None, # The post_vae lambda.
+    post_vae_kl_lambda = None, # The KL lambda in post_vae.
+    ce_diffdim_lambda = None, # The cross_entropy lambda for diff dim.
+    use_group_fc = None, # If use group_fc in navigator.
+    lrate = None, # Learning rate.
+    diff_avg_lerp_rate = None, # Lerp rate for diff_avg.
+    lerp_lambda = None, # Lerp lambda.
+    lerp_norm = None, # If lerp on l2-norm.
+    neg_lambda = None, # Neg sample lambda.
+    pos_lambda = None, # Pos sample lambda.
+    neg_on_self = None, # If apply neg samples on self.
+    use_catdiff = None, # If use concat features in perceiver.
+    show_normd = None, # If show normD
+    use_heat_max = None, # If use the max value in heat during trav
 ):
     args = dnnlib.EasyDict()
 
     # ------------------------------------------
     # General options: gpus, snap, metrics, seed
     # ------------------------------------------
+
+    if n_samples_per is None:
+        n_samples_per = 10
+    args.n_samples_per = n_samples_per
 
     if gpus is None:
         gpus = 1
@@ -122,8 +138,8 @@ def setup_training_loop_kwargs(
     args.image_snapshot_ticks = snap
     args.network_snapshot_ticks = snap
 
-    if metrics is None:
-        metrics = ['fid50k_full']
+    # if metrics is None:
+        # metrics = ['fid50k_full']
     assert isinstance(metrics, list)
     if not all(metric_main.is_valid_metric(metric) for metric in metrics):
         raise UserError('\n'.join(['--metrics can only contain the following values:'] + metric_main.list_valid_metrics()))
@@ -138,19 +154,20 @@ def setup_training_loop_kwargs(
     # Dataset: data, cond, subset, mirror
     # -----------------------------------
 
-    assert data is not None
+    # assert data is not None
     assert isinstance(data, str)
     args.training_set_kwargs = dnnlib.EasyDict(class_name='training.dataset.ImageFolderDataset', path=data, use_labels=True, max_size=None, xflip=False)
-    args.data_loader_kwargs = dnnlib.EasyDict(pin_memory=True, num_workers=3, prefetch_factor=2)
-    try:
-        training_set = dnnlib.util.construct_class_by_name(**args.training_set_kwargs) # subclass of training.dataset.Dataset
-        args.training_set_kwargs.resolution = training_set.resolution # be explicit about resolution
-        args.training_set_kwargs.use_labels = training_set.has_labels # be explicit about labels
-        args.training_set_kwargs.max_size = len(training_set) # be explicit about dataset size
-        desc = training_set.name
-        del training_set # conserve memory
-    except IOError as err:
-        raise UserError(f'--data: {err}')
+    desc = cfg
+    # args.data_loader_kwargs = dnnlib.EasyDict(pin_memory=True, num_workers=3, prefetch_factor=2)
+    # try:
+        # training_set = dnnlib.util.construct_class_by_name(**args.training_set_kwargs) # subclass of training.dataset.Dataset
+        # args.training_set_kwargs.resolution = training_set.resolution # be explicit about resolution
+        # args.training_set_kwargs.use_labels = training_set.has_labels # be explicit about labels
+        # args.training_set_kwargs.max_size = len(training_set) # be explicit about dataset size
+        # desc = training_set.name
+        # del training_set # conserve memory
+    # except IOError as err:
+        # raise UserError(f'--data: {err}')
 
     if cond is None:
         cond = False
@@ -188,20 +205,15 @@ def setup_training_loop_kwargs(
     desc += f'-{cfg}'
 
     cfg_specs = {
-        'auto':      dict(ref_gpus=-1, kimg=25000, mb=-1, mbstd=-1, fmaps=-1, lrate=-1, gamma=-1, ema=-1, ramp=0.05, n_samples_per=7,
-                          z_dim=64, lie_alg_init_scale=0.001, group_mat_dim=20, pl_weight=2, style_mixing_prob=0.9, G_reg_interval=4,
-                          commute_lamb=0, hessian_lamb=0, anisotropy_lamb=0, I_lambda=0, I_g_lambda=0, group_ncut=0, use_code_mask=False), # Populated dynamically based on resolution and GPU count.
-        'basic': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
-                      z_dim=64, lie_alg_init_scale=0.001, group_mat_dim=20, pl_weight=2, style_mixing_prob=0.9, G_reg_interval=4,
-                      commute_lamb=0, hessian_lamb=0, anisotropy_lamb=0, I_lambda=0, I_g_lambda=0, group_ncut=0, use_code_mask=False),
-        'celeba-hes_0.1-Ig_1': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
-                             z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, pl_weight=2, style_mixing_prob=0.9, G_reg_interval=4,
-                             commute_lamb=0, hessian_lamb=0.1, anisotropy_lamb=0, I_lambda=0, I_g_lambda=1, group_ncut=0, use_code_mask=False),
+        # 'auto':      dict(ref_gpus=-1, kimg=25000,  mb=-1, mbstd=-1, fmaps=-1,  lrate=-1,     gamma=-1,   ema=-1,  ramp=0.05, map=2), # Populated dynamically based on resolution and GPU count.
+        'stylegan2': dict(ref_gpus=8,  kimg=25000,  mb=32, mbstd=4,  fmaps=1,   lrate=0.002),
+        # 'paper256':  dict(ref_gpus=8,  kimg=25000,  mb=64, mbstd=8,  fmaps=0.5, lrate=0.0025, gamma=1,    ema=20,  ramp=None, map=8),
+        # 'paper512':  dict(ref_gpus=8,  kimg=25000,  mb=64, mbstd=8,  fmaps=1,   lrate=0.0025, gamma=0.5,  ema=20,  ramp=None, map=8),
+        # 'paper1024': dict(ref_gpus=8,  kimg=25000,  mb=32, mbstd=4,  fmaps=1,   lrate=0.002,  gamma=2,    ema=10,  ramp=None, map=8),
+        # 'cifar':     dict(ref_gpus=2,  kimg=100000, mb=64, mbstd=32, fmaps=1,   lrate=0.0025, gamma=0.01, ema=500, ramp=0.05, map=2),
     }
 
-    # assert cfg in cfg_specs
-    if cfg != 'basic':
-        cfg_specs[cfg] = construct_specs(dnnlib.EasyDict(cfg_specs['basic']), cfg)
+    assert cfg in cfg_specs
     spec = dnnlib.EasyDict(cfg_specs[cfg])
     if cfg == 'auto':
         desc += f'{gpus:d}'
@@ -214,63 +226,57 @@ def setup_training_loop_kwargs(
         spec.gamma = 0.0002 * (res ** 2) / spec.mb # heuristic formula
         spec.ema = spec.mb * 10 / 32
 
-    args.G_kwargs = dnnlib.EasyDict(class_name='training.networks_liestylegan.LieStyleGenerator',
-                                    z_dim=spec.z_dim, w_dim=spec.group_mat_dim*spec.group_mat_dim,
-                                    mapping_kwargs=dnnlib.EasyDict(), synthesis_kwargs=dnnlib.EasyDict())
-    args.D_kwargs = dnnlib.EasyDict(class_name='training.networks.Discriminator', block_kwargs=dnnlib.EasyDict(),
-                                    mapping_kwargs=dnnlib.EasyDict(), epilogue_kwargs=dnnlib.EasyDict())
-    args.G_kwargs.mapping_kwargs.liegroup_kwargs = dnnlib.EasyDict()
-    args.G_kwargs.mapping_kwargs.liegroup_kwargs.lie_alg_init_scale = spec.lie_alg_init_scale
-    args.G_kwargs.mapping_kwargs.liegroup_kwargs.mat_dim = spec.group_mat_dim
-    args.G_kwargs.mapping_kwargs.liegroup_kwargs.ncut = spec.group_ncut
-    args.G_kwargs.mapping_kwargs.liegroup_kwargs.use_code_mask = spec.use_code_mask
+    args.M_kwargs = dnnlib.EasyDict(class_name='training.networks_navigator.Navigator')
+    args.M_kwargs.z_dim = m_z_dim
+    args.M_kwargs.nav_type = nav_type
+    args.M_kwargs.num_layers = num_layers
+    args.M_kwargs.lr_multiplier = lr_multiplier
+    args.M_kwargs.use_local_layer_heat = use_local_layer_heat
+    args.M_kwargs.use_global_layer_heat = use_global_layer_heat
+    args.M_kwargs.heat_fn = heat_fn
+    args.M_kwargs.wvae_lambda = wvae_lambda
+    args.M_kwargs.kl_lambda = kl_lambda
+    args.M_kwargs.wvae_noise = wvae_noise
+    args.M_kwargs.apply_M_on_z = apply_m_on_z
+    args.M_kwargs.post_vae_lambda = post_vae_lambda
+    args.M_kwargs.post_vae_kl_lambda = post_vae_kl_lambda
+    args.M_kwargs.ce_diffdim_lambda = ce_diffdim_lambda
+    args.M_kwargs.use_group_fc = use_group_fc
 
-    args.G_kwargs.synthesis_kwargs.channel_base = args.D_kwargs.channel_base = int(spec.fmaps * 32768)
-    args.G_kwargs.synthesis_kwargs.channel_max = args.D_kwargs.channel_max = 512
-    args.G_kwargs.synthesis_kwargs.num_fp16_res = args.D_kwargs.num_fp16_res = 4 # enable mixed-precision training
-    args.G_kwargs.synthesis_kwargs.conv_clamp = args.D_kwargs.conv_clamp = 256 # clamp activations to avoid float16 overflow
+    args.M_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', lr=spec.lrate if lrate is None else lrate, betas=[0,0.99], eps=1e-8)
+    if sensor_type is None:
+        sensor_type = 'alex'
+    args.sensor_type = sensor_type
+    args.trav_walk_scale = trav_walk_scale
 
-    args.D_kwargs.epilogue_kwargs.mbstd_group_size = spec.mbstd
-
-    args.G_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', lr=spec.lrate, betas=[0,0.99], eps=1e-8)
-    args.D_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', lr=spec.lrate, betas=[0,0.99], eps=1e-8)
-
-    if ('I_lambda' in spec and spec.I_lambda > 0) or ('I_g_lambda' in spec and spec.I_g_lambda > 0):
-        args.I_kwargs = dnnlib.EasyDict(class_name='training.networks_liegan.Recognizer',  block_kwargs=dnnlib.EasyDict(),
-                                        mapping_kwargs=dnnlib.EasyDict(), epilogue_kwargs=dnnlib.EasyDict())
-        args.I_kwargs.channel_base = int(spec.fmaps * 32768)
-        args.I_kwargs.channel_max = 512
-        args.I_kwargs.num_fp16_res = 4 # enable mixed-precision training
-        args.I_kwargs.conv_clamp = 256 # clamp activations to avoid float16 overflow
-        args.I_kwargs.epilogue_kwargs.mbstd_group_size = spec.mbstd
-        args.I_kwargs.z_dim = spec.z_dim if spec.I_lambda > 0 else None
-        args.I_kwargs.mat_dim = spec.group_mat_dim if spec.I_g_lambda > 0 else None
-        args.loss_kwargs = dnnlib.EasyDict(class_name='training.loss_liestylegan.LieStyleGANLoss', r1_gamma=spec.gamma,
-                                           commute_lamb=spec.commute_lamb, hessian_lamb=spec.hessian_lamb, anisotropy_lamb=spec.anisotropy_lamb,
-                                           I_lambda=spec.I_lambda, I_g_lambda=spec.I_g_lambda, group_split=spec.group_ncut>0)
-    else:
-        args.loss_kwargs = dnnlib.EasyDict(class_name='training.loss_liestylegan.LieStyleGANLoss', r1_gamma=spec.gamma,
-                                           commute_lamb=spec.commute_lamb, hessian_lamb=spec.hessian_lamb, anisotropy_lamb=spec.anisotropy_lamb,
-                                           group_split=spec.group_ncut>0)
-
-    # args.loss_kwargs = dnnlib.EasyDict(class_name='training.loss_liestylegan.LieStyleGANLoss', r1_gamma=spec.gamma,
-                                       # commute_lamb=spec.commute_lamb, hessian_lamb=spec.hessian_lamb)
-    args.loss_kwargs.pl_weight = spec.pl_weight # disable path length regularization
-    args.loss_kwargs.style_mixing_prob = spec.style_mixing_prob # disable style mixing
+    args.loss_kwargs = dnnlib.EasyDict(class_name='training.loss_discover.DiscoverLoss' if not apply_m_on_z else 'training.loss_discover_on_z.DiscoverOnZLoss')
+    args.loss_kwargs.S_L = 7 if args.sensor_type == 'squeeze' else 5
+    args.loss_kwargs.norm_on_depth = norm_on_depth
+    args.loss_kwargs.div_lambda = div_lambda
+    args.loss_kwargs.div_heat_lambda = div_heat_lambda
+    args.loss_kwargs.norm_lambda = norm_lambda
+    args.loss_kwargs.var_sample_scale = var_sample_scale
+    args.loss_kwargs.var_sample_mean = var_sample_mean
+    args.loss_kwargs.sensor_used_layers = sensor_used_layers
+    args.loss_kwargs.use_norm_mask = use_norm_mask
+    args.loss_kwargs.divide_mask_sum = divide_mask_sum
+    args.loss_kwargs.use_dynamic_scale = use_dynamic_scale
+    args.loss_kwargs.use_norm_as_mask = use_norm_as_mask
+    args.loss_kwargs.diff_avg_lerp_rate = diff_avg_lerp_rate
+    args.loss_kwargs.lerp_lambda = lerp_lambda
+    args.loss_kwargs.lerp_norm = lerp_norm
+    args.loss_kwargs.neg_lambda = neg_lambda
+    args.loss_kwargs.pos_lambda = pos_lambda
+    args.loss_kwargs.neg_on_self = neg_on_self
+    args.loss_kwargs.use_catdiff = use_catdiff
 
     args.total_kimg = spec.kimg
     args.batch_size = spec.mb
     args.batch_gpu = spec.mb // spec.ref_gpus
-    args.ema_kimg = spec.ema
-    args.ema_rampup = spec.ramp
-    args.G_reg_interval = None if spec.G_reg_interval == 0 else spec.G_reg_interval
-
-    if gamma is not None:
-        assert isinstance(gamma, float)
-        if not gamma >= 0:
-            raise UserError('--gamma must be non-negative')
-        desc += f'-gamma{gamma:g}'
-        args.loss_kwargs.r1_gamma = gamma
+    args.save_size = save_size
+    args.recursive_walk = recursive_walk
+    args.show_normD = show_normd
+    args.use_heat_max = use_heat_max
 
     if kimg is not None:
         assert isinstance(kimg, int)
@@ -287,73 +293,6 @@ def setup_training_loop_kwargs(
         args.batch_size = batch
         args.batch_gpu = batch // gpus
 
-    # ---------------------------------------------------
-    # Discriminator augmentation: aug, p, target, augpipe
-    # ---------------------------------------------------
-
-    if aug is None:
-        aug = 'ada'
-    else:
-        assert isinstance(aug, str)
-        desc += f'-{aug}'
-
-    if aug == 'ada':
-        args.ada_target = 0.6
-
-    elif aug == 'noaug':
-        pass
-
-    elif aug == 'fixed':
-        if p is None:
-            raise UserError(f'--aug={aug} requires specifying --p')
-
-    else:
-        raise UserError(f'--aug={aug} not supported')
-
-    if p is not None:
-        assert isinstance(p, float)
-        if aug != 'fixed':
-            raise UserError('--p can only be specified with --aug=fixed')
-        if not 0 <= p <= 1:
-            raise UserError('--p must be between 0 and 1')
-        desc += f'-p{p:g}'
-        args.augment_p = p
-
-    if target is not None:
-        assert isinstance(target, float)
-        if aug != 'ada':
-            raise UserError('--target can only be specified with --aug=ada')
-        if not 0 <= target <= 1:
-            raise UserError('--target must be between 0 and 1')
-        desc += f'-target{target:g}'
-        args.ada_target = target
-
-    assert augpipe is None or isinstance(augpipe, str)
-    if augpipe is None:
-        augpipe = 'bgc'
-    else:
-        if aug == 'noaug':
-            raise UserError('--augpipe cannot be specified with --aug=noaug')
-        desc += f'-{augpipe}'
-
-    augpipe_specs = {
-        'blit':   dict(xflip=1, rotate90=1, xint=1),
-        'geom':   dict(scale=1, rotate=1, aniso=1, xfrac=1),
-        'color':  dict(brightness=1, contrast=1, lumaflip=1, hue=1, saturation=1),
-        'filter': dict(imgfilter=1),
-        'noise':  dict(noise=1),
-        'cutout': dict(cutout=1),
-        'bg':     dict(xflip=1, rotate90=1, xint=1, scale=1, rotate=1, aniso=1, xfrac=1),
-        'bgc':    dict(xflip=1, rotate90=1, xint=1, scale=1, rotate=1, aniso=1, xfrac=1, brightness=1, contrast=1, lumaflip=1, hue=1, saturation=1),
-        'bgcf':   dict(xflip=1, rotate90=1, xint=1, scale=1, rotate=1, aniso=1, xfrac=1, brightness=1, contrast=1, lumaflip=1, hue=1, saturation=1, imgfilter=1),
-        'bgcfn':  dict(xflip=1, rotate90=1, xint=1, scale=1, rotate=1, aniso=1, xfrac=1, brightness=1, contrast=1, lumaflip=1, hue=1, saturation=1, imgfilter=1, noise=1),
-        'bgcfnc': dict(xflip=1, rotate90=1, xint=1, scale=1, rotate=1, aniso=1, xfrac=1, brightness=1, contrast=1, lumaflip=1, hue=1, saturation=1, imgfilter=1, noise=1, cutout=1),
-    }
-
-    assert augpipe in augpipe_specs
-    if aug != 'noaug':
-        args.augment_kwargs = dnnlib.EasyDict(class_name='training.augment.AugmentPipe', **augpipe_specs[augpipe])
-
     # ----------------------------------
     # Transfer learning: resume, freezed
     # ----------------------------------
@@ -366,63 +305,26 @@ def setup_training_loop_kwargs(
         'lsundog256':  'https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/transfer-learning-source-nets/lsundog-res256-paper256-kimg100000-noaug.pkl',
     }
 
+    assert gan_network_pkl is None or isinstance(gan_network_pkl, str)
+    if gan_network_pkl is None:
+        gan_network_pkl = 'noresume'
+    elif gan_network_pkl == 'noresume':
+        desc += '-noresume'
+    elif gan_network_pkl in resume_specs:
+        desc += f'-gan_network_pkl{gan_network_pkl}'
+        args.gan_network_pkl = resume_specs[gan_network_pkl] # predefined url
+    else:
+        desc += '-resumecustom'
+        args.gan_network_pkl = gan_network_pkl # custom path or url
+
     assert resume is None or isinstance(resume, str)
     if resume is None:
         resume = 'noresume'
     elif resume == 'noresume':
         desc += '-noresume'
-    elif resume in resume_specs:
-        desc += f'-resume{resume}'
-        args.resume_pkl = resume_specs[resume] # predefined url
     else:
         desc += '-resumecustom'
         args.resume_pkl = resume # custom path or url
-
-    if resume != 'noresume':
-        args.ada_kimg = 100 # make ADA react faster at the beginning
-        args.ema_rampup = None # disable EMA rampup
-
-    if freezed is not None:
-        assert isinstance(freezed, int)
-        if not freezed >= 0:
-            raise UserError('--freezed must be non-negative')
-        desc += f'-freezed{freezed:d}'
-        args.D_kwargs.block_kwargs.freeze_layers = freezed
-
-    # -------------------------------------------------
-    # Performance options: fp32, nhwc, nobench, workers
-    # -------------------------------------------------
-
-    if fp32 is None:
-        fp32 = False
-    assert isinstance(fp32, bool)
-    if fp32:
-        args.G_kwargs.synthesis_kwargs.num_fp16_res = args.D_kwargs.num_fp16_res = 0
-        args.G_kwargs.synthesis_kwargs.conv_clamp = args.D_kwargs.conv_clamp = None
-
-    if nhwc is None:
-        nhwc = False
-    assert isinstance(nhwc, bool)
-    if nhwc:
-        args.G_kwargs.synthesis_kwargs.fp16_channels_last = args.D_kwargs.block_kwargs.fp16_channels_last = True
-
-    if nobench is None:
-        nobench = False
-    assert isinstance(nobench, bool)
-    if nobench:
-        args.cudnn_benchmark = False
-
-    if allow_tf32 is None:
-        allow_tf32 = False
-    assert isinstance(allow_tf32, bool)
-    if allow_tf32:
-        args.allow_tf32 = True
-
-    if workers is not None:
-        assert isinstance(workers, int)
-        if not workers >= 1:
-            raise UserError('--workers must be at least 1')
-        args.data_loader_kwargs.num_workers = workers
 
     return desc, args
 
@@ -448,7 +350,7 @@ def subprocess_fn(rank, args, temp_dir):
         custom_ops.verbosity = 'none'
 
     # Execute training loop.
-    training_loop_liestyle.training_loop(rank=rank, **args)
+    training_loop_discover.training_loop(rank=rank, **args)
 
 #----------------------------------------------------------------------------
 
@@ -481,7 +383,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--mirror', help='Enable dataset x-flips [default: false]', type=bool, metavar='BOOL')
 
 # Base config.
-@click.option('--cfg', help='Base config [default: auto]', type=str, metavar='STR')
+@click.option('--cfg', help='Base config [default: auto]', type=click.Choice(['auto', 'stylegan2', 'paper256', 'paper512', 'paper1024', 'cifar']))
 @click.option('--gamma', help='Override R1 gamma', type=float)
 @click.option('--kimg', help='Override training duration', type=int, metavar='INT')
 @click.option('--batch', help='Override batch size', type=int, metavar='INT')
@@ -502,6 +404,50 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--nobench', help='Disable cuDNN benchmarking', type=bool, metavar='BOOL')
 @click.option('--allow-tf32', help='Allow PyTorch to use TF32 internally', type=bool, metavar='BOOL')
 @click.option('--workers', help='Override number of DataLoader workers', type=int, metavar='INT')
+
+# Discover net options.
+@click.option('--n_samples_per', help='The number of steps in traversals.', type=int, metavar='INT', default=10)
+@click.option('--m_z_dim', help='The z_dim in M.', type=int, default=10)
+@click.option('--sensor_type', help='The type of sensor network.', type=str, default='alex')
+@click.option('--gan_network_pkl', help='GAN network pickle', metavar='PKL')
+@click.option('--nav_type', help='The Navigator type', type=str, default='ada')
+@click.option('--num_layers', help='Number of layers in Navigator', metavar='INT', default=2)
+@click.option('--norm_on_depth', help='If normalize diff vectors taking depth into account', default=True, type=bool)
+@click.option('--use_norm_mask', help='If use norm mask when computing main loss', type=bool, default=True)
+@click.option('--divide_mask_sum', help='If divide cos with mask_sum when computing main loss', type=bool, default=True)
+@click.option('--use_dynamic_scale', help='If use dynamic scale in loss', type=bool, default=True)
+@click.option('--use_norm_as_mask', help='If use norm as mask', type=bool, default=False)
+@click.option('--div_lambda', help='The W-space div_lambda', type=float, default=0.)
+@click.option('--div_heat_lambda', help='The div_heat_lambda', type=float, default=0.)
+@click.option('--norm_lambda', help='The norm lambda in diff features', type=float, default=0.)
+@click.option('--var_sample_scale', help='The sampling scale for variation', type=float, default=1.)
+@click.option('--var_sample_mean', help='The sampling mean for variation', type=float, default=1.)
+@click.option('--sensor_used_layers', help='The number of used layers in sensor', type=int, default=5)
+@click.option('--lr_multiplier', help='The lr_multiplier in M net', type=float, default=1.)
+@click.option('--use_local_layer_heat', help='If use local layer_heat in discover loss', default=False, type=bool)
+@click.option('--use_global_layer_heat', help='If use global layer_heat in discover loss', default=False, type=bool)
+@click.option('--heat_fn', help='If use layer_heat, the heat_fn', type=str, default='softmax')
+@click.option('--wvae_lambda', help='The wvae lambda in M', type=float, default=0)
+@click.option('--kl_lambda', help='The kl lambda in M wvae', type=float, default=1)
+@click.option('--wvae_noise', help='The number of noise dim in M wvae', type=int, default=0)
+@click.option('--apply_m_on_z', help='If apply M on z of G', type=bool, default=False)
+@click.option('--save_size', help='The size to save per image in traversal', type=int, default=128)
+@click.option('--recursive_walk', help='If recursive walk', type=bool, default=False)
+@click.option('--trav_walk_scale', help='The walk scale in traversal', type=float, default=0.01)
+@click.option('--post_vae_lambda', help='The post_vae lambda.', type=float, default=0.)
+@click.option('--post_vae_kl_lambda', help='The KL lambda in post_vae.', type=float, default=1.)
+@click.option('--ce_diffdim_lambda', help='The cross_entropy lambda for diff dim.', type=float, default=1.)
+@click.option('--use_group_fc', help='If use group_fc in navigator.', type=bool, default=True)
+@click.option('--lrate', help='The lr_multiplier in M net', type=float, metavar='FLOAT')
+@click.option('--diff_avg_lerp_rate', help='The lerp rate for diff_avg', type=float, default=0.01)
+@click.option('--lerp_lambda', help='The lerp lambda', type=float, default=0.)
+@click.option('--lerp_norm', help='If lerp on l2-norm instead of on feature', type=bool, default=False)
+@click.option('--neg_lambda', help='The negative pair lambda', type=float, default=1.)
+@click.option('--pos_lambda', help='The positive pair lambda', type=float, default=1.)
+@click.option('--neg_on_self', help='If apply neg samples on self sample', type=bool, default=False)
+@click.option('--use_catdiff', help='If concat diff features', type=bool, default=False)
+@click.option('--show_normd', help='If show normD in saving heatmap', type=bool, default=False)
+@click.option('--use_heat_max', help='If use the max value in heat when trav', type=bool, default=False)
 
 def main(ctx, outdir, dry_run, **config_kwargs):
     """Train a GAN using the techniques described in the paper
@@ -571,13 +517,13 @@ def main(ctx, outdir, dry_run, **config_kwargs):
     print(json.dumps(args, indent=2))
     print()
     print(f'Output directory:   {args.run_dir}')
-    print(f'Training data:      {args.training_set_kwargs.path}')
+    # print(f'Training data:      {args.training_set_kwargs.path}')
     print(f'Training duration:  {args.total_kimg} kimg')
     print(f'Number of GPUs:     {args.num_gpus}')
-    print(f'Number of images:   {args.training_set_kwargs.max_size}')
-    print(f'Image resolution:   {args.training_set_kwargs.resolution}')
-    print(f'Conditional model:  {args.training_set_kwargs.use_labels}')
-    print(f'Dataset x-flips:    {args.training_set_kwargs.xflip}')
+    # print(f'Number of images:   {args.training_set_kwargs.max_size}')
+    # print(f'Image resolution:   {args.training_set_kwargs.resolution}')
+    # print(f'Conditional model:  {args.training_set_kwargs.use_labels}')
+    # print(f'Dataset x-flips:    {args.training_set_kwargs.xflip}')
     print()
 
     # Dry run?
