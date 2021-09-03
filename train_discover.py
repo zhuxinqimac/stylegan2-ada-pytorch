@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 03 Sep 2021 14:58:30 AEST
+# --- Last Modified: Fri 03 Sep 2021 15:35:58 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -35,14 +35,14 @@ class UserError(Exception):
 KEY_BRIEF_NAMES = {'z': 'nv_dim', 'at': 'att_type', 'nt': 'nav_type', 'amf': 'att_middle_feat', 'nmf': 'nav_middle_feat', 'atl': 'att_layers', 'nod': 'norm_on_depth',
                    'comp': 'compose_lamb', 'cont': 'contrast_lamb', 'ncol': 'loss_n_colors', 'div': 'div_lamb', 'norm': 'norm_lamb',
                    'vars': 'var_sample_scale', 'varm': 'var_sample_mean', 'sensl': 'sensor_used_layers', 'nomask': 'use_norm_mask',
-                   'divmsum': 'divide_mask_sum', 'dys': 'use_dynamic_scale', 'norasm': 'use_norm_as_mask',
+                   'divmsum': 'divide_mask_sum', 'dys': 'use_dynamic_scale', 'norasm': 'use_norm_as_mask', 'lr': 'lrate', 
                    'lerprt': 'diff_avg_lerp_rate', 'lerp': 'lerp_lamb', 'lerpnm': 'lerp_norm', 'neg': 'neg_lamb', 'pos': 'pos_lamb',
                    'nself': 'neg_on_self', 'catd': 'use_catdiff', 'nper': 'n_samples_per', 'sensor': 'sensor_type', 'ssize': 'save_size',
                    'wals': 'trav_walk_scale', 'recw': 'recursive_walk', 'shownm': 'show_normD'}
 KEY_DTYPES = {'nv_dim': int, 'att_type': str, 'nav_type': str, 'att_middle_feat': int, 'nav_middle_feat': int, 'att_layers': int, 'norm_on_depth': bool,
               'compose_lamb': float, 'contrast_lamb': float, 'loss_n_colors': int, 'div_lamb': float, 'norm_lamb': float,
               'var_sample_scale': float, 'var_sample_mean': float, 'sensor_used_layers': int, 'use_norm_mask': bool,
-              'divide_mask_sum': bool, 'use_dynamic_scale': bool, 'use_norm_as_mask': bool,
+              'divide_mask_sum': bool, 'use_dynamic_scale': bool, 'use_norm_as_mask': bool, 'lrate': float,
               'diff_avg_lerp_rate': float, 'lerp_lamb': float, 'lerp_norm': bool, 'neg_lamb': float, 'pos_lamb': float,
               'neg_on_self': bool, 'use_catdiff': bool, 'n_samples_per': int, 'sensor_type': str, 'save_size': int,
               'trav_walk_scale': float, 'recursive_walk': bool, 'show_normD': bool}
