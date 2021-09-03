@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 03 Sep 2021 03:39:43 AEST
+# --- Last Modified: Fri 03 Sep 2021 14:59:17 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -20,8 +20,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_utils import misc
 from torch_utils import persistence
-from training.networks import FullyConnectedLayer, DiscriminatorBlock
-from training.networks import MinibatchStdLayer, Conv2dLayer
+from training.networks import FullyConnectedLayer
+from training.networks import normalize_2nd_moment
 
 #----------------------------------------------------------------------------
 # Attentioners
@@ -32,12 +32,15 @@ class NoneAttentioner(torch.nn.Module):
         nv_dim,                     # Navigator latent dim.
         num_ws,                     # Number of intermediate latents for synthesis net input.
         w_dim,                      # Intermediate latent (W) dimensionality.
+        att_layers='all',           # Number of ws attention layers.
         **kwargs,
     ):
         super().__init__()
         self.nv_dim = nv_dim
         self.num_ws = num_ws
         self.w_dim = w_dim
+        self.att_layers = num_ws if att_layers=='all' else att_layers
+        assert att_layers <= num_ws
 
     def forward(self, ws_in):
         # ws_in: [b, num_ws, w_dim]
@@ -50,17 +53,20 @@ class FixedAttentioner(NoneAttentioner):
         nv_dim,                     # Navigator latent dim.
         num_ws,                     # Number of intermediate latents for synthesis net input.
         w_dim,                      # Intermediate latent (W) dimensionality.
+        att_layers,                 # Number of ws attention layers.
         **kwargs,
     ):
         super().__init__(nv_dim, num_ws, w_dim)
-        self.att_logits = nn.Parameter(torch.normal(mean=torch.zeros(nv_dim, num_ws), std=1),
+        self.att_logits = nn.Parameter(torch.normal(mean=torch.zeros(nv_dim, self.att_layers), std=1),
                                        requires_grad=True)
 
     def forward(self, ws_in):
         # ws_in: [b, num_ws, w_dim]
         # return: [b, nv_dim, num_ws]
-        ws_atts = torch.softmax(self.att_logits, dim=-1).view(
-            1, self.nv_dim, self.num_ws).repeat(ws_in.shape[0], 1, 1).to(ws_in.device)
+        ws_atts = torch.softmax(self.att_logits, dim=-1).view(1, self.nv_dim, self.att_layers)
+        ws_atts = torch.cat([ws_atts, torch.zeros([1, self.nv_dim, self.num_ws - self.att_layers],
+                                                  dtype=ws_in.dtype).to(ws_in.device)], dim=-1) # [1, nv_dim, num_ws]
+        ws_atts = ws_atts.repeat(ws_in.shape[0], 1, 1).to(ws_in.device)
         return ws_atts
 
 @persistence.persistent_class
@@ -69,20 +75,23 @@ class Ada1wAttentioner(NoneAttentioner):
         nv_dim,                     # Navigator latent dim.
         num_ws,                     # Number of intermediate latents for synthesis net input.
         w_dim,                      # Intermediate latent (W) dimensionality.
+        att_layers,                 # Number of ws attention layers.
         **kwargs,
     ):
         '''
         Depending only on a single w (or averaged w over num_ws).
         '''
-        super().__init__(nv_dim, num_ws, w_dim)
-        self.net = FullyConnectedLayer(w_dim, nv_dim * num_ws, activation='linear')
+        super().__init__(nv_dim, num_ws, w_dim, att_layers)
+        self.net = FullyConnectedLayer(w_dim, nv_dim * self.att_layers, activation='linear')
 
     def forward(self, ws_in):
         # ws_in: [b, num_ws, w_dim]
         # return: [b, nv_dim, num_ws]
         b = ws_in.shape[0]
         logits = self.net(ws_in.mean(1))
-        ws_atts = torch.softmax(logits.view(b, self.nv_dim, self.num_ws), dim=-1)
+        ws_atts = torch.softmax(logits.view(b, self.nv_dim, self.att_layers), dim=-1)
+        ws_atts = torch.cat([ws_atts, torch.zeros([b, self.nv_dim, self.num_ws - self.att_layers],
+                                                  dtype=ws_in.dtype).to(ws_in.device)], dim=-1) # [b, nv_dim, num_ws]
         return ws_atts
 
 @persistence.persistent_class
@@ -91,22 +100,25 @@ class AdaALLwAttentioner(NoneAttentioner):
         nv_dim,                     # Navigator latent dim.
         num_ws,                     # Number of intermediate latents for synthesis net input.
         w_dim,                      # Intermediate latent (W) dimensionality.
+        att_layers,                 # Number of ws attention layers.
         middle_feat=128,            # Intermediate feature dims in self.net.
         **kwargs,
     ):
         '''
         Depending on all ws.
         '''
-        super().__init__(nv_dim, num_ws, w_dim)
+        super().__init__(nv_dim, num_ws, w_dim, att_layers)
         self.net = nn.Sequential(FullyConnectedLayer(num_ws * w_dim, middle_feat, activation='relu'),
-                                 FullyConnectedLayer(middle_feat, nv_dim * num_ws, activation='linear'))
+                                 FullyConnectedLayer(middle_feat, nv_dim * self.att_layers, activation='linear'))
 
     def forward(self, ws_in):
         # ws_in: [b, num_ws, w_dim]
         # return: [b, nv_dim, num_ws]
         b = ws_in.shape[0]
         logits = self.net(ws_in.flatten(1))
-        ws_atts = torch.softmax(logits.view(b, self.nv_dim, self.num_ws), dim=-1)
+        ws_atts = torch.softmax(logits.view(b, self.nv_dim, self.att_layers), dim=-1)
+        ws_atts = torch.cat([ws_atts, torch.zeros([b, self.nv_dim, self.num_ws - self.att_layers],
+                                                  dtype=ws_in.dtype).to(ws_in.device)], dim=-1) # [b, nv_dim, num_ws]
         return ws_atts
 
 #----------------------------------------------------------------------------
@@ -245,6 +257,7 @@ class Navigator(torch.nn.Module):
         # To output delta per nv_dim in W space.
         ws_atts = self.att_net(ws_in) # [b, nv_dim, num_ws]
         per_w_dir = self.nav_net(ws_in) # [b, nv_dim, w_dim]
+        per_w_dir = normalize_2nd_moment(per_w_dir, dim=-1)
 
         dirs = ws_atts[:, :, :, np.newaxis] * per_w_dir[:, :, np.newaxis, ...] # [b, nv_dim, num_ws, w_dim]
         return dirs
