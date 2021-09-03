@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 03 Sep 2021 03:39:11 AEST
+# --- Last Modified: Fri 03 Sep 2021 16:31:00 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -353,16 +353,16 @@ class DiscoverLoss(Loss):
 
     def calc_loss_diversity(self, delta):
         '''
-        delta: (b/1, z_dim, w_dim)
+        delta: [b, nv_dim, num_ws, w_dim]
         '''
-        delta1 = delta[:, np.newaxis, ...] # (b/1, 1, z_dim, w_dim)
-        delta2 = delta[:, :, np.newaxis, ...] # (b/1, z_dim, 1, w_dim)
+        delta1 = delta.flatten(2)[:, np.newaxis, ...] # (b, 1, nv_dim, num_ws * w_dim)
+        delta2 = delta.flatten(2)[:, :, np.newaxis, ...] # (b, nv_dim, 1, num_ws * w_dim)
         # print('delta1.len:', torch.norm(delta1, dim=-1).squeeze())
         # norm = torch.norm(diff, dim=1) # (0.5batch, h, w)
-        cos_div = self.cos_fn_diversity(delta1, delta2) # (b/1, z_dim, z_dim)
+        cos_div = self.cos_fn_diversity(delta1, delta2) # (b, nv_dim, nv_dim)
         # print('cos_div:', cos_div)
         div_mask = 1. - torch.eye(self.nv_dim, device=delta.device).view(1, self.nv_dim, self.nv_dim)
-        loss = (cos_div * div_mask)**2
+        loss = (cos_div * div_mask).square()
         return loss.sum(dim=[1,2]).mean()
 
     def get_multicolor_ws(self, n_colors):
