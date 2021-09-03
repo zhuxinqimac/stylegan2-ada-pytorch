@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 03 Sep 2021 17:22:22 AEST
+# --- Last Modified: Fri 03 Sep 2021 22:22:46 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -32,7 +32,6 @@ def get_color_cuts(n_segs, len_v):
     np_cuts = np.linspace(0, len_v, num=n_segs+1, dtype=np.int)
     return np_cuts
 
-# loss_compose = extract_compose_loss(diff_1, diff_2, diff_1p2)
 def get_diff(orig, end):
     if isinstance(orig, torch.Tensor):
         return end - orig
@@ -53,10 +52,17 @@ def extract_compose_loss(diff_1, diff_2, diff_1p2):
         loss_ls = [square_loss(df_1, diff_2[i], diff_1p2[i])[:, np.newaxis] for i, df_1 in enumerate(diff_1)]
         return torch.cat(loss_ls, dim=1).mean(1)
 
+def extract_significance_loss(diff):
+    if isinstance(diff, torch.Tensor):
+        return -diff.square().flattent(1).mean(1)
+    else:
+        loss_ls = [df.square().flatten(1).mean(1)[:, np.newaxis] for i, df in enumerate(diff)]
+        return -torch.cat(loss_ls, dim=1).mean(1)
+
 #----------------------------------------------------------------------------
 class DiscoverLoss(Loss):
     def __init__(self, device, G_mapping, G_synthesis, M, S, S_L, norm_on_depth,
-                 compose_lamb=0., contrast_lamb=1., batch_gpu=4, n_colors=1,
+                 compose_lamb=0., contrast_lamb=1., significance_lamb=0., batch_gpu=4, n_colors=1,
                  div_lamb=0., norm_lamb=0., var_sample_scale=1.,
                  var_sample_mean=0., sensor_used_layers=5, use_norm_mask=True,
                  divide_mask_sum=True, use_dynamic_scale=True, use_norm_as_mask=False,
@@ -81,6 +87,7 @@ class DiscoverLoss(Loss):
         self.batch_gpu = batch_gpu
         self.compose_lamb = compose_lamb
         self.contrast_lamb = contrast_lamb
+        self.significance_lamb = significance_lamb
         self.norm_on_depth = norm_on_depth
         self.use_norm_mask = use_norm_mask
         self.divide_mask_sum = divide_mask_sum
@@ -386,6 +393,7 @@ class DiscoverLoss(Loss):
     def accumulate_gradients(self, phase, sync, gain):
         assert phase in ['Mall', 'Mcompose', 'Mdiverse', 'Mcontrast']
         do_Mcompose = (phase in ['Mall', 'Mcompose']) and (self.compose_lamb != 0)
+        do_Msignificance = (phase in ['Mall', 'Msignificance']) and (self.significance_lamb != 0)
         do_Mdiverse = (phase in ['Mall', 'Mdiverse']) and (self.div_lamb != 0)
         do_Mcontrast = (phase in ['Mall', 'Mcontrast']) and (self.contrast_lamb != 0)
 
@@ -412,7 +420,7 @@ class DiscoverLoss(Loss):
 
                 # Sample variation scales.
                 if self.use_dynamic_scale:
-                    scale = (torch.randn(b//2, device=delta.device) * self.var_sample_scale + self.var_sample_mean).view(b//2, 1)
+                    scale = (torch.randn(b//2, device=delta.device) * self.var_sample_scale + self.var_sample_mean).view(b//2, 1, 1)
                 else:
                     scale = self.var_sample_scale
 
@@ -436,7 +444,7 @@ class DiscoverLoss(Loss):
                     loss_contrast = self.extract_catdiff_loss(outs_all, pos_neg_idx)
                 else:
                     loss_contrast = self.extract_diff_loss(outs_all, pos_neg_idx)
-            loss_all += self.contrast_lamb * loss_contrast
+            loss_all += self.contrast_lamb * loss_contrast.mean()
 
         if do_Mcompose:
             # print('Using compose loss...')
@@ -474,7 +482,39 @@ class DiscoverLoss(Loss):
                 diff_1, diff_2, diff_1p2 = get_diff(outs_orig, outs_1), get_diff(outs_orig, outs_2), get_diff(outs_orig, outs_1p2)
                 loss_compose = extract_compose_loss(diff_1, diff_2, diff_1p2)
                 training_stats.report('Loss/M/loss_compose', loss_compose)
-                loss_all += self.compose_lamb * loss_compose
+                loss_all += self.compose_lamb * loss_compose.mean()
+
+        if do_Msignificance:
+            if not do_Mcompose:
+                with torch.autograd.profiler.record_function('Msignificance_sample_dirs'):
+                    dirs_idx = self.sample_batch_pos_neg_dirs(b, self.nv_dim, without_repeat=False).to(delta.device) # (b, 2)
+                    delta_1 = torch.gather(delta, 1, dirs_idx[:, 0].view(b, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim)).squeeze() # [b, num_ws, w_dim]
+
+                    # Sample variation scales.
+                    if self.use_dynamic_scale:
+                        scale_1 = (torch.randn(b, device=delta.device) * self.var_sample_scale + self.var_sample_mean).view(b, 1, 1)
+                    else:
+                        scale_1 = self.var_sample_scale
+
+                    # Apply all variations to ws.
+                    ws_1 = ws_orig + (delta_1 * scale_1) # (b, num_ws, w_dim)
+
+                with torch.autograd.profiler.record_function('Msignificance_generate_imgs'):
+                    # Generate images.
+                    ws_all = torch.cat([ws_orig, ws_1], dim=0) # (2 * b, num_ws, w_dim)
+                    imgs_all = self.run_G_synthesis(ws_all)
+
+                with torch.autograd.profiler.record_function('Msignificance_diff'):
+                    if imgs_all.size(1) == 1:
+                        imgs_all = imgs_all.repeat(1, 3, 1, 1)
+                    imgs_orig, imgs_1 = imgs_all.split(b)
+                    outs_orig, outs_1 = self.S.forward(imgs_orig), self.S.forward(imgs_1) # list [f1, f2, f3, ...]
+                    diff_1 = get_diff(outs_orig, outs_1)
+
+            with torch.autograd.profiler.record_function('Msignificance_loss'):
+                loss_significance = extract_significance_loss(diff_1)
+                training_stats.report('Loss/M/loss_significance', loss_significance)
+                loss_all += self.significance_lamb * loss_significance.mean()
 
         if do_Mdiverse:
             # print('Using diverse loss...')
@@ -482,7 +522,7 @@ class DiscoverLoss(Loss):
                 # Dir diversity loss.
                 loss_diversity = self.calc_loss_diversity(delta) # (b/1)
                 training_stats.report('Loss/M/loss_diversity', loss_diversity)
-                loss_all += self.div_lamb * loss_diversity
+                loss_all += self.div_lamb * loss_diversity.mean()
 
         with torch.autograd.profiler.record_function('M_backward'):
             loss_all.mean().mul(gain).backward()
