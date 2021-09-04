@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 03 Sep 2021 14:59:17 AEST
+# --- Last Modified: Sat 04 Sep 2021 16:46:49 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -22,6 +22,16 @@ from torch_utils import misc
 from torch_utils import persistence
 from training.networks import FullyConnectedLayer
 from training.networks import normalize_2nd_moment
+
+def construct_fc_layers(in_dim, fc_layers, middle_feat, out_dim, act='relu'):
+    net_ls = []
+    in_f, out_f = in_dim, middle_feat
+    print('Used FC_layers:', fc_layers)
+    for i in range(fc_layers):
+        net_ls.append(FullyConnectedLayer(in_f, out_f, activation=act))
+        in_f = out_f
+    net_ls.append(FullyConnectedLayer(in_f, out_dim, activation='linear'))
+    return nn.Sequential(*net_ls)
 
 #----------------------------------------------------------------------------
 # Attentioners
@@ -76,13 +86,15 @@ class Ada1wAttentioner(NoneAttentioner):
         num_ws,                     # Number of intermediate latents for synthesis net input.
         w_dim,                      # Intermediate latent (W) dimensionality.
         att_layers,                 # Number of ws attention layers.
+        middle_feat=128,            # Intermediate feature dims in self.net.
+        att_fc_layers=1,            # Number of FC layers.
         **kwargs,
     ):
         '''
         Depending only on a single w (or averaged w over num_ws).
         '''
         super().__init__(nv_dim, num_ws, w_dim, att_layers)
-        self.net = FullyConnectedLayer(w_dim, nv_dim * self.att_layers, activation='linear')
+        self.net = construct_fc_layers(w_dim, att_fc_layers, middle_feat, nv_dim * self.att_layers)
 
     def forward(self, ws_in):
         # ws_in: [b, num_ws, w_dim]
@@ -102,14 +114,16 @@ class AdaALLwAttentioner(NoneAttentioner):
         w_dim,                      # Intermediate latent (W) dimensionality.
         att_layers,                 # Number of ws attention layers.
         middle_feat=128,            # Intermediate feature dims in self.net.
+        att_fc_layers=1,            # Number of FC layers.
         **kwargs,
     ):
         '''
         Depending on all ws.
         '''
         super().__init__(nv_dim, num_ws, w_dim, att_layers)
-        self.net = nn.Sequential(FullyConnectedLayer(num_ws * w_dim, middle_feat, activation='relu'),
-                                 FullyConnectedLayer(middle_feat, nv_dim * self.att_layers, activation='linear'))
+        # self.net = nn.Sequential(FullyConnectedLayer(num_ws * w_dim, middle_feat, activation='relu'),
+                                 # FullyConnectedLayer(middle_feat, nv_dim * self.att_layers, activation='linear'))
+        self.net = construct_fc_layers(num_ws * w_dim, att_fc_layers, middle_feat, nv_dim * self.att_layers)
 
     def forward(self, ws_in):
         # ws_in: [b, num_ws, w_dim]
@@ -167,13 +181,16 @@ class Ada1wNavigatorNet(NoneNavigatorNet):
         nv_dim,                     # Navigator latent dim.
         num_ws,                     # Number of intermediate latents for synthesis net input.
         w_dim,                      # Intermediate latent (W) dimensionality.
+        middle_feat=128,            # Intermediate feature dims in self.net.
+        nav_fc_layers=1,            # Number of FC layers.
         **kwargs,
     ):
         '''
         Depending only on a single w (or averaged w over num_ws).
         '''
         super().__init__(nv_dim, num_ws, w_dim)
-        self.net = FullyConnectedLayer(w_dim, nv_dim * w_dim, activation='linear')
+        # self.net = FullyConnectedLayer(w_dim, nv_dim * w_dim, activation='linear')
+        self.net = construct_fc_layers(w_dim, nav_fc_layers, middle_feat, nv_dim * w_dim)
 
     def forward(self, ws_in):
         # ws_in: [b, num_ws, w_dim]
@@ -190,14 +207,16 @@ class AdaALLwNavigatorNet(NoneNavigatorNet):
         num_ws,                     # Number of intermediate latents for synthesis net input.
         w_dim,                      # Intermediate latent (W) dimensionality.
         middle_feat=128,            # Intermediate feature dims in self.net.
+        nav_fc_layers=1,            # Number of FC layers.
         **kwargs,
     ):
         '''
         Depending on all ws.
         '''
         super().__init__(nv_dim, num_ws, w_dim)
-        self.net = nn.Sequential(FullyConnectedLayer(num_ws * w_dim, middle_feat, activation='relu'),
-                                 FullyConnectedLayer(middle_feat, nv_dim * w_dim, activation='linear'))
+        # self.net = nn.Sequential(FullyConnectedLayer(num_ws * w_dim, middle_feat, activation='relu'),
+                                 # FullyConnectedLayer(middle_feat, nv_dim * w_dim, activation='linear'))
+        self.net = construct_fc_layers(num_ws * w_dim, nav_fc_layers, middle_feat, nv_dim * w_dim)
 
     def forward(self, ws_in):
         # ws_in: [b, num_ws, w_dim]
