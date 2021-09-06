@@ -8,7 +8,7 @@
 
 # --- File Name: train_group.py
 # --- Creation Date: 22-08-2021
-# --- Last Modified: Thu 02 Sep 2021 23:21:35 AEST
+# --- Last Modified: Mon 06 Sep 2021 20:50:44 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -34,13 +34,16 @@ class UserError(Exception):
     pass
 
 #----------------------------------------------------------------------------
+def bool_own(v):
+    return v.lower() == 'true'
+
 KEY_BRIEF_NAMES = {'z': 'z_dim', 'gnoi': 'use_noise', 'pfs': 'proj_feat_size', 'pfc': 'proj_feat_ch', 'lies': 'lie_alg_init_scale',
                    'gmat': 'group_mat_dim', 'ptype': 'projector_type', 'com': 'commute_lamb', 'hes': 'hessian_lamb', 'ani': 'anisotropy_lamb',
                    'pbase': 'post_exp_conv_feat_base', 'I': 'I_lambda', 'Ig': 'I_g_lambda', 'gncut': 'group_ncut', 'cmask': 'use_code_mask',
                    'mb': 'mb', 'mbstd': 'mbstd', 'fm': 'fmaps', 'lr': 'lrate', 'gm': 'gamma', 'ema': 'ema', 'nper': 'n_samples_per'}
-KEY_DTYPES = {'z_dim': int, 'use_noise': bool, 'proj_feat_size': int, 'proj_feat_ch': int, 'lie_alg_init_scale': float,
+KEY_DTYPES = {'z_dim': int, 'use_noise': bool_own, 'proj_feat_size': int, 'proj_feat_ch': int, 'lie_alg_init_scale': float,
               'group_mat_dim': int, 'projector_type': str, 'commute_lamb': float, 'hessian_lamb': float, 'anisotropy_lamb': float,
-              'post_exp_conv_feat_base': int, 'I_lambda': float, 'I_g_lambda': float, 'group_ncut': int, 'use_code_mask': bool,
+              'post_exp_conv_feat_base': int, 'I_lambda': float, 'I_g_lambda': float, 'group_ncut': int, 'use_code_mask': bool_own,
               'mb': int, 'mbstd': int, 'fmaps': float, 'lrate': float, 'gamma': float, 'ema': int, 'n_samples_per': int}
 
 def parse_cfg(cfg):

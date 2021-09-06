@@ -8,7 +8,7 @@
 
 # --- File Name: train_liestyle.py
 # --- Creation Date: 24-08-2021
-# --- Last Modified: Mon 06 Sep 2021 16:43:04 AEST
+# --- Last Modified: Mon 06 Sep 2021 23:23:14 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -34,15 +34,18 @@ class UserError(Exception):
     pass
 
 #----------------------------------------------------------------------------
-KEY_BRIEF_NAMES = {'z': 'z_dim', 'gnoi': 'use_noise', 'lies': 'lie_alg_init_scale',
+def bool_own(v):
+    return v.lower() == 'true'
+
+KEY_BRIEF_NAMES = {'z': 'z_dim', 'w': 'w_dim', 'gnoi': 'use_noise', 'lies': 'lie_alg_init_scale', 'gtype': 'G_type',
                    'gmat': 'group_mat_dim', 'com': 'commute_lamb', 'hes': 'hessian_lamb', 'ani': 'anisotropy_lamb',
                    'I': 'I_lambda', 'Ig': 'I_g_lambda', 'C': 'C_lambda', 'gncut': 'group_ncut', 'cmask': 'use_code_mask', 'pts': 'perturb_scale',
-                   'mb': 'mb', 'mbstd': 'mbstd', 'fm': 'fmaps', 'lr': 'lrate', 'gm': 'gamma', 'ema': 'ema', 'nper': 'n_samples_per',
+                   'mb': 'mb', 'mbstd': 'mbstd', 'fm': 'fmaps', 'lr': 'lrate', 'gm': 'gamma', 'ema': 'ema', 'nper': 'n_samples_per', 'map': 'map',
                    'plw': 'pl_weight', 'mixp': 'style_mixing_prob', 'grin': 'G_reg_interval'}
-KEY_DTYPES = {'z_dim': int, 'use_noise': bool, 'lie_alg_init_scale': float,
+KEY_DTYPES = {'z_dim': int, 'w_dim': int, 'use_noise': bool_own, 'lie_alg_init_scale': float, 'G_type': str,
               'group_mat_dim': int, 'commute_lamb': float, 'hessian_lamb': float, 'anisotropy_lamb': float,
-              'I_lambda': float, 'I_g_lambda': float, 'C_lambda': float, 'group_ncut': int, 'use_code_mask': bool, 'perturb_scale': float,
-              'mb': int, 'mbstd': int, 'fmaps': float, 'lrate': float, 'gamma': float, 'ema': int, 'n_samples_per': int,
+              'I_lambda': float, 'I_g_lambda': float, 'C_lambda': float, 'group_ncut': int, 'use_code_mask': bool_own, 'perturb_scale': float,
+              'mb': int, 'mbstd': int, 'fmaps': float, 'lrate': float, 'gamma': float, 'ema': int, 'n_samples_per': int, 'map': int,
               'pl_weight': float, 'style_mixing_prob': float, 'G_reg_interval': int}
 
 def parse_cfg(cfg):
@@ -191,14 +194,14 @@ def setup_training_loop_kwargs(
     desc += f'-{cfg}'
 
     cfg_specs = {
-        'auto':      dict(ref_gpus=-1, kimg=25000, mb=-1, mbstd=-1, fmaps=-1, lrate=-1, gamma=-1, ema=-1, ramp=0.05, n_samples_per=7,
-                          z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, pl_weight=2, style_mixing_prob=0.9, G_reg_interval=4,
+        'auto':      dict(ref_gpus=-1, kimg=25000, mb=-1, mbstd=-1, fmaps=-1, lrate=-1, gamma=-1, ema=-1, ramp=0.05, G_type='liestyle', n_samples_per=7, map=8,
+                          z_dim=64, w_dim=512, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, pl_weight=2, style_mixing_prob=0.9, G_reg_interval=4,
                           commute_lamb=0, hessian_lamb=0, anisotropy_lamb=0, I_lambda=0, I_g_lambda=0, C_lambda=0, group_ncut=0, use_code_mask=False), # Populated dynamically based on resolution and GPU count.
-        'basic': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
-                      z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, pl_weight=2, style_mixing_prob=0.9, G_reg_interval=4,
+        'basic': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, G_type='liestyle', n_samples_per=7, map=8,
+                      z_dim=64, w_dim=512, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, pl_weight=2, style_mixing_prob=0.9, G_reg_interval=4,
                       commute_lamb=0, hessian_lamb=0, anisotropy_lamb=0, I_lambda=0, I_g_lambda=0, C_lambda=0, group_ncut=0, use_code_mask=False, perturb_scale=1.),
-        'celeba-hes_0.1-Ig_1': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
-                             z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, pl_weight=2, style_mixing_prob=0.9, G_reg_interval=4,
+        'celeba-hes_0.1-Ig_1': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, G_type='liestyle', n_samples_per=7, map=8,
+                             z_dim=64, w_dim=512, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, pl_weight=2, style_mixing_prob=0.9, G_reg_interval=4,
                              commute_lamb=0, hessian_lamb=0.1, anisotropy_lamb=0, I_lambda=0, I_g_lambda=1, group_ncut=0, use_code_mask=False, perturb_scale=1.),
     }
 
@@ -217,16 +220,25 @@ def setup_training_loop_kwargs(
         spec.gamma = 0.0002 * (res ** 2) / spec.mb # heuristic formula
         spec.ema = spec.mb * 10 / 32
 
-    args.G_kwargs = dnnlib.EasyDict(class_name='training.networks_liestylegan.LieStyleGenerator',
-                                    z_dim=spec.z_dim, w_dim=spec.group_mat_dim*spec.group_mat_dim,
-                                    mapping_kwargs=dnnlib.EasyDict(), synthesis_kwargs=dnnlib.EasyDict())
+    if spec.G_type == 'liestyle':
+        args.G_kwargs = dnnlib.EasyDict(class_name='training.networks_liestylegan.LieStyleGenerator',
+                                        z_dim=spec.z_dim, w_dim=spec.group_mat_dim*spec.group_mat_dim,
+                                        mapping_kwargs=dnnlib.EasyDict(), synthesis_kwargs=dnnlib.EasyDict())
+        args.G_kwargs.mapping_kwargs.liegroup_kwargs = dnnlib.EasyDict()
+        args.G_kwargs.mapping_kwargs.liegroup_kwargs.lie_alg_init_scale = spec.lie_alg_init_scale
+        args.G_kwargs.mapping_kwargs.liegroup_kwargs.mat_dim = spec.group_mat_dim
+        args.G_kwargs.mapping_kwargs.liegroup_kwargs.ncut = spec.group_ncut
+        args.G_kwargs.mapping_kwargs.liegroup_kwargs.use_code_mask = spec.use_code_mask
+    elif spec.G_type == 'style':
+        args.G_kwargs = dnnlib.EasyDict(class_name='training.networks_liestylegan.Generator',
+                                        z_dim=spec.z_dim, w_dim=spec.w_dim,
+                                        mapping_kwargs=dnnlib.EasyDict(), synthesis_kwargs=dnnlib.EasyDict())
+        args.G_kwargs.mapping_kwargs.num_layers = spec.map
+    else:
+        raise ValueError('Unknown G_type:', G_type)
+
     args.D_kwargs = dnnlib.EasyDict(class_name='training.networks.Discriminator', block_kwargs=dnnlib.EasyDict(),
                                     mapping_kwargs=dnnlib.EasyDict(), epilogue_kwargs=dnnlib.EasyDict())
-    args.G_kwargs.mapping_kwargs.liegroup_kwargs = dnnlib.EasyDict()
-    args.G_kwargs.mapping_kwargs.liegroup_kwargs.lie_alg_init_scale = spec.lie_alg_init_scale
-    args.G_kwargs.mapping_kwargs.liegroup_kwargs.mat_dim = spec.group_mat_dim
-    args.G_kwargs.mapping_kwargs.liegroup_kwargs.ncut = spec.group_ncut
-    args.G_kwargs.mapping_kwargs.liegroup_kwargs.use_code_mask = spec.use_code_mask
 
     args.G_kwargs.synthesis_kwargs.channel_base = args.D_kwargs.channel_base = int(spec.fmaps * 32768)
     args.G_kwargs.synthesis_kwargs.channel_max = args.D_kwargs.channel_max = 512

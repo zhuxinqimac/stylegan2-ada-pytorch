@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 04 Sep 2021 16:20:54 AEST
+# --- Last Modified: Mon 06 Sep 2021 20:50:19 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -32,6 +32,9 @@ class UserError(Exception):
     pass
 
 #----------------------------------------------------------------------------
+def bool_own(v):
+    return v.lower() == 'true'
+
 KEY_BRIEF_NAMES = {'z': 'nv_dim', 'at': 'att_type', 'nt': 'nav_type', 'amf': 'att_middle_feat', 'nmf': 'nav_middle_feat',
                    'afc': 'att_fc_layers', 'nfc': 'nav_fc_layers', 'atl': 'att_layers', 'nod': 'norm_on_depth',
                    'comp': 'compose_lamb', 'cont': 'contrast_lamb', 'sig': 'significance_lamb', 'ncol': 'loss_n_colors', 'div': 'div_lamb', 'norm': 'norm_lamb',
@@ -41,13 +44,13 @@ KEY_BRIEF_NAMES = {'z': 'nv_dim', 'at': 'att_type', 'nt': 'nav_type', 'amf': 'at
                    'nself': 'neg_on_self', 'catd': 'use_catdiff', 'nper': 'n_samples_per', 'sensor': 'sensor_type', 'ssize': 'save_size',
                    'wals': 'trav_walk_scale', 'recw': 'recursive_walk', 'shownm': 'show_normD'}
 KEY_DTYPES = {'nv_dim': int, 'att_type': str, 'nav_type': str, 'att_middle_feat': int, 'nav_middle_feat': int,
-              'att_fc_layers': int, 'nav_fc_layers': int, 'att_layers': int, 'norm_on_depth': bool,
+              'att_fc_layers': int, 'nav_fc_layers': int, 'att_layers': int, 'norm_on_depth': bool_own,
               'compose_lamb': float, 'contrast_lamb': float, 'significance_lamb': float, 'loss_n_colors': int, 'div_lamb': float, 'norm_lamb': float,
-              'var_sample_scale': float, 'var_sample_mean': float, 'sensor_used_layers': int, 'use_norm_mask': bool,
-              'divide_mask_sum': bool, 'use_dynamic_scale': bool, 'use_norm_as_mask': bool, 'lrate': float,
-              'diff_avg_lerp_rate': float, 'lerp_lamb': float, 'lerp_norm': bool, 'neg_lamb': float, 'pos_lamb': float,
-              'neg_on_self': bool, 'use_catdiff': bool, 'n_samples_per': int, 'sensor_type': str, 'save_size': int,
-              'trav_walk_scale': float, 'recursive_walk': bool, 'show_normD': bool}
+              'var_sample_scale': float, 'var_sample_mean': float, 'sensor_used_layers': int, 'use_norm_mask': bool_own,
+              'divide_mask_sum': bool_own, 'use_dynamic_scale': bool_own, 'use_norm_as_mask': bool_own, 'lrate': float,
+              'diff_avg_lerp_rate': float, 'lerp_lamb': float, 'lerp_norm': bool_own, 'neg_lamb': float, 'pos_lamb': float,
+              'neg_on_self': bool_own, 'use_catdiff': bool_own, 'n_samples_per': int, 'sensor_type': str, 'save_size': int,
+              'trav_walk_scale': float, 'recursive_walk': bool_own, 'show_normD': bool_own}
 
 def parse_cfg(cfg):
     '''

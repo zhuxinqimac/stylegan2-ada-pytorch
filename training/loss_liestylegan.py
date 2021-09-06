@@ -8,7 +8,7 @@
 
 # --- File Name: loss_liestylegan.py
 # --- Creation Date: 26-08-2021
-# --- Last Modified: Mon 06 Sep 2021 16:10:00 AEST
+# --- Last Modified: Mon 06 Sep 2021 23:37:37 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -62,7 +62,7 @@ class LieStyleGANLoss(Loss):
             if return_gfeats:
                 ws, lie_group = self.G_mapping(z, c, return_gfeats=return_gfeats, **G_kwargs)
             else:
-                ws = self.G_mapping(z, c, return_gfeats=return_gfeats, **G_kwargs)
+                ws = self.G_mapping(z, c, **G_kwargs)
             if self.style_mixing_prob > 0:
                 with torch.autograd.profiler.record_function('style_mixing'):
                     cutoff = torch.empty([], dtype=torch.int64, device=ws.device).random_(1, ws.shape[1])
@@ -141,7 +141,10 @@ class LieStyleGANLoss(Loss):
         # GregI: Enforce InfoGAN loss.
         if do_GregI:
             with torch.autograd.profiler.record_function('G_forward_in_regI'):
-                gen_img, _gen_ws, lie_group = self.run_G(gen_z, gen_c, sync=sync, return_gfeats=True, group_split=self.group_split)
+                if self.I_g_lambda > 0:
+                    gen_img, _gen_ws, lie_group = self.run_G(gen_z, gen_c, sync=sync, return_gfeats=True, group_split=self.group_split)
+                else:
+                    gen_img, _gen_ws = self.run_G(gen_z, gen_c, sync=sync, return_gfeats=False, group_split=self.group_split)
             with torch.autograd.profiler.record_function('I_forward'):
                 out_z, out_g = self.run_I(gen_img, gen_c, sync=sync)
             with torch.autograd.profiler.record_function('Compute_regI_loss'):

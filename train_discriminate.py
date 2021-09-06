@@ -8,7 +8,7 @@
 
 # --- File Name: train_discriminate.py
 # --- Creation Date: 05-09-2021
-# --- Last Modified: Mon 06 Sep 2021 00:54:31 AEST
+# --- Last Modified: Mon 06 Sep 2021 20:50:33 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -34,8 +34,11 @@ class UserError(Exception):
     pass
 
 #----------------------------------------------------------------------------
+def bool_own(v):
+    return v.lower() == 'true'
+
 KEY_BRIEF_NAMES = {'ch': 'net_ch_in', 'dout': 'net_dim_out', 'netn': 'net_name', 'pretr': 'pretrained', 'loss': 'loss_name'}
-KEY_DTYPES = {'net_ch_in': int, 'net_dim_out': int, 'net_name': str, 'pretrained': bool, 'loss_name': str}
+KEY_DTYPES = {'net_ch_in': int, 'net_dim_out': int, 'net_name': str, 'pretrained': bool_own, 'loss_name': str}
 
 def parse_cfg(cfg):
     '''
