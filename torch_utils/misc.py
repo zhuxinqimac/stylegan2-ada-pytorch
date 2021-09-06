@@ -49,9 +49,9 @@ except AttributeError:
     def nan_to_num(input, nan=0.0, posinf=None, neginf=None, *, out=None): # pylint: disable=redefined-builtin
         assert isinstance(input, torch.Tensor)
         if posinf is None:
-            posinf = torch.finfo(input.dtype).max
+            posinf = torch.finfo(input.dtype).max if input.dtype==torch.float else torch.iinfo(input.dtype).max
         if neginf is None:
-            neginf = torch.finfo(input.dtype).min
+            neginf = torch.finfo(input.dtype).min if input.dtype==torch.float else torch.iinfo(input.dtype).min
         assert nan == 0
         if any(torch.__version__.startswith(x) for x in ['1.7.', '1.8.', '1.9']):
             return torch.clamp(input.unsqueeze(0).nansum(0), min=neginf, max=posinf, out=out)
@@ -191,6 +191,8 @@ def check_ddp_consistency(module, ignore_regex=None):
         # print('tensor.shape:', tensor.shape)
         # print('other.shape:', other.shape)
         # print(tensor == other)
+        # print(f'name {name} tensor.dtype:', tensor.dtype)
+        # print(f'name {name} other.dtype:', other.dtype)
         assert (nan_to_num(tensor) == nan_to_num(other)).all(), fullname
 
 #----------------------------------------------------------------------------

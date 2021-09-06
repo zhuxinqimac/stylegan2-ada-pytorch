@@ -8,7 +8,7 @@
 
 # --- File Name: networks_liestylegan.py
 # --- Creation Date: 24-08-2021
-# --- Last Modified: Mon 30 Aug 2021 22:08:28 AEST
+# --- Last Modified: Mon 06 Sep 2021 16:49:19 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -84,6 +84,7 @@ class LieStyleGenerator(torch.nn.Module):
         self.w_dim = w_dim
         self.img_resolution = img_resolution
         self.img_channels = img_channels
+        print('synthesis_kwargs.use_noise:', synthesis_kwargs.use_noise)
         self.synthesis = SynthesisNetwork(w_dim=w_dim, img_resolution=img_resolution, img_channels=img_channels, **synthesis_kwargs)
         self.num_ws = self.synthesis.num_ws
         # self.mapping = MappingNetwork(z_dim=z_dim, c_dim=c_dim, w_dim=w_dim, num_ws=self.num_ws, **mapping_kwargs)

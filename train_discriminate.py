@@ -6,13 +6,13 @@
 # You may obtain a copy of the License at
 # http://www.apache.org/licenses/LICENSE-2.0
 
-# --- File Name: train_liestyle.py
-# --- Creation Date: 24-08-2021
-# --- Last Modified: Mon 06 Sep 2021 16:43:04 AEST
+# --- File Name: train_discriminate.py
+# --- Creation Date: 05-09-2021
+# --- Last Modified: Mon 06 Sep 2021 00:54:31 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
-LieStyleGAN training code. Code borrowed from train.py
+Train main file for discriminate tasks.
 """
 
 import os
@@ -23,7 +23,7 @@ import tempfile
 import torch
 import dnnlib
 
-from training import training_loop_liestyle
+from training import training_loop_discriminate
 from metrics import metric_main
 from torch_utils import training_stats
 from torch_utils import custom_ops
@@ -34,16 +34,8 @@ class UserError(Exception):
     pass
 
 #----------------------------------------------------------------------------
-KEY_BRIEF_NAMES = {'z': 'z_dim', 'gnoi': 'use_noise', 'lies': 'lie_alg_init_scale',
-                   'gmat': 'group_mat_dim', 'com': 'commute_lamb', 'hes': 'hessian_lamb', 'ani': 'anisotropy_lamb',
-                   'I': 'I_lambda', 'Ig': 'I_g_lambda', 'C': 'C_lambda', 'gncut': 'group_ncut', 'cmask': 'use_code_mask', 'pts': 'perturb_scale',
-                   'mb': 'mb', 'mbstd': 'mbstd', 'fm': 'fmaps', 'lr': 'lrate', 'gm': 'gamma', 'ema': 'ema', 'nper': 'n_samples_per',
-                   'plw': 'pl_weight', 'mixp': 'style_mixing_prob', 'grin': 'G_reg_interval'}
-KEY_DTYPES = {'z_dim': int, 'use_noise': bool, 'lie_alg_init_scale': float,
-              'group_mat_dim': int, 'commute_lamb': float, 'hessian_lamb': float, 'anisotropy_lamb': float,
-              'I_lambda': float, 'I_g_lambda': float, 'C_lambda': float, 'group_ncut': int, 'use_code_mask': bool, 'perturb_scale': float,
-              'mb': int, 'mbstd': int, 'fmaps': float, 'lrate': float, 'gamma': float, 'ema': int, 'n_samples_per': int,
-              'pl_weight': float, 'style_mixing_prob': float, 'G_reg_interval': int}
+KEY_BRIEF_NAMES = {'ch': 'net_ch_in', 'dout': 'net_dim_out', 'netn': 'net_name', 'pretr': 'pretrained', 'loss': 'loss_name'}
+KEY_DTYPES = {'net_ch_in': int, 'net_dim_out': int, 'net_name': str, 'pretrained': bool, 'loss_name': str}
 
 def parse_cfg(cfg):
     '''
@@ -91,7 +83,7 @@ def setup_training_loop_kwargs(
     augpipe    = None, # Augmentation pipeline: 'blit', 'geom', 'color', 'filter', 'noise', 'cutout', 'bg', 'bgc' (default), ..., 'bgcfnc'
 
     # Transfer learning.
-    resume     = None, # Load previous network: 'noresume' (default), 'ffhq256', 'ffhq512', 'ffhq1024', 'celebahq256', 'lsundog256', <file>, <url>
+    resume     = None, # Load previous generative network, not used.
     freezed    = None, # Freeze-D: <int>, default = 0 discriminator layers
 
     # Performance options (not included in desc).
@@ -100,9 +92,6 @@ def setup_training_loop_kwargs(
     allow_tf32 = None, # Allow PyTorch to use TF32 for matmul and convolutions: <bool>, default = False
     nobench    = None, # Disable cuDNN benchmarking: <bool>, default = False
     workers    = None, # Override number of DataLoader workers: <int>, default = 3
-
-    # Common sense network.
-    common_sense_net_pkl = None, # Common sense net pkl
 ):
     args = dnnlib.EasyDict()
 
@@ -143,43 +132,16 @@ def setup_training_loop_kwargs(
 
     assert data is not None
     assert isinstance(data, str)
-    args.training_set_kwargs = dnnlib.EasyDict(class_name='training.dataset.ImageFolderDataset', path=data, use_labels=True, max_size=None, xflip=False)
+    # args.training_set_kwargs = dnnlib.EasyDict(class_name='training.dataset.ImageFolderDataset', path=data, use_labels=True, max_size=None, xflip=False)
+    args.training_set_kwargs = dnnlib.EasyDict(class_name='training.dataset_discriminate.Paired3DShapes', path=data)
     args.data_loader_kwargs = dnnlib.EasyDict(pin_memory=True, num_workers=3, prefetch_factor=2)
     try:
         training_set = dnnlib.util.construct_class_by_name(**args.training_set_kwargs) # subclass of training.dataset.Dataset
         args.training_set_kwargs.resolution = training_set.resolution # be explicit about resolution
-        args.training_set_kwargs.use_labels = training_set.has_labels # be explicit about labels
-        args.training_set_kwargs.max_size = len(training_set) # be explicit about dataset size
         desc = training_set.name
         del training_set # conserve memory
     except IOError as err:
         raise UserError(f'--data: {err}')
-
-    if cond is None:
-        cond = False
-    assert isinstance(cond, bool)
-    if cond:
-        if not args.training_set_kwargs.use_labels:
-            raise UserError('--cond=True requires labels specified in dataset.json')
-        desc += '-cond'
-    else:
-        args.training_set_kwargs.use_labels = False
-
-    if subset is not None:
-        assert isinstance(subset, int)
-        if not 1 <= subset <= args.training_set_kwargs.max_size:
-            raise UserError(f'--subset must be between 1 and {args.training_set_kwargs.max_size}')
-        desc += f'-subset{subset}'
-        if subset < args.training_set_kwargs.max_size:
-            args.training_set_kwargs.max_size = subset
-            args.training_set_kwargs.random_seed = args.random_seed
-
-    if mirror is None:
-        mirror = False
-    assert isinstance(mirror, bool)
-    if mirror:
-        desc += '-mirror'
-        args.training_set_kwargs.xflip = True
 
     # ------------------------------------
     # Base config: cfg, gamma, kimg, batch
@@ -191,15 +153,9 @@ def setup_training_loop_kwargs(
     desc += f'-{cfg}'
 
     cfg_specs = {
-        'auto':      dict(ref_gpus=-1, kimg=25000, mb=-1, mbstd=-1, fmaps=-1, lrate=-1, gamma=-1, ema=-1, ramp=0.05, n_samples_per=7,
-                          z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, pl_weight=2, style_mixing_prob=0.9, G_reg_interval=4,
-                          commute_lamb=0, hessian_lamb=0, anisotropy_lamb=0, I_lambda=0, I_g_lambda=0, C_lambda=0, group_ncut=0, use_code_mask=False), # Populated dynamically based on resolution and GPU count.
-        'basic': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
-                      z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, pl_weight=2, style_mixing_prob=0.9, G_reg_interval=4,
-                      commute_lamb=0, hessian_lamb=0, anisotropy_lamb=0, I_lambda=0, I_g_lambda=0, C_lambda=0, group_ncut=0, use_code_mask=False, perturb_scale=1.),
-        'celeba-hes_0.1-Ig_1': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, n_samples_per=7,
-                             z_dim=64, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, pl_weight=2, style_mixing_prob=0.9, G_reg_interval=4,
-                             commute_lamb=0, hessian_lamb=0.1, anisotropy_lamb=0, I_lambda=0, I_g_lambda=1, group_ncut=0, use_code_mask=False, perturb_scale=1.),
+        'auto':      dict(ref_gpus=-1, kimg=25000, mb=-1, mbstd=-1, fmaps=-1, lrate=-1, ema=-1, ramp=0.05, map=8), # Populated dynamically based on resolution and GPU count.
+        'basic':     dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, ema=10,  ramp=0.05,
+                          net_ch_in=6, net_dim_out=1, net_name='resnet50', pretrained=True, loss_name='simp'),
     }
 
     # assert cfg in cfg_specs
@@ -217,61 +173,17 @@ def setup_training_loop_kwargs(
         spec.gamma = 0.0002 * (res ** 2) / spec.mb # heuristic formula
         spec.ema = spec.mb * 10 / 32
 
-    args.G_kwargs = dnnlib.EasyDict(class_name='training.networks_liestylegan.LieStyleGenerator',
-                                    z_dim=spec.z_dim, w_dim=spec.group_mat_dim*spec.group_mat_dim,
-                                    mapping_kwargs=dnnlib.EasyDict(), synthesis_kwargs=dnnlib.EasyDict())
-    args.D_kwargs = dnnlib.EasyDict(class_name='training.networks.Discriminator', block_kwargs=dnnlib.EasyDict(),
-                                    mapping_kwargs=dnnlib.EasyDict(), epilogue_kwargs=dnnlib.EasyDict())
-    args.G_kwargs.mapping_kwargs.liegroup_kwargs = dnnlib.EasyDict()
-    args.G_kwargs.mapping_kwargs.liegroup_kwargs.lie_alg_init_scale = spec.lie_alg_init_scale
-    args.G_kwargs.mapping_kwargs.liegroup_kwargs.mat_dim = spec.group_mat_dim
-    args.G_kwargs.mapping_kwargs.liegroup_kwargs.ncut = spec.group_ncut
-    args.G_kwargs.mapping_kwargs.liegroup_kwargs.use_code_mask = spec.use_code_mask
+    args.D_kwargs = dnnlib.EasyDict(class_name='training.networks_common_sense.BackboneNet', ch_in=spec.net_ch_in, dim_out=spec.net_dim_out,
+                                    net_name=spec.net_name, pretrained=spec.pretrained)
 
-    args.G_kwargs.synthesis_kwargs.channel_base = args.D_kwargs.channel_base = int(spec.fmaps * 32768)
-    args.G_kwargs.synthesis_kwargs.channel_max = args.D_kwargs.channel_max = 512
-    args.G_kwargs.synthesis_kwargs.num_fp16_res = args.D_kwargs.num_fp16_res = 4 # enable mixed-precision training
-    args.G_kwargs.synthesis_kwargs.conv_clamp = args.D_kwargs.conv_clamp = 256 # clamp activations to avoid float16 overflow
-    args.G_kwargs.synthesis_kwargs.use_noise = spec.use_noise
-
-    args.D_kwargs.epilogue_kwargs.mbstd_group_size = spec.mbstd
-
-    args.G_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', lr=spec.lrate, betas=[0,0.99], eps=1e-8)
     args.D_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', lr=spec.lrate, betas=[0,0.99], eps=1e-8)
+    args.loss_kwargs = dnnlib.EasyDict(class_name='training.loss_discriminate.DiscriminateLoss', loss_name=spec.loss_name)
 
-    args.loss_kwargs = dnnlib.EasyDict(class_name='training.loss_liestylegan.LieStyleGANLoss', r1_gamma=spec.gamma,
-                                       commute_lamb=spec.commute_lamb, hessian_lamb=spec.hessian_lamb, anisotropy_lamb=spec.anisotropy_lamb,
-                                       group_split=spec.group_ncut>0)
-
-    if ('I_lambda' in spec and spec.I_lambda > 0) or ('I_g_lambda' in spec and spec.I_g_lambda > 0):
-        args.I_kwargs = dnnlib.EasyDict(class_name='training.networks_liegan.Recognizer',  block_kwargs=dnnlib.EasyDict(),
-                                        mapping_kwargs=dnnlib.EasyDict(), epilogue_kwargs=dnnlib.EasyDict())
-        args.I_kwargs.channel_base = int(spec.fmaps * 32768)
-        args.I_kwargs.channel_max = 512
-        args.I_kwargs.num_fp16_res = 4 # enable mixed-precision training
-        args.I_kwargs.conv_clamp = 256 # clamp activations to avoid float16 overflow
-        args.I_kwargs.epilogue_kwargs.mbstd_group_size = spec.mbstd
-        args.I_kwargs.z_dim = spec.z_dim if spec.I_lambda > 0 else None
-        args.I_kwargs.mat_dim = spec.group_mat_dim if spec.I_g_lambda > 0 else None
-        args.loss_kwargs.I_lambda = spec.I_lambda
-        args.loss_kwargs.I_g_lambda = spec.I_g_lambda
-
-    # Common sense loss
-    if ('C_lambda' in spec) and (spec.C_lambda > 0):
-        args.C_kwargs = dnnlib.EasyDict(C_pkl=common_sense_net_pkl)
-        args.loss_kwargs.perturb_scale = spec.perturb_scale
-        args.loss_kwargs.C_lambda = spec.C_lambda
-
-    args.loss_kwargs.pl_weight = spec.pl_weight # disable path length regularization
-    args.loss_kwargs.style_mixing_prob = spec.style_mixing_prob # disable style mixing
-
-    args.n_samples_per = spec.n_samples_per
     args.total_kimg = spec.kimg
     args.batch_size = spec.mb
     args.batch_gpu = spec.mb // spec.ref_gpus
     args.ema_kimg = spec.ema
     args.ema_rampup = spec.ramp
-    args.G_reg_interval = None if spec.G_reg_interval == 0 else spec.G_reg_interval
 
     if gamma is not None:
         assert isinstance(gamma, float)
@@ -362,41 +274,6 @@ def setup_training_loop_kwargs(
     if aug != 'noaug':
         args.augment_kwargs = dnnlib.EasyDict(class_name='training.augment.AugmentPipe', **augpipe_specs[augpipe])
 
-    # ----------------------------------
-    # Transfer learning: resume, freezed
-    # ----------------------------------
-
-    resume_specs = {
-        'ffhq256':     'https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/transfer-learning-source-nets/ffhq-res256-mirror-paper256-noaug.pkl',
-        'ffhq512':     'https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/transfer-learning-source-nets/ffhq-res512-mirror-stylegan2-noaug.pkl',
-        'ffhq1024':    'https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/transfer-learning-source-nets/ffhq-res1024-mirror-stylegan2-noaug.pkl',
-        'celebahq256': 'https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/transfer-learning-source-nets/celebahq-res256-mirror-paper256-kimg100000-ada-target0.5.pkl',
-        'lsundog256':  'https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/transfer-learning-source-nets/lsundog-res256-paper256-kimg100000-noaug.pkl',
-    }
-
-    assert resume is None or isinstance(resume, str)
-    if resume is None:
-        resume = 'noresume'
-    elif resume == 'noresume':
-        desc += '-noresume'
-    elif resume in resume_specs:
-        desc += f'-resume{resume}'
-        args.resume_pkl = resume_specs[resume] # predefined url
-    else:
-        desc += '-resumecustom'
-        args.resume_pkl = resume # custom path or url
-
-    if resume != 'noresume':
-        args.ada_kimg = 100 # make ADA react faster at the beginning
-        args.ema_rampup = None # disable EMA rampup
-
-    if freezed is not None:
-        assert isinstance(freezed, int)
-        if not freezed >= 0:
-            raise UserError('--freezed must be non-negative')
-        desc += f'-freezed{freezed:d}'
-        args.D_kwargs.block_kwargs.freeze_layers = freezed
-
     # -------------------------------------------------
     # Performance options: fp32, nhwc, nobench, workers
     # -------------------------------------------------
@@ -456,7 +333,7 @@ def subprocess_fn(rank, args, temp_dir):
         custom_ops.verbosity = 'none'
 
     # Execute training loop.
-    training_loop_liestyle.training_loop(rank=rank, **args)
+    training_loop_discriminate.training_loop(rank=rank, **args)
 
 #----------------------------------------------------------------------------
 
@@ -489,7 +366,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--mirror', help='Enable dataset x-flips [default: false]', type=bool, metavar='BOOL')
 
 # Base config.
-@click.option('--cfg', help='Base config [default: auto]', type=str, metavar='STR')
+@click.option('--cfg', help='Base config [default: auto]', type=str)
 @click.option('--gamma', help='Override R1 gamma', type=float)
 @click.option('--kimg', help='Override training duration', type=int, metavar='INT')
 @click.option('--batch', help='Override batch size', type=int, metavar='INT')
@@ -510,9 +387,6 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--nobench', help='Disable cuDNN benchmarking', type=bool, metavar='BOOL')
 @click.option('--allow-tf32', help='Allow PyTorch to use TF32 internally', type=bool, metavar='BOOL')
 @click.option('--workers', help='Override number of DataLoader workers', type=int, metavar='INT')
-
-# Common sense net pkl
-@click.option('--common_sense_net_pkl', help='Common sense net pkl', type=str, metavar='STR')
 
 def main(ctx, outdir, dry_run, **config_kwargs):
     dnnlib.util.Logger(should_flush=True)
@@ -542,10 +416,7 @@ def main(ctx, outdir, dry_run, **config_kwargs):
     print(f'Training data:      {args.training_set_kwargs.path}')
     print(f'Training duration:  {args.total_kimg} kimg')
     print(f'Number of GPUs:     {args.num_gpus}')
-    print(f'Number of images:   {args.training_set_kwargs.max_size}')
     print(f'Image resolution:   {args.training_set_kwargs.resolution}')
-    print(f'Conditional model:  {args.training_set_kwargs.use_labels}')
-    print(f'Dataset x-flips:    {args.training_set_kwargs.xflip}')
     print()
 
     # Dry run?

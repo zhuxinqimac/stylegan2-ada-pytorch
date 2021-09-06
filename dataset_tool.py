@@ -201,18 +201,18 @@ def open_dsprites(dsprites_filename: str, *, max_images: Optional[int]):
     data = np.load(dsprites_filename, encoding='latin1', allow_pickle=True)
     images = data['imgs'] * 255 # (737280, 64, 64) of uint8
     # labels = data['latents_classes']  # (737280, 6), [color(0), shape(3), scale(6), orientation(40), x(32), y(32)]
-    labels = data['latents_classes'][:, 1].astype(np.int32)  # (737280), [shape(3)]
+    labels = data['latents_classes'][:, 1:].astype(np.float32)  # (737280, 5), [shape(3), scale(6), orientation(40), x(32), y(32)]
+    # labels = data['latents_classes'][:, 1].astype(np.int32)  # (737280), [shape(3)]
 
     assert images.shape == (737280, 64, 64) and images.dtype == np.uint8
-    assert labels.shape == (737280,) and labels.dtype in [np.int32, np.int64]
+    assert labels.shape == (737280, 5)
     assert np.min(images) == 0 and np.max(images) == 255
-    assert np.min(labels) == 0 and np.max(labels) == 2
 
     max_idx = maybe_min(len(images), max_images)
 
     def iterate_images():
         for idx, img in enumerate(images):
-            yield dict(img=img, label=int(labels[idx]))
+            yield dict(img=img, label=labels[idx].tolist())
             if idx >= max_idx-1:
                 break
 
@@ -226,18 +226,18 @@ def open_3dshapes(h5_file: str, *, max_images: Optional[int]):
 
     h5py_loaded = h5py.File(h5_file, 'r')
     images = h5py_loaded['images'][:]  # array shape [480000,64,64,3], uint8 in range(256)
-    labels = h5py_loaded['labels'][:, 4].astype(np.int32)  # array shape [480000], float64
+    # labels = h5py_loaded['labels'][:, 4].astype(np.int32)  # array shape [480000], float64
+    labels = h5py_loaded['labels'][:].astype(np.float32)  # array shape [480000, 6], float64
 
     assert images.shape == (480000, 64, 64, 3) and images.dtype == np.uint8
-    assert labels.shape == (480000,) and labels.dtype in [np.int32, np.int64]
+    assert labels.shape == (480000, 6)
     assert np.min(images) == 0 and np.max(images) == 255
-    assert np.min(labels) == 0 and np.max(labels) == 3
 
     max_idx = maybe_min(len(images), max_images)
 
     def iterate_images():
         for idx, img in enumerate(images):
-            yield dict(img=img, label=int(labels[idx]))
+            yield dict(img=img, label=labels[idx].tolist())
             if idx >= max_idx-1:
                 break
 
