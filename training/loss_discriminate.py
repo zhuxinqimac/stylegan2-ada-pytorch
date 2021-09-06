@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discriminate.py
 # --- Creation Date: 05-09-2021
-# --- Last Modified: Mon 06 Sep 2021 23:41:45 AEST
+# --- Last Modified: Tue 07 Sep 2021 00:05:52 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -76,6 +76,7 @@ class DiscriminateLoss(Loss):
                 gen_logits = self.run_D(real_img, sync=sync)
                 if self.loss_name == 'simp':
                     n_vars = ((real_c[:, 0] - real_c[:, 1]) != 0).sum(dim=1, keepdim=True)
+                    print('n_vars:', n_vars)
                     label = (n_vars == 1 or n_vars == 0).float() # 1 dim_var is True, other dim_var is False
                 loss_Dmain = self.loss_fn(gen_logits, label)
                 training_stats.report('Loss/D/loss', loss_Dmain)
