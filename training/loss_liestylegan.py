@@ -8,7 +8,7 @@
 
 # --- File Name: loss_liestylegan.py
 # --- Creation Date: 26-08-2021
-# --- Last Modified: Mon 06 Sep 2021 23:37:37 AEST
+# --- Last Modified: Tue 07 Sep 2021 13:59:02 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -17,6 +17,7 @@ LieStyleGAN loss.
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch_utils import training_stats
 from torch_utils import misc
 from torch_utils.ops import conv2d_gradfix
@@ -90,11 +91,20 @@ class LieStyleGANLoss(Loss):
         logits = self.C(img)
         return logits
 
-    def vary_1_dim(self, gen_z):
+    def vary_1_dim_naive(self, gen_z):
         assert gen_z.ndim == 2
         var_dim = torch.randint(gen_z.shape[1], size=[])
         perturb = (torch.rand(size=[gen_z.shape[0]]) - 0.5) * 2. * self.perturb_scale
         gen_z[:, var_dim] = gen_z[:, var_dim] + perturb.to(gen_z.device)
+        return gen_z
+
+    def vary_1_dim(self, gen_z):
+        assert gen_z.ndim == 2
+        b, n_dim = gen_z.shape
+        var_dim = torch.randint(n_dim, size=[b]).to(gen_z.device)
+        var_dim_onehot = F.one_hot(var_dim).float() # [b, n_dim]
+        perturb = (torch.rand(size=[b]).to(gen_z.device) - 0.5) * 2. * self.perturb_scale # [b]
+        gen_z = gen_z + var_dim_onehot * perturb.view(b, 1)
         return gen_z
 
     def accumulate_gradients(self, phase, real_img, real_c, gen_z, gen_c, sync, gain):
