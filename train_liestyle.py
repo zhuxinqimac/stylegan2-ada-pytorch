@@ -8,7 +8,7 @@
 
 # --- File Name: train_liestyle.py
 # --- Creation Date: 24-08-2021
-# --- Last Modified: Wed 08 Sep 2021 00:22:17 AEST
+# --- Last Modified: Wed 08 Sep 2021 00:25:12 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -273,7 +273,7 @@ def setup_training_loop_kwargs(
         args.C_kwargs = dnnlib.EasyDict(C_pkl=common_sense_net_pkl)
         args.loss_kwargs.perturb_scale = spec.perturb_scale
         args.loss_kwargs.C_lambda = spec.C_lambda
-        args.naive_vary_dim_impl = spec.naive_vary_dim_impl
+        args.loss_kwargs.naive_vary_dim_impl = spec.naive_vary_dim_impl
 
     args.loss_kwargs.pl_weight = spec.pl_weight # disable path length regularization
     args.loss_kwargs.style_mixing_prob = spec.style_mixing_prob # disable style mixing
