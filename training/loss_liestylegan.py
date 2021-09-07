@@ -8,7 +8,7 @@
 
 # --- File Name: loss_liestylegan.py
 # --- Creation Date: 26-08-2021
-# --- Last Modified: Tue 07 Sep 2021 13:59:02 AEST
+# --- Last Modified: Tue 07 Sep 2021 21:22:24 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -102,7 +102,7 @@ class LieStyleGANLoss(Loss):
         assert gen_z.ndim == 2
         b, n_dim = gen_z.shape
         var_dim = torch.randint(n_dim, size=[b]).to(gen_z.device)
-        var_dim_onehot = F.one_hot(var_dim).float() # [b, n_dim]
+        var_dim_onehot = F.one_hot(var_dim, n_dim).float() # [b, n_dim]
         perturb = (torch.rand(size=[b]).to(gen_z.device) - 0.5) * 2. * self.perturb_scale # [b]
         gen_z = gen_z + var_dim_onehot * perturb.view(b, 1)
         return gen_z
