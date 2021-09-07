@@ -8,7 +8,7 @@
 
 # --- File Name: loss_liestylegan.py
 # --- Creation Date: 26-08-2021
-# --- Last Modified: Wed 08 Sep 2021 00:24:08 AEST
+# --- Last Modified: Wed 08 Sep 2021 00:26:28 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -94,7 +94,6 @@ class LieStyleGANLoss(Loss):
 
     def vary_1_dim_naive(self, gen_z):
         assert gen_z.ndim == 2
-        print("using naive var implementation")
         var_dim = torch.randint(gen_z.shape[1], size=[])
         perturb = (torch.rand(size=[gen_z.shape[0]]) - 0.5) * 2. * self.perturb_scale
         gen_z[:, var_dim] = gen_z[:, var_dim] + perturb.to(gen_z.device)
