@@ -8,7 +8,7 @@
 
 # --- File Name: train_liestyle.py
 # --- Creation Date: 24-08-2021
-# --- Last Modified: Mon 06 Sep 2021 23:23:14 AEST
+# --- Last Modified: Wed 08 Sep 2021 00:22:17 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -41,12 +41,12 @@ KEY_BRIEF_NAMES = {'z': 'z_dim', 'w': 'w_dim', 'gnoi': 'use_noise', 'lies': 'lie
                    'gmat': 'group_mat_dim', 'com': 'commute_lamb', 'hes': 'hessian_lamb', 'ani': 'anisotropy_lamb',
                    'I': 'I_lambda', 'Ig': 'I_g_lambda', 'C': 'C_lambda', 'gncut': 'group_ncut', 'cmask': 'use_code_mask', 'pts': 'perturb_scale',
                    'mb': 'mb', 'mbstd': 'mbstd', 'fm': 'fmaps', 'lr': 'lrate', 'gm': 'gamma', 'ema': 'ema', 'nper': 'n_samples_per', 'map': 'map',
-                   'plw': 'pl_weight', 'mixp': 'style_mixing_prob', 'grin': 'G_reg_interval'}
+                   'plw': 'pl_weight', 'mixp': 'style_mixing_prob', 'grin': 'G_reg_interval', 'naiv': 'naive_vary_dim_impl'}
 KEY_DTYPES = {'z_dim': int, 'w_dim': int, 'use_noise': bool_own, 'lie_alg_init_scale': float, 'G_type': str,
               'group_mat_dim': int, 'commute_lamb': float, 'hessian_lamb': float, 'anisotropy_lamb': float,
               'I_lambda': float, 'I_g_lambda': float, 'C_lambda': float, 'group_ncut': int, 'use_code_mask': bool_own, 'perturb_scale': float,
               'mb': int, 'mbstd': int, 'fmaps': float, 'lrate': float, 'gamma': float, 'ema': int, 'n_samples_per': int, 'map': int,
-              'pl_weight': float, 'style_mixing_prob': float, 'G_reg_interval': int}
+              'pl_weight': float, 'style_mixing_prob': float, 'G_reg_interval': int, 'naive_vary_dim_impl': bool_own}
 
 def parse_cfg(cfg):
     '''
@@ -195,13 +195,13 @@ def setup_training_loop_kwargs(
 
     cfg_specs = {
         'auto':      dict(ref_gpus=-1, kimg=25000, mb=-1, mbstd=-1, fmaps=-1, lrate=-1, gamma=-1, ema=-1, ramp=0.05, G_type='liestyle', n_samples_per=7, map=8,
-                          z_dim=64, w_dim=512, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, pl_weight=2, style_mixing_prob=0.9, G_reg_interval=4,
+                          z_dim=64, w_dim=512, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, pl_weight=2, style_mixing_prob=0.9, G_reg_interval=4, naive_vary_dim_impl=False,
                           commute_lamb=0, hessian_lamb=0, anisotropy_lamb=0, I_lambda=0, I_g_lambda=0, C_lambda=0, group_ncut=0, use_code_mask=False), # Populated dynamically based on resolution and GPU count.
         'basic': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, G_type='liestyle', n_samples_per=7, map=8,
-                      z_dim=64, w_dim=512, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, pl_weight=2, style_mixing_prob=0.9, G_reg_interval=4,
+                      z_dim=64, w_dim=512, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, pl_weight=2, style_mixing_prob=0.9, G_reg_interval=4, naive_vary_dim_impl=False,
                       commute_lamb=0, hessian_lamb=0, anisotropy_lamb=0, I_lambda=0, I_g_lambda=0, C_lambda=0, group_ncut=0, use_code_mask=False, perturb_scale=1.),
         'celeba-hes_0.1-Ig_1': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, G_type='liestyle', n_samples_per=7, map=8,
-                             z_dim=64, w_dim=512, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, pl_weight=2, style_mixing_prob=0.9, G_reg_interval=4,
+                             z_dim=64, w_dim=512, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, pl_weight=2, style_mixing_prob=0.9, G_reg_interval=4, naive_vary_dim_impl=False,
                              commute_lamb=0, hessian_lamb=0.1, anisotropy_lamb=0, I_lambda=0, I_g_lambda=1, group_ncut=0, use_code_mask=False, perturb_scale=1.),
     }
 
@@ -273,6 +273,7 @@ def setup_training_loop_kwargs(
         args.C_kwargs = dnnlib.EasyDict(C_pkl=common_sense_net_pkl)
         args.loss_kwargs.perturb_scale = spec.perturb_scale
         args.loss_kwargs.C_lambda = spec.C_lambda
+        args.naive_vary_dim_impl = spec.naive_vary_dim_impl
 
     args.loss_kwargs.pl_weight = spec.pl_weight # disable path length regularization
     args.loss_kwargs.style_mixing_prob = spec.style_mixing_prob # disable style mixing

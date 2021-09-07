@@ -8,7 +8,7 @@
 
 # --- File Name: loss_liestylegan.py
 # --- Creation Date: 26-08-2021
-# --- Last Modified: Tue 07 Sep 2021 21:22:24 AEST
+# --- Last Modified: Wed 08 Sep 2021 00:19:59 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -33,7 +33,7 @@ class Loss:
 
 class LieStyleGANLoss(Loss):
     def __init__(self, device, G_mapping, G_synthesis, D, I=None, C=None, augment_pipe=None, style_mixing_prob=0.9, r1_gamma=10,
-                 pl_batch_shrink=2, pl_decay=0.01, pl_weight=2, commute_lamb=0., hessian_lamb=0.,
+                 pl_batch_shrink=2, pl_decay=0.01, pl_weight=2, commute_lamb=0., hessian_lamb=0., naive_vary_dim_impl=False,
                  anisotropy_lamb=0., I_lambda=0., I_g_lambda=0., C_lambda=0., group_split=False, perturb_scale=1.):
         super().__init__()
         self.device = device
@@ -57,6 +57,7 @@ class LieStyleGANLoss(Loss):
         self.C_lambda = C_lambda
         self.group_split = group_split
         self.perturb_scale = perturb_scale
+        self.naive_vary_dim_impl = naive_vary_dim_impl
 
     def run_G(self, z, c, sync, return_gfeats=False, **G_kwargs):
         with misc.ddp_sync(self.G_mapping, sync):
@@ -173,7 +174,10 @@ class LieStyleGANLoss(Loss):
         if do_GregC:
             with torch.autograd.profiler.record_function('G_forward_in_regC'):
                 gen_img_1, _gen_ws = self.run_G(gen_z, gen_c, sync=False)
-                gen_z_2 = self.vary_1_dim(gen_z.clone())
+                if self.naive_vary_dim_impl:
+                    gen_z_2 = self.vary_1_dim_naive(gen_z.clone())
+                else:
+                    gen_z_2 = self.vary_1_dim(gen_z.clone())
                 gen_img_2, _gen_ws = self.run_G(gen_z_2, gen_c, sync=sync)
             with torch.autograd.profiler.record_function('C_forward'):
                 # Rescale images to C_net input.
