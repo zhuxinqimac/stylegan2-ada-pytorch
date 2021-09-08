@@ -8,7 +8,7 @@
 
 # --- File Name: networks_common_sense.py
 # --- Creation Date: 05-09-2021
-# --- Last Modified: Mon 06 Sep 2021 01:00:51 AEST
+# --- Last Modified: Wed 08 Sep 2021 22:27:00 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -55,8 +55,9 @@ class BackboneNet(torch.nn.Module):
         self.resolution = resolution
         assert net_name in PRETRAINED_NAMES
         self.net = getattr(models, net_name)(pretrained=pretrained)
-        self.net.conv1.weight = nn.Parameter(self.net.conv1.weight.repeat([1,2,1,1]) / 2.,
-                                             requires_grad=True) # Kernel: (64,3,7,7) => (64,6,7,7)
+        n_mul = ch_in // 3
+        self.net.conv1.weight = nn.Parameter(self.net.conv1.weight.repeat([1,n_mul,1,1]) / float(n_mul),
+                                             requires_grad=True) # e.g. kernel: (64,3,7,7) => (64,6,7,7)
         self.net.fc = nn.Linear(self.net.fc.in_features, dim_out)
 
     def forward(self, x):

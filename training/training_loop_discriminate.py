@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discriminate.py
 # --- Creation Date: 05-09-2021
-# --- Last Modified: Mon 06 Sep 2021 02:57:42 AEST
+# --- Last Modified: Wed 08 Sep 2021 22:42:09 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -190,8 +190,8 @@ def training_loop(
         with torch.autograd.profiler.record_function('data_fetch'):
             phase_real_img, phase_real_c = next(training_set_iterator)
             # phase_real_img = (phase_real_img.to(device).to(torch.float32) / 127.5 - 1).split(batch_gpu)
-            phase_real_img = (((phase_real_img.to(device).to(torch.float32) / 255.) - torch.tensor([0.485, 0.456, 0.406]).to(device).view(1,3,1,1).repeat(1,2,1,1)) / \
-                              torch.tensor([0.229, 0.224, 0.225]).to(device).view(1,3,1,1).repeat(1,2,1,1)).split(batch_gpu)
+            phase_real_img = (((phase_real_img.to(device).to(torch.float32) / 255.) - torch.tensor([0.485, 0.456, 0.406]).to(device).view(1,3,1,1).repeat(1,D.ch_in // 3,1,1)) / \
+                              torch.tensor([0.229, 0.224, 0.225]).to(device).view(1,3,1,1).repeat(1,D.ch_in // 3,1,1)).split(batch_gpu)
             phase_real_c = phase_real_c.to(device).split(batch_gpu)
 
         # Execute training phases.
@@ -297,7 +297,6 @@ def training_loop(
             # print('Var truth:', ((phase_real_c[0][:5][:, 0] - phase_real_c[0][:5][:, 1]) > 0).shape)
             print('Predict logits:', logits.tolist())
             print('Factor pairs:', phase_real_c[0][:5].tolist())
-            print('Var truth:', (((phase_real_c[0][:5][:, 0] - phase_real_c[0][:5][:, 1]) != 0).sum(dim=1) == 1).tolist())
 
         # Evaluate metrics.
         if (snapshot_data is not None) and (len(metrics) > 0):

@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discriminate.py
 # --- Creation Date: 05-09-2021
-# --- Last Modified: Tue 07 Sep 2021 00:18:51 AEST
+# --- Last Modified: Wed 08 Sep 2021 22:40:03 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -77,6 +77,12 @@ class DiscriminateLoss(Loss):
                 if self.loss_name == 'simp':
                     n_vars = ((real_c[:, 0] - real_c[:, 1]) != 0).sum(dim=1, keepdim=True)
                     label = torch.logical_or(n_vars == 1, n_vars == 0).float() # 1 dim_var is True, other dim_var is False
+                elif self.loss_name == 'compos':
+                    n_vars_1 = (real_c[:, 1] - real_c[:, 0] != 0).sum(dim=1, keepdim=True)
+                    n_vars_2 = (real_c[:, 2] - real_c[:, 0] != 0).sum(dim=1, keepdim=True) # [b, 1]
+                    n_vars_label = torch.logical_and(n_vars_1 <= 1, n_vars_2 <= 1)
+                    comp_label = ((real_c[:, 1] - real_c[:, 0] + real_c[:, 2] == real_c[:, 2]).sum(dim=1, keepdim=True) == real_c.shape[-1]) # [b, 1]
+                    label = torch.logical_and(n_vars_label, comp_label).float()
                 loss_Dmain = self.loss_fn(gen_logits, label)
                 training_stats.report('Loss/D/loss', loss_Dmain)
             with torch.autograd.profiler.record_function('Dmain_backward'):

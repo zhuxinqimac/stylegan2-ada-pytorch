@@ -8,7 +8,7 @@
 
 # --- File Name: dataset_discriminate.py
 # --- Creation Date: 05-09-2021
-# --- Last Modified: Mon 06 Sep 2021 02:46:31 AEST
+# --- Last Modified: Wed 08 Sep 2021 23:13:12 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -295,4 +295,42 @@ class Paired3DShapes(torch.utils.data.Dataset):
     @property
     def has_onehot_labels(self):
         return False
+#----------------------------------------------------------------------------
+
+class Triplet3DShapes(Paired3DShapes):
+    """
+    Args:
+        path (str): Root directory of dataset containing 3dshapes.zip
+    """
+    def __init__(self, path, resolution=None, random_seed=0):
+        super(Triplet3DShapes, self).__init__(path, resolution, random_seed)
+
+    def sample_varied_factor(self, fac_1, var_max=2):
+        fac_2 = fac_1.copy()
+        n_var = self.rnd.randint(var_max) # Number of varied dims
+        varied_dims = self.rnd.choice(len(self.factor_sizes), size=n_var, replace=False)
+        for i in varied_dims:
+            fac_2[i] = self.rnd.randint(self.factor_sizes[i])
+        return fac_2
+
+    def __getitem__(self, index):
+        fac_1 = self.sample_factor()
+        fac_2 = self.sample_varied_factor(fac_1, 4)
+        fac_3 = self.sample_varied_factor(fac_1, 4)
+        fac_4_ori = (fac_2 - fac_1 + fac_3) % self.factor_sizes
+        if self.rnd.normal() > 0:
+            fac_4 = self.sample_varied_factor(fac_4_ori, 3)
+        else:
+            fac_4 = fac_4_ori
+        idx_1 = self.factor_to_idx(fac_1)
+        idx_2 = self.factor_to_idx(fac_2)
+        idx_3 = self.factor_to_idx(fac_3)
+        idx_4 = self.factor_to_idx(fac_4)
+        img_1 = self._load_raw_image(idx_1)
+        img_2 = self._load_raw_image(idx_2)
+        img_3 = self._load_raw_image(idx_3)
+        img_4 = self._load_raw_image(idx_4)
+
+        return np.concatenate((img_1, img_2, img_3, img_4), axis=0), np.stack((fac_1, fac_2, fac_3, fac_4), axis=0).astype(np.float) # (12, h, w), (4, 6)
+
 #----------------------------------------------------------------------------

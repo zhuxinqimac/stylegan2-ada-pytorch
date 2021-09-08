@@ -8,7 +8,7 @@
 
 # --- File Name: train_discriminate.py
 # --- Creation Date: 05-09-2021
-# --- Last Modified: Mon 06 Sep 2021 20:50:33 AEST
+# --- Last Modified: Wed 08 Sep 2021 22:25:37 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -133,10 +133,28 @@ def setup_training_loop_kwargs(
     # Dataset: data, cond, subset, mirror
     # -----------------------------------
 
+    if cfg is None:
+        cfg = 'auto'
+    assert isinstance(cfg, str)
+
+    cfg_specs = {
+        'auto':      dict(ref_gpus=-1, kimg=25000, mb=-1, mbstd=-1, fmaps=-1, lrate=-1, ema=-1, ramp=0.05, map=8), # Populated dynamically based on resolution and GPU count.
+        'basic':     dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, ema=10,  ramp=0.05,
+                          net_ch_in=6, net_dim_out=1, net_name='resnet50', pretrained=True, loss_name='simp'),
+    }
+
+    # assert cfg in cfg_specs
+    if cfg != 'basic':
+        cfg_specs[cfg] = construct_specs(dnnlib.EasyDict(cfg_specs['basic']), cfg)
+    spec = dnnlib.EasyDict(cfg_specs[cfg])
+
     assert data is not None
     assert isinstance(data, str)
     # args.training_set_kwargs = dnnlib.EasyDict(class_name='training.dataset.ImageFolderDataset', path=data, use_labels=True, max_size=None, xflip=False)
-    args.training_set_kwargs = dnnlib.EasyDict(class_name='training.dataset_discriminate.Paired3DShapes', path=data)
+    if spec.loss_name == 'simp':
+        args.training_set_kwargs = dnnlib.EasyDict(class_name='training.dataset_discriminate.Paired3DShapes', path=data)
+    elif spec.loss_name == 'compos':
+        args.training_set_kwargs = dnnlib.EasyDict(class_name='training.dataset_discriminate.Triplet3DShapes', path=data)
     args.data_loader_kwargs = dnnlib.EasyDict(pin_memory=True, num_workers=3, prefetch_factor=2)
     try:
         training_set = dnnlib.util.construct_class_by_name(**args.training_set_kwargs) # subclass of training.dataset.Dataset
@@ -149,22 +167,7 @@ def setup_training_loop_kwargs(
     # ------------------------------------
     # Base config: cfg, gamma, kimg, batch
     # ------------------------------------
-
-    if cfg is None:
-        cfg = 'auto'
-    assert isinstance(cfg, str)
     desc += f'-{cfg}'
-
-    cfg_specs = {
-        'auto':      dict(ref_gpus=-1, kimg=25000, mb=-1, mbstd=-1, fmaps=-1, lrate=-1, ema=-1, ramp=0.05, map=8), # Populated dynamically based on resolution and GPU count.
-        'basic':     dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, ema=10,  ramp=0.05,
-                          net_ch_in=6, net_dim_out=1, net_name='resnet50', pretrained=True, loss_name='simp'),
-    }
-
-    # assert cfg in cfg_specs
-    if cfg != 'basic':
-        cfg_specs[cfg] = construct_specs(dnnlib.EasyDict(cfg_specs['basic']), cfg)
-    spec = dnnlib.EasyDict(cfg_specs[cfg])
     if cfg == 'auto':
         desc += f'{gpus:d}'
         spec.ref_gpus = gpus
