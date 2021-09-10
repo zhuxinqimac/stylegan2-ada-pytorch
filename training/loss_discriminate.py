@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discriminate.py
 # --- Creation Date: 05-09-2021
-# --- Last Modified: Wed 08 Sep 2021 22:40:03 AEST
+# --- Last Modified: Fri 10 Sep 2021 00:35:59 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -35,9 +35,11 @@ def build_loss(loss_name):
         # return mean_square_loss
         return nn.BCEWithLogitsLoss()
     elif loss_name == 'consis':
-        return mean_square_loss
+        # return mean_square_loss
+        return nn.BCEWithLogitsLoss()
     elif loss_name == 'compos':
-        return mean_square_loss
+        # return mean_square_loss
+        return nn.BCEWithLogitsLoss()
     else:
         raise ValueError('Unknown loss_name:', loss_name)
 
@@ -81,7 +83,7 @@ class DiscriminateLoss(Loss):
                     n_vars_1 = (real_c[:, 1] - real_c[:, 0] != 0).sum(dim=1, keepdim=True)
                     n_vars_2 = (real_c[:, 2] - real_c[:, 0] != 0).sum(dim=1, keepdim=True) # [b, 1]
                     n_vars_label = torch.logical_and(n_vars_1 <= 1, n_vars_2 <= 1)
-                    comp_label = ((real_c[:, 1] - real_c[:, 0] + real_c[:, 2] == real_c[:, 2]).sum(dim=1, keepdim=True) == real_c.shape[-1]) # [b, 1]
+                    comp_label = ((real_c[:, 1] - real_c[:, 0] + real_c[:, 2] == real_c[:, 3]).sum(dim=1, keepdim=True) == real_c.shape[-1]) # [b, 1]
                     label = torch.logical_and(n_vars_label, comp_label).float()
                 loss_Dmain = self.loss_fn(gen_logits, label)
                 training_stats.report('Loss/D/loss', loss_Dmain)

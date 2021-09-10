@@ -8,7 +8,7 @@
 
 # --- File Name: dataset_discriminate.py
 # --- Creation Date: 05-09-2021
-# --- Last Modified: Wed 08 Sep 2021 23:13:12 AEST
+# --- Last Modified: Fri 10 Sep 2021 03:43:52 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -315,8 +315,8 @@ class Triplet3DShapes(Paired3DShapes):
 
     def __getitem__(self, index):
         fac_1 = self.sample_factor()
-        fac_2 = self.sample_varied_factor(fac_1, 4)
-        fac_3 = self.sample_varied_factor(fac_1, 4)
+        fac_2 = self.sample_varied_factor(fac_1, 3)
+        fac_3 = self.sample_varied_factor(fac_1, 3)
         fac_4_ori = (fac_2 - fac_1 + fac_3) % self.factor_sizes
         if self.rnd.normal() > 0:
             fac_4 = self.sample_varied_factor(fac_4_ori, 3)

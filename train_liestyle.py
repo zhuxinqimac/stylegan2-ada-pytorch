@@ -8,7 +8,7 @@
 
 # --- File Name: train_liestyle.py
 # --- Creation Date: 24-08-2021
-# --- Last Modified: Wed 08 Sep 2021 00:25:12 AEST
+# --- Last Modified: Fri 10 Sep 2021 17:00:16 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -39,12 +39,12 @@ def bool_own(v):
 
 KEY_BRIEF_NAMES = {'z': 'z_dim', 'w': 'w_dim', 'gnoi': 'use_noise', 'lies': 'lie_alg_init_scale', 'gtype': 'G_type',
                    'gmat': 'group_mat_dim', 'com': 'commute_lamb', 'hes': 'hessian_lamb', 'ani': 'anisotropy_lamb',
-                   'I': 'I_lambda', 'Ig': 'I_g_lambda', 'C': 'C_lambda', 'gncut': 'group_ncut', 'cmask': 'use_code_mask', 'pts': 'perturb_scale',
+                   'I': 'I_lambda', 'Ig': 'I_g_lambda', 'Sim': 'Sim_lambda', 'Comp': 'Comp_lambda', 'gncut': 'group_ncut', 'cmask': 'use_code_mask', 'pts': 'perturb_scale',
                    'mb': 'mb', 'mbstd': 'mbstd', 'fm': 'fmaps', 'lr': 'lrate', 'gm': 'gamma', 'ema': 'ema', 'nper': 'n_samples_per', 'map': 'map',
                    'plw': 'pl_weight', 'mixp': 'style_mixing_prob', 'grin': 'G_reg_interval', 'naiv': 'naive_vary_dim_impl'}
 KEY_DTYPES = {'z_dim': int, 'w_dim': int, 'use_noise': bool_own, 'lie_alg_init_scale': float, 'G_type': str,
               'group_mat_dim': int, 'commute_lamb': float, 'hessian_lamb': float, 'anisotropy_lamb': float,
-              'I_lambda': float, 'I_g_lambda': float, 'C_lambda': float, 'group_ncut': int, 'use_code_mask': bool_own, 'perturb_scale': float,
+              'I_lambda': float, 'I_g_lambda': float, 'Sim_lambda': float, 'Comp_lambda': float, 'group_ncut': int, 'use_code_mask': bool_own, 'perturb_scale': float,
               'mb': int, 'mbstd': int, 'fmaps': float, 'lrate': float, 'gamma': float, 'ema': int, 'n_samples_per': int, 'map': int,
               'pl_weight': float, 'style_mixing_prob': float, 'G_reg_interval': int, 'naive_vary_dim_impl': bool_own}
 
@@ -105,7 +105,8 @@ def setup_training_loop_kwargs(
     workers    = None, # Override number of DataLoader workers: <int>, default = 3
 
     # Common sense network.
-    common_sense_net_pkl = None, # Common sense net pkl
+    common_sense_net_sim_pkl = None, # Common sense net pkl
+    common_sense_net_comp_pkl = None, # Common sense net pkl
 ):
     args = dnnlib.EasyDict()
 
@@ -196,13 +197,10 @@ def setup_training_loop_kwargs(
     cfg_specs = {
         'auto':      dict(ref_gpus=-1, kimg=25000, mb=-1, mbstd=-1, fmaps=-1, lrate=-1, gamma=-1, ema=-1, ramp=0.05, G_type='liestyle', n_samples_per=7, map=8,
                           z_dim=64, w_dim=512, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, pl_weight=2, style_mixing_prob=0.9, G_reg_interval=4, naive_vary_dim_impl=False,
-                          commute_lamb=0, hessian_lamb=0, anisotropy_lamb=0, I_lambda=0, I_g_lambda=0, C_lambda=0, group_ncut=0, use_code_mask=False), # Populated dynamically based on resolution and GPU count.
+                          commute_lamb=0, hessian_lamb=0, anisotropy_lamb=0, I_lambda=0, I_g_lambda=0, Sim_lambda=0, Comp_lambda=0, group_ncut=0, use_code_mask=False), # Populated dynamically based on resolution and GPU count.
         'basic': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, G_type='liestyle', n_samples_per=7, map=8,
                       z_dim=64, w_dim=512, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, pl_weight=2, style_mixing_prob=0.9, G_reg_interval=4, naive_vary_dim_impl=False,
-                      commute_lamb=0, hessian_lamb=0, anisotropy_lamb=0, I_lambda=0, I_g_lambda=0, C_lambda=0, group_ncut=0, use_code_mask=False, perturb_scale=1.),
-        'celeba-hes_0.1-Ig_1': dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05, G_type='liestyle', n_samples_per=7, map=8,
-                             z_dim=64, w_dim=512, use_noise=True, lie_alg_init_scale=0.001, group_mat_dim=20, pl_weight=2, style_mixing_prob=0.9, G_reg_interval=4, naive_vary_dim_impl=False,
-                             commute_lamb=0, hessian_lamb=0.1, anisotropy_lamb=0, I_lambda=0, I_g_lambda=1, group_ncut=0, use_code_mask=False, perturb_scale=1.),
+                      commute_lamb=0, hessian_lamb=0, anisotropy_lamb=0, I_lambda=0, I_g_lambda=0, Sim_lambda=0, Comp_lambda=0, group_ncut=0, use_code_mask=False, perturb_scale=1.),
     }
 
     # assert cfg in cfg_specs
@@ -269,10 +267,15 @@ def setup_training_loop_kwargs(
         args.loss_kwargs.I_g_lambda = spec.I_g_lambda
 
     # Common sense loss
-    if ('C_lambda' in spec) and (spec.C_lambda > 0):
-        args.C_kwargs = dnnlib.EasyDict(C_pkl=common_sense_net_pkl)
+    if ('Sim_lambda' in spec) and (spec.Sim_lambda > 0):
+        args.Sim_kwargs = dnnlib.EasyDict(pkl=common_sense_net_sim_pkl)
         args.loss_kwargs.perturb_scale = spec.perturb_scale
-        args.loss_kwargs.C_lambda = spec.C_lambda
+        args.loss_kwargs.Sim_lambda = spec.Sim_lambda
+        args.loss_kwargs.naive_vary_dim_impl = spec.naive_vary_dim_impl
+    if ('Comp_lambda' in spec) and (spec.Comp_lambda > 0):
+        args.Comp_kwargs = dnnlib.EasyDict(pkl=common_sense_net_comp_pkl)
+        args.loss_kwargs.perturb_scale = spec.perturb_scale
+        args.loss_kwargs.Comp_lambda = spec.Comp_lambda
         args.loss_kwargs.naive_vary_dim_impl = spec.naive_vary_dim_impl
 
     args.loss_kwargs.pl_weight = spec.pl_weight # disable path length regularization
@@ -525,7 +528,8 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--workers', help='Override number of DataLoader workers', type=int, metavar='INT')
 
 # Common sense net pkl
-@click.option('--common_sense_net_pkl', help='Common sense net pkl', type=str, metavar='STR')
+@click.option('--common_sense_net_sim_pkl', help='Common sense net pkl', type=str, metavar='STR')
+@click.option('--common_sense_net_comp_pkl', help='Common sense net pkl', type=str, metavar='STR')
 
 def main(ctx, outdir, dry_run, **config_kwargs):
     dnnlib.util.Logger(should_flush=True)

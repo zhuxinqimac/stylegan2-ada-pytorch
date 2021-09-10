@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_liestyle.py
 # --- Creation Date: 26-08-2021
-# --- Last Modified: Mon 06 Sep 2021 16:26:25 AEST
+# --- Last Modified: Fri 10 Sep 2021 17:15:07 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -44,7 +44,8 @@ def training_loop(
     G_kwargs                = {},       # Options for generator network.
     D_kwargs                = {},       # Options for discriminator network.
     I_kwargs                = {},       # Options for recognizer network.
-    C_kwargs                = {},       # Options for pretrained common sense network.
+    Sim_kwargs              = {},       # Options for pretrained common sense network: Simplicity.
+    Comp_kwargs             = {},       # Options for pretrained common sense network: Composition.
     G_opt_kwargs            = {},       # Options for generator optimizer.
     D_opt_kwargs            = {},       # Options for discriminator optimizer.
     augment_kwargs          = None,     # Options for augmentation pipeline. None = disable.
@@ -109,21 +110,23 @@ def training_loop(
         I = dnnlib.util.construct_class_by_name(**I_kwargs, **common_kwargs).train().requires_grad_(False).to(device) # subclass of torch.nn.Module
     else:
         I = None
-    if (C_kwargs != {}): # Load pretrained common sense network.
-        # with dnnlib.util.open_url(C_kwargs.C_pkl) as f:
-            # network_dict = legacy.load_network_pkl(f)
-        with open(C_kwargs.C_pkl, 'rb') as f:
+    Sim = None
+    Comp = None
+    if (Sim_kwargs != {}): # Load pretrained common sense network: Simplicity.
+        with open(Sim_kwargs.pkl, 'rb') as f:
             network_dict = pickle.load(f)
-            C = network_dict['D_ema'].requires_grad_(False).to(device) # subclass of torch.nn.Module
-    else:
-        C = None
+            Sim = network_dict['D_ema'].requires_grad_(False).to(device) # subclass of torch.nn.Module
+    if (Comp_kwargs != {}): # Load pretrained common sense network: Composition.
+        with open(Comp_kwargs.pkl, 'rb') as f:
+            network_dict = pickle.load(f)
+            Comp = network_dict['D_ema'].requires_grad_(False).to(device) # subclass of torch.nn.Module
 
     # Resume from existing pickle.
     if (resume_pkl is not None) and (rank == 0):
         print(f'Resuming from "{resume_pkl}"')
         with dnnlib.util.open_url(resume_pkl) as f:
             resume_data = legacy.load_network_pkl(f)
-        for name, module in [('G', G), ('D', D), ('G_ema', G_ema), ('I', I), ('C', C)]:
+        for name, module in [('G', G), ('D', D), ('G_ema', G_ema), ('I', I), ('Sim', Sim), ('Comp', Comp)]:
             if (module is not None) and (name in resume_data):
                 misc.copy_params_and_buffers(resume_data[name], module, require_all=False)
 
@@ -135,8 +138,10 @@ def training_loop(
         misc.print_module_summary(D, [img, c])
         if I is not None:
             misc.print_module_summary(I, [img, c])
-        if C is not None:
-            misc.print_module_summary(C, [torch.cat([img, img], dim=1)])
+        if Sim is not None:
+            misc.print_module_summary(Sim, [torch.cat([img, img], dim=1)])
+        if Comp is not None:
+            misc.print_module_summary(Comp, [torch.cat([img, img, img, img], dim=1)])
 
     # Setup augmentation.
     if rank == 0:
@@ -153,8 +158,9 @@ def training_loop(
     if rank == 0:
         print(f'Distributing across {num_gpus} GPUs...')
     ddp_modules = dict()
-    for name, module in [('G_mapping', G.mapping), ('G_synthesis', G.synthesis), ('D', D), (None, G_ema), ('augment_pipe', augment_pipe), ('I', I), ('C', C)]:
-        if (num_gpus > 1) and name != 'C' and (module is not None) and len(list(module.parameters())) != 0:
+    for name, module in [('G_mapping', G.mapping), ('G_synthesis', G.synthesis), ('D', D), (None, G_ema), ('augment_pipe', augment_pipe), ('I', I),\
+                         ('Sim', Sim), ('Comp', Comp)]:
+        if (num_gpus > 1) and (name != 'Sim') and (name != 'Comp') and (module is not None) and len(list(module.parameters())) != 0:
             module.requires_grad_(True)
             module = torch.nn.parallel.DistributedDataParallel(module, device_ids=[device], broadcast_buffers=False)
             module.requires_grad_(False)
@@ -345,9 +351,8 @@ def training_loop(
         snapshot_data = None
         if (network_snapshot_ticks is not None) and (done or cur_tick % network_snapshot_ticks == 0):
             snapshot_data = dict(training_set_kwargs=dict(training_set_kwargs))
-            for name, module in [('G', G), ('D', D), ('G_ema', G_ema), ('augment_pipe', augment_pipe), ('I', I), ('C', C)]:
+            for name, module in [('G', G), ('D', D), ('G_ema', G_ema), ('augment_pipe', augment_pipe), ('I', I), ('Sim', Sim), ('Comp', Comp)]:
                 if module is not None:
-                    # if (num_gpus > 1) and (name != 'C'):
                     if num_gpus > 1:
                         misc.check_ddp_consistency(module, ignore_regex=r'.*\.w_avg')
                     module = copy.deepcopy(module).eval().requires_grad_(False).cpu()

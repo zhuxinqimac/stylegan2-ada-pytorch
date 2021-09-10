@@ -8,7 +8,7 @@
 
 # --- File Name: loss_liestylegan.py
 # --- Creation Date: 26-08-2021
-# --- Last Modified: Wed 08 Sep 2021 00:26:28 AEST
+# --- Last Modified: Fri 10 Sep 2021 16:36:19 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -31,17 +31,26 @@ class Loss:
 
 #----------------------------------------------------------------------------
 
+def normalize_img(img, device):
+    # range [-1, 1] -> ImageNet normed imgs
+    img = (((img + 1.) / 2.) - torch.tensor([0.485, 0.456, 0.406]).to(device).view(1,3,1,1)) / \
+        torch.tensor([0.229, 0.224, 0.225]).to(device).view(1,3,1,1)
+    return img
+
+#----------------------------------------------------------------------------
+
 class LieStyleGANLoss(Loss):
-    def __init__(self, device, G_mapping, G_synthesis, D, I=None, C=None, augment_pipe=None, style_mixing_prob=0.9, r1_gamma=10,
+    def __init__(self, device, G_mapping, G_synthesis, D, I=None, Sim=None, Comp=None, augment_pipe=None, style_mixing_prob=0.9, r1_gamma=10,
                  pl_batch_shrink=2, pl_decay=0.01, pl_weight=2, commute_lamb=0., hessian_lamb=0., naive_vary_dim_impl=False,
-                 anisotropy_lamb=0., I_lambda=0., I_g_lambda=0., C_lambda=0., group_split=False, perturb_scale=1.):
+                 anisotropy_lamb=0., I_lambda=0., I_g_lambda=0., Sim_lambda=0., Comp_lambda=0., group_split=False, perturb_scale=1.):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
         self.G_synthesis = G_synthesis
         self.D = D
         self.I = I
-        self.C = C
+        self.Sim = Sim
+        self.Comp = Comp
         self.augment_pipe = augment_pipe
         self.style_mixing_prob = style_mixing_prob
         self.r1_gamma = r1_gamma
@@ -54,7 +63,8 @@ class LieStyleGANLoss(Loss):
         self.anisotropy_lamb = anisotropy_lamb
         self.I_lambda = I_lambda
         self.I_g_lambda = I_g_lambda
-        self.C_lambda = C_lambda
+        self.Sim_lambda = Sim_lambda
+        self.Comp_lambda = Comp_lambda
         self.group_split = group_split
         self.perturb_scale = perturb_scale
         self.naive_vary_dim_impl = naive_vary_dim_impl
@@ -88,19 +98,21 @@ class LieStyleGANLoss(Loss):
             logits = self.I(img, c)
         return logits
 
-    def run_C(self, img):
-        logits = self.C(img)
+    def run_Sim(self, img):
+        logits = self.Sim(img)
         return logits
 
-    def vary_1_dim_naive(self, gen_z):
-        assert gen_z.ndim == 2
-        var_dim = torch.randint(gen_z.shape[1], size=[])
-        perturb = (torch.rand(size=[gen_z.shape[0]]) - 0.5) * 2. * self.perturb_scale
-        gen_z[:, var_dim] = gen_z[:, var_dim] + perturb.to(gen_z.device)
-        return gen_z
+    def run_Comp(self, img):
+        logits = self.Comp(img)
+        return logits
 
     def vary_1_dim(self, gen_z):
         assert gen_z.ndim == 2
+        if self.naive_vary_dim_impl:
+            var_dim = torch.randint(gen_z.shape[1], size=[])
+            perturb = (torch.rand(size=[gen_z.shape[0]]) - 0.5) * 2. * self.perturb_scale
+            gen_z[:, var_dim] = gen_z[:, var_dim] + perturb.to(gen_z.device)
+            return gen_z
         b, n_dim = gen_z.shape
         var_dim = torch.randint(n_dim, size=[b]).to(gen_z.device)
         var_dim_onehot = F.one_hot(var_dim, n_dim).float() # [b, n_dim]
@@ -113,15 +125,16 @@ class LieStyleGANLoss(Loss):
         do_Gmain = (phase in ['Gmain', 'Gboth'])
         do_Dmain = (phase in ['Dmain', 'Dboth'])
         do_Gpl   = (phase in ['Greg', 'Gboth']) and (self.pl_weight != 0)
-        do_Galg   = (phase in ['Greg', 'Gboth']) and (self.commute_lamb != 0 or self.hessian_lamb != 0 or self.anisotropy_lamb != 0)
+        do_Galg  = (phase in ['Greg', 'Gboth']) and (self.commute_lamb != 0 or self.hessian_lamb != 0 or self.anisotropy_lamb != 0)
         do_GregI = (phase in ['Greg', 'Gboth']) and ((self.I_lambda != 0) or (self.I_g_lambda != 0)) and (self.I is not None)
-        do_GregC = (phase in ['Greg', 'Gboth']) and (self.C_lambda != 0) and (self.C is not None)
+        do_GregSim = (phase in ['Greg', 'Gboth']) and (self.Sim_lambda != 0) and (self.Sim is not None)
+        do_GregComp = (phase in ['Greg', 'Gboth']) and (self.Comp_lambda != 0) and (self.Comp is not None)
         do_Dr1   = (phase in ['Dreg', 'Dboth']) and (self.r1_gamma != 0)
 
         # Gmain: Maximize logits for generated images.
         if do_Gmain:
             with torch.autograd.profiler.record_function('Gmain_forward'):
-                gen_img, _gen_ws = self.run_G(gen_z, gen_c, sync=(sync and (not do_Gpl) and (not do_GregI) and (not do_GregC))) # May get synced by Gpl.
+                gen_img, _gen_ws = self.run_G(gen_z, gen_c, sync=(sync and (not do_Gpl) and (not do_GregI) and (not do_GregSim))) # May get synced by Gpl.
                 gen_logits = self.run_D(gen_img, gen_c, sync=False)
                 training_stats.report('Loss/scores/fake', gen_logits)
                 training_stats.report('Loss/signs/fake', gen_logits.sign())
@@ -170,28 +183,46 @@ class LieStyleGANLoss(Loss):
             with torch.autograd.profiler.record_function('RegI_backward'):
                 (gen_img[:, 0, 0, 0] * 0 + I_loss + I_g_loss).mean().mul(gain).backward()
 
-        # GregC: Enforce Common Sense loss.
-        if do_GregC:
-            with torch.autograd.profiler.record_function('G_forward_in_regC'):
+        # GregSim: Enforce Common Sense loss: Simplicity.
+        if do_GregSim:
+            with torch.autograd.profiler.record_function('G_forward_in_regSim'):
                 gen_img_1, _gen_ws = self.run_G(gen_z, gen_c, sync=False)
-                if self.naive_vary_dim_impl:
-                    gen_z_2 = self.vary_1_dim_naive(gen_z.clone())
-                else:
-                    gen_z_2 = self.vary_1_dim(gen_z.clone())
+                gen_z_2 = self.vary_1_dim(gen_z.clone())
                 gen_img_2, _gen_ws = self.run_G(gen_z_2, gen_c, sync=sync)
-            with torch.autograd.profiler.record_function('C_forward'):
-                # Rescale images to C_net input.
-                gen_img_1 = (((gen_img_1 + 1.) / 2.) - torch.tensor([0.485, 0.456, 0.406]).to(self.device).view(1,3,1,1)) / \
-                    torch.tensor([0.229, 0.224, 0.225]).to(self.device).view(1,3,1,1)
-                gen_img_2 = (((gen_img_2 + 1.) / 2.) - torch.tensor([0.485, 0.456, 0.406]).to(self.device).view(1,3,1,1)) / \
-                    torch.tensor([0.229, 0.224, 0.225]).to(self.device).view(1,3,1,1)
-                out_logits = self.run_C(torch.cat([gen_img_1, gen_img_2], dim=1)) # [b, 1]
-            with torch.autograd.profiler.record_function('Compute_regC_loss'):
-                C_loss = self.C_lambda * torch.nn.functional.softplus(-out_logits)
-                # C_loss = - self.C_lambda * out_logits
-                training_stats.report('Loss/GregC/C_loss', C_loss)
-            with torch.autograd.profiler.record_function('RegC_backward'):
-                (gen_img_1[:, 0, 0, 0] * 0 + C_loss).mean().mul(gain).backward()
+            with torch.autograd.profiler.record_function('Sim_forward'):
+                # Rescale images to resnet input.
+                gen_img_1 = normalize_img(gen_img_1, self.device)
+                gen_img_2 = normalize_img(gen_img_2, self.device)
+                out_logits = self.run_Sim(torch.cat([gen_img_1, gen_img_2], dim=1)) # [b, 1]
+            with torch.autograd.profiler.record_function('Compute_regSim_loss'):
+                sim_loss = self.Sim_lambda * torch.nn.functional.softplus(-out_logits)
+                # sim_loss = - self.Sim_lambda * out_logits
+                training_stats.report('Loss/GregC/sim_loss', sim_loss)
+            with torch.autograd.profiler.record_function('RegSim_backward'):
+                (gen_img_1[:, 0, 0, 0] * 0 + sim_loss).mean().mul(gain).backward()
+
+        # GregComp: Enforce Common Sense loss: Composition.
+        if do_GregComp:
+            with torch.autograd.profiler.record_function('G_forward_in_regComp'):
+                gen_img_1, _gen_ws = self.run_G(gen_z, gen_c, sync=False)
+                gen_z_2 = self.vary_1_dim(gen_z.clone())
+                gen_img_2, _gen_ws = self.run_G(gen_z_2, gen_c, sync=False)
+                gen_z_3 = self.vary_1_dim(gen_z.clone())
+                gen_img_3, _gen_ws = self.run_G(gen_z_3, gen_c, sync=False)
+                gen_z_4 = gen_z_2 - gen_z + gen_z_3
+                gen_img_4, _gen_ws = self.run_G(gen_z_4, gen_c, sync=sync)
+            with torch.autograd.profiler.record_function('Comp_forward'):
+                # Rescale images to resnet input.
+                gen_img_1 = normalize_img(gen_img_1, self.device)
+                gen_img_2 = normalize_img(gen_img_2, self.device)
+                gen_img_3 = normalize_img(gen_img_3, self.device)
+                gen_img_4 = normalize_img(gen_img_4, self.device)
+                out_logits = self.run_Comp(torch.cat([gen_img_1, gen_img_2, gen_img_3, gen_img_4], dim=1)) # [b, 1]
+            with torch.autograd.profiler.record_function('Compute_regComp_loss'):
+                comp_loss = self.Comp_lambda * torch.nn.functional.softplus(-out_logits)
+                training_stats.report('Loss/GregComp/comp_loss', comp_loss)
+            with torch.autograd.profiler.record_function('RegComp_backward'):
+                (gen_img_1[:, 0, 0, 0] * 0 + comp_loss).mean().mul(gain).backward()
 
         # Gpl: Apply path length regularization.
         if do_Gpl:
