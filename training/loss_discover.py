@@ -8,13 +8,14 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 03 Sep 2021 22:22:46 AEST
+# --- Last Modified: Sat 11 Sep 2021 01:35:29 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
 Loss for Discover Network. Code borrowed from Nvidia StyleGAN2-ada-pytorch.
 """
 
+import pickle
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -60,6 +61,14 @@ def extract_significance_loss(diff):
         return -torch.cat(loss_ls, dim=1).mean(1)
 
 #----------------------------------------------------------------------------
+
+def normalize_img(img, device):
+    # range [-1, 1] -> ImageNet normed imgs
+    img = (((img + 1.) / 2.) - torch.tensor([0.485, 0.456, 0.406]).to(device).view(1,3,1,1)) / \
+        torch.tensor([0.229, 0.224, 0.225]).to(device).view(1,3,1,1)
+    return img
+
+#----------------------------------------------------------------------------
 class DiscoverLoss(Loss):
     def __init__(self, device, G_mapping, G_synthesis, M, S, S_L, norm_on_depth,
                  compose_lamb=0., contrast_lamb=1., significance_lamb=0., batch_gpu=4, n_colors=1,
@@ -67,7 +76,8 @@ class DiscoverLoss(Loss):
                  var_sample_mean=0., sensor_used_layers=5, use_norm_mask=True,
                  divide_mask_sum=True, use_dynamic_scale=True, use_norm_as_mask=False,
                  diff_avg_lerp_rate=0.01, lerp_lamb=0., lerp_norm=False,
-                 neg_lamb=1., pos_lamb=1., neg_on_self=False, use_catdiff=False):
+                 neg_lamb=1., pos_lamb=1., neg_on_self=False, use_catdiff=False,
+                 Sim_pkl=None, Comp_pkl=None, Sim_lambda=0., Comp_lambda=0.):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -83,6 +93,20 @@ class DiscoverLoss(Loss):
             self.w_dim = self.M.w_dim
         self.S = S
         self.S_L = S_L
+
+        self.Sim = None
+        self.Comp = None
+        self.Sim_lambda = Sim_lambda
+        self.Comp_lambda = Comp_lambda
+        if (Sim_pkl is not None) and (Sim_lambda > 0): # Load pretrained common sense network: Simplicity.
+            with open(Sim_pkl, 'rb') as f:
+                network_dict = pickle.load(f)
+                self.Sim = network_dict['D_ema'].requires_grad_(False).to(device) # subclass of torch.nn.Module
+        if (Comp_pkl is not None) and (Comp_lambda >0): # Load pretrained common sense network: Composition.
+            with open(Comp_pkl, 'rb') as f:
+                network_dict = pickle.load(f)
+                self.Comp = network_dict['D_ema'].requires_grad_(False).to(device) # subclass of torch.nn.Module
+
         self.n_colors = n_colors
         self.batch_gpu = batch_gpu
         self.compose_lamb = compose_lamb
@@ -150,6 +174,18 @@ class DiscoverLoss(Loss):
             else:
                 feats_ls = [torch.cat([feats, feats_tmp_ls[j]]) for j, feats in enumerate(feats_ls)]
         return feats_ls
+
+    def run_Sim(self, img):
+        # print('Using Sim net...')
+        logits = [self.Sim(img_tmp) for img_tmp in img.split(self.batch_gpu)]
+        logits = torch.cat(logits, dim=0)
+        return logits
+
+    def run_Comp(self, img):
+        # print('Using Comp net...')
+        logits = [self.Comp(img_tmp) for img_tmp in img.split(self.batch_gpu)]
+        logits = torch.cat(logits, dim=0)
+        return logits
 
     def sample_batch_pos_neg_dirs(self, batch, z_dim, without_repeat=True):
         if without_repeat:
@@ -396,6 +432,8 @@ class DiscoverLoss(Loss):
         do_Msignificance = (phase in ['Mall', 'Msignificance']) and (self.significance_lamb != 0)
         do_Mdiverse = (phase in ['Mall', 'Mdiverse']) and (self.div_lamb != 0)
         do_Mcontrast = (phase in ['Mall', 'Mcontrast']) and (self.contrast_lamb != 0)
+        do_Msim = (phase in ['Mall', 'Msim']) and (self.Sim_lambda != 0) and (self.Sim is not None)
+        do_Mcomp = (phase in ['Mall', 'Mcomp']) and (self.Comp_lambda != 0) and (self.Comp is not None)
 
         with torch.autograd.profiler.record_function('M_run'):
             ws_orig = self.get_multicolor_ws(self.n_colors) # [b(_gpu), num_ws, w_dim]
@@ -523,6 +561,66 @@ class DiscoverLoss(Loss):
                 loss_diversity = self.calc_loss_diversity(delta) # (b/1)
                 training_stats.report('Loss/M/loss_diversity', loss_diversity)
                 loss_all += self.div_lamb * loss_diversity.mean()
+
+        # GregSim: Enforce Common Sense loss: Simplicity.
+        if do_Msim:
+            with torch.autograd.profiler.record_function('Msim_sample_dirs'):
+                dirs_idx = torch.randint(self.nv_dim, size=[b]) # [b]
+                delta_1 = torch.gather(delta, 1, dirs_idx.view(b, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim)).squeeze() # [b, num_ws, w_dim]
+
+                # Sample variation scales.
+                if self.use_dynamic_scale:
+                    scale_1 = (torch.randn(b, device=delta.device) * self.var_sample_scale + self.var_sample_mean).view(b, 1, 1)
+                else:
+                    scale_1 = self.var_sample_scale
+
+                # Apply all variations to ws.
+                ws_1 = ws_orig + (delta_1 * scale_1) # (b, num_ws, w_dim)
+
+            with torch.autograd.profiler.record_function('Msim_generate_imgs'):
+                # Generate images.
+                ws_all = torch.cat([ws_orig, ws_1], dim=0) # (2 * b, num_ws, w_dim)
+                imgs_all = self.run_G_synthesis(ws_all)
+                # Rescale images to resnet input.
+                imgs_all = normalize_img(imgs_all, self.device) # [2 * b, c, h, w]
+                out_logits = self.run_Sim(torch.cat(imgs_all.split(b, dim=0), dim=1)) # [b, 1]
+            with torch.autograd.profiler.record_function('Compute_regSim_loss'):
+                sim_loss = torch.nn.functional.softplus(-out_logits)
+                # sim_loss = - self.Sim_lambda * out_logits
+                training_stats.report('Loss/Msim/sim_loss', sim_loss)
+                loss_all += self.Sim_lambda * sim_loss.mean()
+
+        # GregComp: Enforce Common Sense loss: Composition.
+        if do_Mcomp:
+            with torch.autograd.profiler.record_function('Mcomp_sample_2dirs'):
+                dirs_idx = self.sample_batch_pos_neg_dirs(b, self.nv_dim, without_repeat=False).to(delta.device) # (b, 2)
+                delta_1 = torch.gather(delta, 1, dirs_idx[:, 0].view(b, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim)).squeeze() # [b, num_ws, w_dim]
+                delta_2 = torch.gather(delta, 1, dirs_idx[:, 1].view(b, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim)).squeeze() # [b, num_ws, w_dim]
+
+                # Sample variation scales.
+                if self.use_dynamic_scale:
+                    scale_1 = (torch.randn(b, device=delta.device) * self.var_sample_scale + self.var_sample_mean).view(b, 1, 1)
+                    scale_2 = (torch.randn(b, device=delta.device) * self.var_sample_scale + self.var_sample_mean).view(b, 1, 1)
+                else:
+                    scale_1 = self.var_sample_scale
+                    scale_2 = self.var_sample_scale
+
+                # Apply all variations to ws.
+                ws_1 = ws_orig + (delta_1 * scale_1) # (b, num_ws, w_dim)
+                ws_2 = ws_orig + (delta_2 * scale_2) # (b, num_ws, w_dim)
+                ws_1p2 = ws_orig + (delta_1 * scale_1 + delta_2 * scale_2) # (b, num_ws, w_dim)
+
+            with torch.autograd.profiler.record_function('Mcomp_generate_imgs'):
+                # Generate images.
+                ws_all = torch.cat([ws_orig, ws_1, ws_2, ws_1p2], dim=0) # (4 * b, num_ws, w_dim)
+                imgs_all = self.run_G_synthesis(ws_all)
+                # Rescale images to resnet input.
+                imgs_all = normalize_img(imgs_all, self.device)
+                out_logits = self.run_Comp(torch.cat(imgs_all.split(b, dim=0), dim=1)) # [b, 1]
+            with torch.autograd.profiler.record_function('Compute_regComp_loss'):
+                comp_loss = torch.nn.functional.softplus(-out_logits)
+                training_stats.report('Loss/Mcomp/comp_loss', comp_loss)
+                loss_all += self.Comp_lambda * comp_loss.mean()
 
         with torch.autograd.profiler.record_function('M_backward'):
             loss_all.mean().mul(gain).backward()
