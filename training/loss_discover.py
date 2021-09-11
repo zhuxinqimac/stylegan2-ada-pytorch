@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 11 Sep 2021 01:35:29 AEST
+# --- Last Modified: Sat 11 Sep 2021 14:12:46 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -565,7 +565,7 @@ class DiscoverLoss(Loss):
         # GregSim: Enforce Common Sense loss: Simplicity.
         if do_Msim:
             with torch.autograd.profiler.record_function('Msim_sample_dirs'):
-                dirs_idx = torch.randint(self.nv_dim, size=[b]) # [b]
+                dirs_idx = torch.randint(self.nv_dim, size=[b]).to(delta.device) # [b]
                 delta_1 = torch.gather(delta, 1, dirs_idx.view(b, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim)).squeeze() # [b, num_ws, w_dim]
 
                 # Sample variation scales.
