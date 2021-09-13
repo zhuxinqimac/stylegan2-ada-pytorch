@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 14 Sep 2021 00:12:28 AEST
+# --- Last Modified: Tue 14 Sep 2021 00:13:22 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -57,7 +57,8 @@ class NoneAttentioner(torch.nn.Module):
         # return: [b, nv_dim, num_ws]
         fake_scaler = self.att_logits / self.att_logits
         ws_atts = fake_scaler * torch.ones([ws_in.shape[0], self.nv_dim, self.att_layers], dtype=ws_in.dtype).to(ws_in.device) / self.att_layers
-        ws_atts = torch.cat([ws_atts, torch.zeros([1, self.nv_dim, self.num_ws - self.att_layers], dtype=ws_in.dtype).to(ws_in.device)], dim=-1) # [1, nv_dim, num_ws]
+        ws_atts = torch.cat([ws_atts, torch.zeros([ws_in.shape[0], self.nv_dim,
+                                                   self.num_ws - self.att_layers], dtype=ws_in.dtype).to(ws_in.device)], dim=-1) # [1, nv_dim, num_ws]
         return ws_atts
 
 @persistence.persistent_class
