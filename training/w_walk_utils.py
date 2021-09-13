@@ -8,7 +8,7 @@
 
 # --- File Name: w_walk_utils.py
 # --- Creation Date: 03-09-2021
-# --- Last Modified: Mon 13 Sep 2021 18:15:55 AEST
+# --- Last Modified: Tue 14 Sep 2021 00:22:09 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -122,7 +122,7 @@ def get_SVD(G, url, device, rank, n_samples=1000000, batch=256, cache=True, cach
             print('Loading SVD pkl...')
             with open(filename, 'rb') as f:
                 data = pickle.load(f)
-            return data['s_values'].to(device), data['v_mat'].to(device)
+            return data['w_avg'].to(device), data['s_values'].to(device), data['v_mat'].to(device)
 
     # Compute SVD.
     print('Computing SVD...')
@@ -130,6 +130,7 @@ def get_SVD(G, url, device, rank, n_samples=1000000, batch=256, cache=True, cach
     c_origin = torch.randn([1, G.c_dim], device=device).repeat([n_samples, 1])
     w_origin_ls = [G.mapping(z, c)[:, 0].cpu() for z, c in zip(z_origin.split(batch), c_origin.split(batch))] # list of [b, w_dim]
     w_origin = torch.cat(w_origin_ls, dim=0) # (n_samples, w_dim)
+    w_avg = w_origin.mean(0)
     # torch.pca_lowrank(A, q=None, center=True, niter=2)
     _, s_values, v_mat = torch.pca_lowrank(w_origin, q=w_origin.size(1)) # [n_samples, w_dim], [w_dim], [w_dim, w_dim]
 
@@ -139,10 +140,10 @@ def get_SVD(G, url, device, rank, n_samples=1000000, batch=256, cache=True, cach
         cache_file = os.path.join(cache_dir, url_md5 + "_" + tail_name)
         temp_file = os.path.join(cache_dir, "tmp_" + uuid.uuid4().hex + "_" + url_md5 + "_" + tail_name)
         os.makedirs(cache_dir, exist_ok=True)
-        save_data = {'s_values': s_values, 'v_mat': v_mat}
+        save_data = {'w_avg': w_avg, 's_values': s_values, 'v_mat': v_mat}
         print('Saving SVD pkl...')
         with open(temp_file, 'wb') as f:
             pickle.dump(save_data, f)
         os.replace(temp_file, cache_file) # atomic
 
-    return s_values.to(device), v_mat.to(device)
+    return w_avg.to(device), s_values.to(device), v_mat.to(device)

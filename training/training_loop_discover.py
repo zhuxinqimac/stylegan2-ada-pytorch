@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 13 Sep 2021 17:59:07 AEST
+# --- Last Modified: Tue 14 Sep 2021 00:23:05 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -88,10 +88,10 @@ def training_loop(
         network_dict = legacy.load_network_pkl(f)
         G = network_dict['G_ema'].requires_grad_(False).to(device) # subclass of torch.nn.Module
 
-    s_values, v_mat = get_SVD(G, gan_network_pkl, device, rank)
+    w_avg, s_values, v_mat = get_SVD(G, gan_network_pkl, device, rank)
     M_kwargs.nav_kwargs.s_values = s_values
     M_kwargs.nav_kwargs.v_mat = v_mat
-    M_kwargs.nav_kwargs.w_avg = G.mapping.w_avg
+    M_kwargs.nav_kwargs.w_avg = w_avg
 
     # Load Sensor networks.
     if rank == 0:
@@ -170,7 +170,7 @@ def training_loop(
         c_origin = torch.randn([1, G.c_dim], device=device)
         w_origin = G.mapping(z_origin, c_origin, truncation_psi=0.7) # (1, num_ws, w_dim)
         # w_walk = get_w_walk(w_origin, M, n_samples_per, trav_walk_scale, recursive_walk=recursive_walk).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
-        w_walk = get_w_walk_SVD_step(w_origin, M, n_samples_per, trav_walk_scale, w_avg=G.mapping.w_avg, s_values=s_values, v_mat=v_mat, recursive_walk=recursive_walk).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
+        w_walk = get_w_walk_SVD_step(w_origin, M, n_samples_per, trav_walk_scale, w_avg=w_avg, s_values=s_values, v_mat=v_mat, recursive_walk=recursive_walk).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
         images = torch.cat([G.synthesis(w, noise_mode='const') for w in w_walk]) # (gh * gw, c, h, w)
 
         if save_size < images.size(-1):
@@ -278,7 +278,7 @@ def training_loop(
             c_origin = torch.randn([1, G.c_dim], device=device)
             w_origin = G.mapping(z_origin, c_origin, truncation_psi=0.7) # (1, num_ws, w_dim)
             # w_walk = get_w_walk(w_origin, M, n_samples_per, trav_walk_scale, recursive_walk=recursive_walk).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
-            w_walk = get_w_walk_SVD_step(w_origin, M, n_samples_per, trav_walk_scale, w_avg=G.mapping.w_avg, s_values=s_values, v_mat=v_mat, recursive_walk=recursive_walk).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
+            w_walk = get_w_walk_SVD_step(w_origin, M, n_samples_per, trav_walk_scale, w_avg=w_avg, s_values=s_values, v_mat=v_mat, recursive_walk=recursive_walk).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
             images = torch.cat([G.synthesis(w, noise_mode='const') for w in w_walk]) # (gh * gw, c, h, w)
 
             if save_size < images.size(-1):
