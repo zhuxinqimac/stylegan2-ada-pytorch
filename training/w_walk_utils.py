@@ -8,7 +8,7 @@
 
 # --- File Name: w_walk_utils.py
 # --- Creation Date: 03-09-2021
-# --- Last Modified: Mon 13 Sep 2021 14:40:55 AEST
+# --- Last Modified: Mon 13 Sep 2021 14:44:15 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -79,7 +79,7 @@ def get_w_walk_SVD_step(w_origin, M, n_samples_per, w_avg, s_values, v_mat, recu
         # Compute step size for each direction
         dir_in_pca = torch.matmul(dirs_orig[0, lat_i].mean(0, keepdim=True), v_mat) # [1, q]
         dir_in_pca_norm = F.normalize(dir_in_pca, dim=1) # [1, q]
-        coef_t = 1. / (dir_in_pca_norm.square() / s_values[np.newaxis, ...]).sum().sqrt()
+        coef_t = 1. / (dir_in_pca_norm.square() / s_values[np.newaxis, ...]).sum().sqrt() # 1/(x^2/a^2 + y^2/b^2, ...).sqrt()
         dir_len_semi = torch.linalg.norm(dir_in_pca_norm * coef_t, dim=-1).sum() # []
         step_pos_in_pca = (step_in_pca * dir_in_pca_norm).sum()
         back_len = dir_len_semi + step_pos_in_pca # []
