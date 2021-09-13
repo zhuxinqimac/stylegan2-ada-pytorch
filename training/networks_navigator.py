@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 13 Sep 2021 19:21:30 AEST
+# --- Last Modified: Tue 14 Sep 2021 00:12:28 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -26,7 +26,6 @@ from training.networks import normalize_2nd_moment
 def construct_fc_layers(in_dim, fc_layers, middle_feat, out_dim, act='relu'):
     net_ls = []
     in_f, out_f = in_dim, middle_feat
-    print('Used FC_layers:', fc_layers)
     for i in range(fc_layers):
         net_ls.append(FullyConnectedLayer(in_f, out_f, activation=act))
         in_f = out_f
@@ -49,7 +48,6 @@ class NoneAttentioner(torch.nn.Module):
         self.nv_dim = nv_dim
         self.num_ws = num_ws
         self.w_dim = w_dim
-        print('att_layers', att_layers)
         self.att_layers = num_ws if att_layers=='all' else att_layers
         assert self.att_layers <= num_ws
         self.att_logits = nn.Parameter(torch.ones([]), requires_grad=True)
@@ -58,7 +56,9 @@ class NoneAttentioner(torch.nn.Module):
         # ws_in: [b, num_ws, w_dim]
         # return: [b, nv_dim, num_ws]
         fake_scaler = self.att_logits / self.att_logits
-        return fake_scaler * torch.ones(ws_in.shape[0], self.nv_dim, self.num_ws, dtype=ws_in.dtype).to(ws_in.device) / self.nv_dim
+        ws_atts = fake_scaler * torch.ones([ws_in.shape[0], self.nv_dim, self.att_layers], dtype=ws_in.dtype).to(ws_in.device) / self.att_layers
+        ws_atts = torch.cat([ws_atts, torch.zeros([1, self.nv_dim, self.num_ws - self.att_layers], dtype=ws_in.dtype).to(ws_in.device)], dim=-1) # [1, nv_dim, num_ws]
+        return ws_atts
 
 @persistence.persistent_class
 class FixedAttentioner(NoneAttentioner):
@@ -286,7 +286,6 @@ class Navigator(torch.nn.Module):
         if 'v_mat' in nav_kwargs:
             self.v_mat = nav_kwargs['v_mat'] # PCA basis of w. [w_dim, q]
 
-        print('att_kwargs:', att_kwargs)
         # Attention net: map tensor w [b, num_ws, w_dim] --> nv_dims of ws attentions [b, nv_dim, num_ws], should be [0, 1]
         if self.att_type == 'none':
             self.att_net = NoneAttentioner(self.nv_dim, self.num_ws, self.w_dim, **att_kwargs)
