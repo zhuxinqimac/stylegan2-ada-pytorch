@@ -8,7 +8,7 @@
 
 # --- File Name: w_walk_utils.py
 # --- Creation Date: 03-09-2021
-# --- Last Modified: Mon 13 Sep 2021 14:39:03 AEST
+# --- Last Modified: Mon 13 Sep 2021 14:40:55 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -81,7 +81,6 @@ def get_w_walk_SVD_step(w_origin, M, n_samples_per, w_avg, s_values, v_mat, recu
         dir_in_pca_norm = F.normalize(dir_in_pca, dim=1) # [1, q]
         coef_t = 1. / (dir_in_pca_norm.square() / s_values[np.newaxis, ...]).sum().sqrt()
         dir_len_semi = torch.linalg.norm(dir_in_pca_norm * coef_t, dim=-1).sum() # []
-        # dir_len_semi = (s_values[np.newaxis, ...] * dir_in_pca_norm).sum() # []
         step_pos_in_pca = (step_in_pca * dir_in_pca_norm).sum()
         back_len = dir_len_semi + step_pos_in_pca # []
         # forward_len = dir_len_semi - step_pos_in_pca # []
