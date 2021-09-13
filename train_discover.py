@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 11 Sep 2021 01:17:09 AEST
+# --- Last Modified: Mon 13 Sep 2021 18:15:28 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -63,7 +63,6 @@ def parse_cfg(cfg):
     cfg_dict = {}
     for bk_v in bk_v_ls:
         bk, v = bk_v.strip().split('_')
-        assert bk in KEY_BRIEF_NAMES
         cfg_dict[KEY_BRIEF_NAMES[bk]] = KEY_DTYPES[KEY_BRIEF_NAMES[bk]](v)
     return cfg_dict
 

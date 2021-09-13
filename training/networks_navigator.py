@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 04 Sep 2021 16:46:49 AEST
+# --- Last Modified: Mon 13 Sep 2021 17:44:05 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -49,13 +49,14 @@ class NoneAttentioner(torch.nn.Module):
         self.nv_dim = nv_dim
         self.num_ws = num_ws
         self.w_dim = w_dim
+        print('att_layers', att_layers)
         self.att_layers = num_ws if att_layers=='all' else att_layers
-        assert att_layers <= num_ws
+        assert self.att_layers <= num_ws
 
     def forward(self, ws_in):
         # ws_in: [b, num_ws, w_dim]
         # return: [b, nv_dim, num_ws]
-        return torch.ones(ws_in.shape[0], self.nv_dim, self.num_ws, dtype=ws_in.dtype).to(ws_in.device)
+        return torch.ones(ws_in.shape[0], self.nv_dim, self.num_ws, dtype=ws_in.dtype).to(ws_in.device) / self.nv_dim
 
 @persistence.persistent_class
 class FixedAttentioner(NoneAttentioner):
@@ -66,7 +67,7 @@ class FixedAttentioner(NoneAttentioner):
         att_layers,                 # Number of ws attention layers.
         **kwargs,
     ):
-        super().__init__(nv_dim, num_ws, w_dim)
+        super().__init__(nv_dim, num_ws, w_dim, att_layers)
         self.att_logits = nn.Parameter(torch.normal(mean=torch.zeros(nv_dim, self.att_layers), std=1),
                                        requires_grad=True)
 
@@ -226,6 +227,33 @@ class AdaALLwNavigatorNet(NoneNavigatorNet):
         ws_dirs = logits.view(b, self.nv_dim, self.w_dim)
         return ws_dirs
 
+@persistence.persistent_class
+class PCANavigatorNet(NoneNavigatorNet):
+    def __init__(self,
+        nv_dim,                     # Navigator latent dim.
+        num_ws,                     # Number of intermediate latents for synthesis net input.
+        w_dim,                      # Intermediate latent (W) dimensionality.
+        w_avg,                      # G.mapping.w_avg.
+        s_values,                   # Singular values of w pca [q].
+        v_mat,                      # PCA basis of w [w_dim, q].
+        **kwargs,
+    ):
+        '''
+        Depending on all ws.
+        '''
+        super().__init__(nv_dim, num_ws, w_dim)
+        self.w_avg = w_avg
+        self.s_values = s_values
+        self.v_mat = v_mat
+        assert self.nv_dim <= self.v_mat.shape[1]
+
+    def forward(self, ws_in):
+        # ws_in: [b, num_ws, w_dim]
+        # return: [b, nv_dim, w_dim]
+        b = ws_in.shape[0]
+        w_dirs = self.v_mat[:, :self.nv_dim].transpose(1, 0) # [nv_dim, w_dim]
+        return w_dirs.view(1, self.nv_dim, self.w_dim).repeat(b, 1, 1).to(ws_in.device)
+
 #----------------------------------------------------------------------------
 # Main Navigator
 
@@ -241,6 +269,7 @@ class Navigator(torch.nn.Module):
         att_kwargs      = {},       # Keyword args for att_net construction.
         nav_kwargs      = {},       # Keyword args for nav_net construction.
     ):
+        # common_kwargs = dict(c_dim=G.c_dim, w_dim=G.w_dim, num_ws=G.num_ws, w_avg=G.mapping.w_avg, s_values=s_values, v_mat=v_mat)
         super().__init__()
         self.nv_dim = nv_dim
         self.c_dim = c_dim # Ignored
@@ -248,7 +277,14 @@ class Navigator(torch.nn.Module):
         self.num_ws = num_ws
         self.att_type = att_type
         self.nav_type = nav_type
+        if 'w_avg' in nav_kwargs:
+            self.w_avg = nav_kwargs['w_avg'] # G.mapping w_avg.
+        if 's_values' in nav_kwargs:
+            self.s_values = nav_kwargs['s_values'] # Singular values of w_SVD. [q]
+        if 'v_mat' in nav_kwargs:
+            self.v_mat = nav_kwargs['v_mat'] # PCA basis of w. [w_dim, q]
 
+        print('att_kwargs:', att_kwargs)
         # Attention net: map tensor w [b, num_ws, w_dim] --> nv_dims of ws attentions [b, nv_dim, num_ws], should be [0, 1]
         if self.att_type == 'none':
             self.att_net = NoneAttentioner(self.nv_dim, self.num_ws, self.w_dim, **att_kwargs)
@@ -268,6 +304,8 @@ class Navigator(torch.nn.Module):
             self.nav_net = Ada1wNavigatorNet(self.nv_dim, self.num_ws, self.w_dim, **nav_kwargs)
         elif self.nav_type == 'adaALLw': # Depending on all num_ws of ws.
             self.nav_net = AdaALLwNavigatorNet(self.nv_dim, self.num_ws, self.w_dim, **nav_kwargs)
+        elif self.nav_type == 'pca': # Using pca nv_dim-largest basis as directions.
+            self.nav_net = PCANavigatorNet(self.nv_dim, self.num_ws, self.w_dim, **nav_kwargs)
         else:
             raise ValueError('Unknown nav_type:', self.nav_type)
 

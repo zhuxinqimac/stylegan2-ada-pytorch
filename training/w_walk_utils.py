@@ -8,7 +8,7 @@
 
 # --- File Name: w_walk_utils.py
 # --- Creation Date: 03-09-2021
-# --- Last Modified: Mon 13 Sep 2021 14:44:15 AEST
+# --- Last Modified: Mon 13 Sep 2021 18:15:55 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -62,7 +62,7 @@ def add_outline(images, width=1):
     images[:, :, :, -width:] = 255
     return images
 
-def get_w_walk_SVD_step(w_origin, M, n_samples_per, w_avg, s_values, v_mat, recursive_walk=True):
+def get_w_walk_SVD_step(w_origin, M, n_samples_per, step_size, w_avg, s_values, v_mat, recursive_walk=True):
     '''
     w_origin: (1, num_ws, w_dim)
     w_avg: [w_dim]
@@ -79,12 +79,12 @@ def get_w_walk_SVD_step(w_origin, M, n_samples_per, w_avg, s_values, v_mat, recu
         # Compute step size for each direction
         dir_in_pca = torch.matmul(dirs_orig[0, lat_i].mean(0, keepdim=True), v_mat) # [1, q]
         dir_in_pca_norm = F.normalize(dir_in_pca, dim=1) # [1, q]
-        coef_t = 1. / (dir_in_pca_norm.square() / s_values[np.newaxis, ...]).sum().sqrt() # 1/(x^2/a^2 + y^2/b^2, ...).sqrt()
+        coef_t = 1. / (dir_in_pca_norm.square() / s_values[np.newaxis, ...].square()).sum().sqrt() # 1/(x^2/a^2 + y^2/b^2, ...).sqrt()
         dir_len_semi = torch.linalg.norm(dir_in_pca_norm * coef_t, dim=-1).sum() # []
         step_pos_in_pca = (step_in_pca * dir_in_pca_norm).sum()
         back_len = dir_len_semi + step_pos_in_pca # []
         # forward_len = dir_len_semi - step_pos_in_pca # []
-        step_size = 2 * dir_len_semi / n_samples_per
+        step_size_t = 2 * dir_len_semi / n_samples_per
 
         # Start walking
         steps_lat_i = [w_origin.clone()[:, np.newaxis, ...]]
@@ -92,22 +92,21 @@ def get_w_walk_SVD_step(w_origin, M, n_samples_per, w_avg, s_values, v_mat, recu
         if not recursive_walk:
             dirs = M(step)
         # Backward steps:
-        for _ in range(1, (back_len / step_size).round().int()):
+        for _ in range(1, (back_len / step_size_t).round().int()):
             if recursive_walk:
                 dirs = M(step) # [1, n_lat, num_ws, w_dim]
-            step = step - step_size * dirs[:, lat_i] # [1, num_ws, w_dim]
+            step = step - step_size_t * step_size * dirs[:, lat_i] # [1, num_ws, w_dim]
             steps_lat_i = [step[:, np.newaxis, ...]] + steps_lat_i # list of [1, 1, num_ws, w_dim]
         step = w_origin.clone() # [1, num_ws, w_dim]
         # Forward steps:
-        for _ in range(n_samples_per - (back_len / step_size).round().int()):
+        for _ in range(n_samples_per - (back_len / step_size_t).round().int()):
             if recursive_walk:
                 dirs = M(step) # [1, n_lat, num_ws, w_dim]
-            step = step + step_size * dirs[:, lat_i] # [1, num_ws, w_dim]
+            step = step + step_size_t * step_size * dirs[:, lat_i] # [1, num_ws, w_dim]
             steps_lat_i = steps_lat_i + [step[:, np.newaxis, ...]] # list of [1, 1, num_ws, w_dim]
         row_tensor = torch.cat(steps_lat_i, dim=1) # [1, n_samples_per, num_ws, w_dim]
         all_ls.append(row_tensor)
     all_tensor = torch.cat(all_ls, dim=0) # [n_lat, n_samples_per, num_ws, w_dim]
-    print('all_tensor.shape:', all_tensor.shape)
     return all_tensor.view(n_lat * n_samples_per, num_ws, w_dim)
 
 def get_SVD(G, url, device, rank, n_samples=1000000, batch=256, cache=True, cache_dir=None):

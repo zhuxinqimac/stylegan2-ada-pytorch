@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 11 Sep 2021 14:12:46 AEST
+# --- Last Modified: Mon 13 Sep 2021 16:38:30 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -77,7 +77,8 @@ class DiscoverLoss(Loss):
                  divide_mask_sum=True, use_dynamic_scale=True, use_norm_as_mask=False,
                  diff_avg_lerp_rate=0.01, lerp_lamb=0., lerp_norm=False,
                  neg_lamb=1., pos_lamb=1., neg_on_self=False, use_catdiff=False,
-                 Sim_pkl=None, Comp_pkl=None, Sim_lambda=0., Comp_lambda=0.):
+                 Sim_pkl=None, Comp_pkl=None, Sim_lambda=0., Comp_lambda=0.,
+                 s_values=None, v_mat=None):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -106,6 +107,9 @@ class DiscoverLoss(Loss):
             with open(Comp_pkl, 'rb') as f:
                 network_dict = pickle.load(f)
                 self.Comp = network_dict['D_ema'].requires_grad_(False).to(device) # subclass of torch.nn.Module
+
+        self.s_values = s_values
+        self.v_mat = v_mat
 
         self.n_colors = n_colors
         self.batch_gpu = batch_gpu
@@ -568,11 +572,16 @@ class DiscoverLoss(Loss):
                 dirs_idx = torch.randint(self.nv_dim, size=[b]).to(delta.device) # [b]
                 delta_1 = torch.gather(delta, 1, dirs_idx.view(b, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim)).squeeze() # [b, num_ws, w_dim]
 
+                dir_in_pca = torch.matmul(delta_1.mean(1), self.v_mat) # [b, q]
+                dir_in_pca_norm = F.normalize(dir_in_pca, dim=1) # [b, q]
+                coef_t = 1. / (dir_in_pca_norm.square() / self.s_values[np.newaxis, ...].square()).sum(1, keepdim=True).sqrt() # [b], 1/(x^2/a^2 + y^2/b^2, ...).sqrt()
+                dir_len_semi = torch.linalg.norm(dir_in_pca_norm * coef_t, dim=-1) # [b]
+                step_size = dir_len_semi / 4.
                 # Sample variation scales.
                 if self.use_dynamic_scale:
-                    scale_1 = (torch.randn(b, device=delta.device) * self.var_sample_scale + self.var_sample_mean).view(b, 1, 1)
+                    scale_1 = (torch.randn(b, device=delta.device) * self.var_sample_scale * step_size + self.var_sample_mean).view(b, 1, 1)
                 else:
-                    scale_1 = self.var_sample_scale
+                    scale_1 = (self.var_sample_scale * step_size).view(b, 1, 1)
 
                 # Apply all variations to ws.
                 ws_1 = ws_orig + (delta_1 * scale_1) # (b, num_ws, w_dim)
