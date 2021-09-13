@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 13 Sep 2021 17:44:05 AEST
+# --- Last Modified: Mon 13 Sep 2021 19:21:30 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -52,11 +52,13 @@ class NoneAttentioner(torch.nn.Module):
         print('att_layers', att_layers)
         self.att_layers = num_ws if att_layers=='all' else att_layers
         assert self.att_layers <= num_ws
+        self.att_logits = nn.Parameter(torch.ones([]), requires_grad=True)
 
     def forward(self, ws_in):
         # ws_in: [b, num_ws, w_dim]
         # return: [b, nv_dim, num_ws]
-        return torch.ones(ws_in.shape[0], self.nv_dim, self.num_ws, dtype=ws_in.dtype).to(ws_in.device) / self.nv_dim
+        fake_scaler = self.att_logits / self.att_logits
+        return fake_scaler * torch.ones(ws_in.shape[0], self.nv_dim, self.num_ws, dtype=ws_in.dtype).to(ws_in.device) / self.nv_dim
 
 @persistence.persistent_class
 class FixedAttentioner(NoneAttentioner):
