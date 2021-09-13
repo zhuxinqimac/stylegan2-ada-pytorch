@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 13 Sep 2021 16:38:30 AEST
+# --- Last Modified: Tue 14 Sep 2021 01:08:14 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -576,7 +576,7 @@ class DiscoverLoss(Loss):
                 dir_in_pca_norm = F.normalize(dir_in_pca, dim=1) # [b, q]
                 coef_t = 1. / (dir_in_pca_norm.square() / self.s_values[np.newaxis, ...].square()).sum(1, keepdim=True).sqrt() # [b], 1/(x^2/a^2 + y^2/b^2, ...).sqrt()
                 dir_len_semi = torch.linalg.norm(dir_in_pca_norm * coef_t, dim=-1) # [b]
-                step_size = dir_len_semi / 4.
+                step_size = dir_len_semi * 0.001
                 # Sample variation scales.
                 if self.use_dynamic_scale:
                     scale_1 = (torch.randn(b, device=delta.device) * self.var_sample_scale * step_size + self.var_sample_mean).view(b, 1, 1)
