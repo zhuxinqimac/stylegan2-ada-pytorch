@@ -8,7 +8,7 @@
 
 # --- File Name: w_walk_utils.py
 # --- Creation Date: 03-09-2021
-# --- Last Modified: Tue 14 Sep 2021 00:22:09 AEST
+# --- Last Modified: Tue 14 Sep 2021 20:58:58 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -66,7 +66,7 @@ def get_w_walk_SVD_step(w_origin, M, n_samples_per, step_size, w_avg, s_values, 
     '''
     w_origin: (1, num_ws, w_dim)
     w_avg: [w_dim]
-    s_values: singular values of size [q] (q ranks)
+    s_values: singular values (normed) of size [q] (q ranks)
     v_mat: [n, q], projection matrix from the feature space to PCA.
         torch.matmul(A, V[:, :k]) to project to first k principle components.
     return (gh * gw, num_ws, w_dim), gh, gw = M.nv_dim, n_samples_per
@@ -75,12 +75,13 @@ def get_w_walk_SVD_step(w_origin, M, n_samples_per, step_size, w_avg, s_values, 
     _, n_lat, num_ws, w_dim = dirs_orig.shape
     step_in_pca = torch.matmul(w_origin[0].mean(0, keepdim=True) - w_avg[np.newaxis, ...], v_mat) # [1, q]
     all_ls = []
+    # s_values_x2 = s_values * 2 # We show range [-2, 2]
     for lat_i in range(n_lat):
         # Compute step size for each direction
         dir_in_pca = torch.matmul(dirs_orig[0, lat_i].mean(0, keepdim=True), v_mat) # [1, q]
         dir_in_pca_norm = F.normalize(dir_in_pca, dim=1) # [1, q]
         coef_t = 1. / (dir_in_pca_norm.square() / s_values[np.newaxis, ...].square()).sum().sqrt() # 1/(x^2/a^2 + y^2/b^2, ...).sqrt()
-        dir_len_semi = torch.linalg.norm(dir_in_pca_norm * coef_t, dim=-1).sum() # []
+        dir_len_semi = torch.linalg.norm(dir_in_pca_norm * coef_t, dim=-1)[0] # []
         step_pos_in_pca = (step_in_pca * dir_in_pca_norm).sum()
         back_len = dir_len_semi + step_pos_in_pca # []
         # forward_len = dir_len_semi - step_pos_in_pca # []
@@ -92,20 +93,21 @@ def get_w_walk_SVD_step(w_origin, M, n_samples_per, step_size, w_avg, s_values, 
         if not recursive_walk:
             dirs = M(step)
         # Backward steps:
-        for _ in range(1, (back_len / step_size_t).round().int()):
+        for _ in range(1, torch.clip((back_len / step_size_t).round().int(), 1, n_samples_per)):
             if recursive_walk:
                 dirs = M(step) # [1, n_lat, num_ws, w_dim]
             step = step - step_size_t * step_size * dirs[:, lat_i] # [1, num_ws, w_dim]
             steps_lat_i = [step[:, np.newaxis, ...]] + steps_lat_i # list of [1, 1, num_ws, w_dim]
         step = w_origin.clone() # [1, num_ws, w_dim]
         # Forward steps:
-        for _ in range(n_samples_per - (back_len / step_size_t).round().int()):
+        for _ in range(n_samples_per - torch.clip((back_len / step_size_t).round().int(), 1, n_samples_per)):
             if recursive_walk:
                 dirs = M(step) # [1, n_lat, num_ws, w_dim]
             step = step + step_size_t * step_size * dirs[:, lat_i] # [1, num_ws, w_dim]
             steps_lat_i = steps_lat_i + [step[:, np.newaxis, ...]] # list of [1, 1, num_ws, w_dim]
         row_tensor = torch.cat(steps_lat_i, dim=1) # [1, n_samples_per, num_ws, w_dim]
         all_ls.append(row_tensor)
+        # print('row_tensor.shape:', row_tensor.shape)
     all_tensor = torch.cat(all_ls, dim=0) # [n_lat, n_samples_per, num_ws, w_dim]
     return all_tensor.view(n_lat * n_samples_per, num_ws, w_dim)
 
@@ -122,7 +124,7 @@ def get_SVD(G, url, device, rank, n_samples=1000000, batch=256, cache=True, cach
             print('Loading SVD pkl...')
             with open(filename, 'rb') as f:
                 data = pickle.load(f)
-            return data['w_avg'].to(device), data['s_values'].to(device), data['v_mat'].to(device)
+            return data['w_avg'].to(device), data['s_values'].to(device), data['v_mat'].to(device), data['s_values_normed'].to(device)
 
     # Compute SVD.
     print('Computing SVD...')
@@ -133,6 +135,7 @@ def get_SVD(G, url, device, rank, n_samples=1000000, batch=256, cache=True, cach
     w_avg = w_origin.mean(0)
     # torch.pca_lowrank(A, q=None, center=True, niter=2)
     _, s_values, v_mat = torch.pca_lowrank(w_origin, q=w_origin.size(1)) # [n_samples, w_dim], [w_dim], [w_dim, w_dim]
+    s_values_normed = s_values / np.sqrt(float(w_origin.size(0)))
 
     # Save to cache.
     if cache and rank == 0:
@@ -140,10 +143,10 @@ def get_SVD(G, url, device, rank, n_samples=1000000, batch=256, cache=True, cach
         cache_file = os.path.join(cache_dir, url_md5 + "_" + tail_name)
         temp_file = os.path.join(cache_dir, "tmp_" + uuid.uuid4().hex + "_" + url_md5 + "_" + tail_name)
         os.makedirs(cache_dir, exist_ok=True)
-        save_data = {'w_avg': w_avg, 's_values': s_values, 'v_mat': v_mat}
+        save_data = {'w_avg': w_avg, 's_values': s_values, 'v_mat': v_mat, 's_values_normed': s_values_normed}
         print('Saving SVD pkl...')
         with open(temp_file, 'wb') as f:
             pickle.dump(save_data, f)
         os.replace(temp_file, cache_file) # atomic
 
-    return w_avg.to(device), s_values.to(device), v_mat.to(device)
+    return w_avg.to(device), s_values.to(device), v_mat.to(device), s_values_normed.to(device)
