@@ -8,7 +8,7 @@
 
 # --- File Name: w_walk_utils.py
 # --- Creation Date: 03-09-2021
-# --- Last Modified: Tue 14 Sep 2021 20:58:58 AEST
+# --- Last Modified: Tue 14 Sep 2021 21:10:07 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -75,12 +75,12 @@ def get_w_walk_SVD_step(w_origin, M, n_samples_per, step_size, w_avg, s_values, 
     _, n_lat, num_ws, w_dim = dirs_orig.shape
     step_in_pca = torch.matmul(w_origin[0].mean(0, keepdim=True) - w_avg[np.newaxis, ...], v_mat) # [1, q]
     all_ls = []
-    # s_values_x2 = s_values * 2 # We show range [-2, 2]
+    s_values_x2 = s_values * 2 # We show range [-2, 2]
     for lat_i in range(n_lat):
         # Compute step size for each direction
         dir_in_pca = torch.matmul(dirs_orig[0, lat_i].mean(0, keepdim=True), v_mat) # [1, q]
         dir_in_pca_norm = F.normalize(dir_in_pca, dim=1) # [1, q]
-        coef_t = 1. / (dir_in_pca_norm.square() / s_values[np.newaxis, ...].square()).sum().sqrt() # 1/(x^2/a^2 + y^2/b^2, ...).sqrt()
+        coef_t = 1. / (dir_in_pca_norm.square() / s_values_x2[np.newaxis, ...].square()).sum().sqrt() # 1/(x^2/a^2 + y^2/b^2, ...).sqrt()
         dir_len_semi = torch.linalg.norm(dir_in_pca_norm * coef_t, dim=-1)[0] # []
         step_pos_in_pca = (step_in_pca * dir_in_pca_norm).sum()
         back_len = dir_len_semi + step_pos_in_pca # []
