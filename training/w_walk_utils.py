@@ -8,7 +8,7 @@
 
 # --- File Name: w_walk_utils.py
 # --- Creation Date: 03-09-2021
-# --- Last Modified: Tue 14 Sep 2021 21:10:07 AEST
+# --- Last Modified: Tue 14 Sep 2021 22:19:03 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -62,11 +62,11 @@ def add_outline(images, width=1):
     images[:, :, :, -width:] = 255
     return images
 
-def get_w_walk_SVD_step(w_origin, M, n_samples_per, step_size, w_avg, s_values, v_mat, recursive_walk=True):
+def get_w_walk_SVD_step(w_origin, M, n_samples_per, step_size, w_avg, s_values_normed, v_mat, recursive_walk=True):
     '''
     w_origin: (1, num_ws, w_dim)
     w_avg: [w_dim]
-    s_values: singular values (normed) of size [q] (q ranks)
+    s_values_normed: singular values (normed) of size [q] (q ranks)
     v_mat: [n, q], projection matrix from the feature space to PCA.
         torch.matmul(A, V[:, :k]) to project to first k principle components.
     return (gh * gw, num_ws, w_dim), gh, gw = M.nv_dim, n_samples_per
@@ -75,7 +75,7 @@ def get_w_walk_SVD_step(w_origin, M, n_samples_per, step_size, w_avg, s_values, 
     _, n_lat, num_ws, w_dim = dirs_orig.shape
     step_in_pca = torch.matmul(w_origin[0].mean(0, keepdim=True) - w_avg[np.newaxis, ...], v_mat) # [1, q]
     all_ls = []
-    s_values_x2 = s_values * 2 # We show range [-2, 2]
+    s_values_x2 = s_values_normed * 2 # We show range [-2, 2]
     for lat_i in range(n_lat):
         # Compute step size for each direction
         dir_in_pca = torch.matmul(dirs_orig[0, lat_i].mean(0, keepdim=True), v_mat) # [1, q]
