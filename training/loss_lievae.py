@@ -8,7 +8,7 @@
 
 # --- File Name: loss_lievae.py
 # --- Creation Date: 17-09-2021
-# --- Last Modified: Fri 17 Sep 2021 22:40:01 AEST
+# --- Last Modified: Fri 17 Sep 2021 23:39:19 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -128,9 +128,11 @@ class LieVaeLoss(Loss):
             with torch.autograd.profiler.record_function('Compute_VAEmain_loss'):
                 ws_rec, mu, logvar = self.run_V(ws_orig, sync=True)
                 recons_loss = calc_recons_loss(ws_orig, ws_rec)
-                loss_kl = gaussian_kl(mu, logvar)
+                kl_loss = gaussian_kl(mu, logvar)
+                training_stats.report('Loss/vaemain/recons_loss', recons_loss)
+                training_stats.report('Loss/vaemain/kl_loss', kl_loss)
             with torch.autograd.profiler.record_function('VAEmain_backward'):
-                (recons_loss + self.beta * loss_kl).mean().mul(gain).backward()
+                (recons_loss + self.beta * kl_loss).mean().mul(gain).backward()
 
         # Valg: Enforce commute or Hessian loss.
         if do_Valg:
