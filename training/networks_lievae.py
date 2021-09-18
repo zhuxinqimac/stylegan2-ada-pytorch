@@ -8,7 +8,7 @@
 
 # --- File Name: networks_lievae.py
 # --- Creation Date: 17-09-2021
-# --- Last Modified: Fri 17 Sep 2021 22:09:53 AEST
+# --- Last Modified: Sat 18 Sep 2021 16:57:50 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -88,8 +88,12 @@ class LieGroupDecoder(torch.nn.Module):
             x_out = x_out[:, np.newaxis, :].repeat(1, tile_dim_1, 1)
         return x_out
 
+    def z_to_gfeat(self, z):
+        gfeat = self.core(z)
+        return gfeat
+
     def forward(self, z, tile_dim_1=None):
-        gfeat = self.core(z) # [b, mat_dim, mat_dim]
+        gfeat = self.z_to_gfeat(z) # [b, mat_dim, mat_dim]
         return self.decode_gfeat(gfeat, tile_dim_1=tile_dim_1)
 
 #----------------------------------------------------------------------------
@@ -122,6 +126,9 @@ class LieGroupVAEonW(torch.nn.Module):
 
     def decode(self, z, tile_dim_1):
         return self.decoder(z, tile_dim_1=tile_dim_1)
+
+    def z_to_gfeat(self, z):
+        return self.decoder.z_to_gfeat(z)
 
     def decode_gfeat(self, gfeat, tile_dim_1):
         return self.decoder.decode_gfeat(gfeat, tile_dim_1=tile_dim_1)
