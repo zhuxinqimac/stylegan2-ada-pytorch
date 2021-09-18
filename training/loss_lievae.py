@@ -8,7 +8,7 @@
 
 # --- File Name: loss_lievae.py
 # --- Creation Date: 17-09-2021
-# --- Last Modified: Sat 18 Sep 2021 16:59:35 AEST
+# --- Last Modified: Sun 19 Sep 2021 01:15:37 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -42,7 +42,7 @@ def gaussian_kl(mu, logvar):
 #----------------------------------------------------------------------------
 class LieVaeLoss(Loss):
     def __init__(self, device, G_mapping, G_synthesis, V, batch_gpu=4, hessian_lamb=0., commute_lamb=0., n_colors=1,
-                 forward_eg_prob=0.2, beta=1., gfeat_rec_lamb=1.):
+                 forward_eg_prob=0.2, beta=1., gfeat_rec_lamb=1., img_recons_lamb=0.):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -55,6 +55,7 @@ class LieVaeLoss(Loss):
         self.forward_eg_prob = forward_eg_prob
         self.beta = beta
         self.gfeat_rec_lamb = gfeat_rec_lamb
+        self.img_recons_lamb = img_recons_lamb
 
     def run_G_mapping(self, all_z, all_c):
         # with misc.ddp_sync(self.G_mapping, sync):
@@ -131,17 +132,21 @@ class LieVaeLoss(Loss):
         if do_Vmain:
             with torch.autograd.profiler.record_function('Compute_VAEmain_loss'):
                 ws_rec, mu, logvar, gfeat, ggfeat = self.run_V(ws_orig, sync=True)
-                # imgs_orig = self.run_G_synthesis(ws_orig)
-                # imgs_rec = self.run_G_synthesis(ws_rec)
-                # recons_loss = calc_recons_loss(imgs_orig, imgs_rec)
-                recons_loss = calc_recons_loss(ws_orig, ws_rec)
+                img_recons_loss = 0.
+                if self.img_recons_lamb > 0:
+                    imgs_orig = self.run_G_synthesis(ws_orig)
+                    imgs_rec = self.run_G_synthesis(ws_rec)
+                    img_recons_loss = calc_recons_loss(imgs_orig, imgs_rec)
+                    training_stats.report('Loss/vaemain/img_recons_loss', img_recons_loss)
+                w_recons_loss = calc_recons_loss(ws_orig, ws_rec)
                 gfeat_rec_loss = calc_recons_loss(gfeat, ggfeat)
                 kl_loss = gaussian_kl(mu, logvar)
-                training_stats.report('Loss/vaemain/recons_loss', recons_loss)
+                training_stats.report('Loss/vaemain/w_recons_loss', w_recons_loss)
                 training_stats.report('Loss/vaemain/gfeat_rec_loss', gfeat_rec_loss)
                 training_stats.report('Loss/vaemain/kl_loss', kl_loss)
             with torch.autograd.profiler.record_function('VAEmain_backward'):
-                (recons_loss + self.beta * kl_loss + self.gfeat_rec_lamb * gfeat_rec_loss).mean().mul(gain).backward()
+                (w_recons_loss + self.img_recons_lamb * img_recons_loss + self.beta * kl_loss \
+                 + self.gfeat_rec_lamb * gfeat_rec_loss).mean().mul(gain).backward()
 
         # Valg: Enforce commute or Hessian loss.
         if do_Valg:
