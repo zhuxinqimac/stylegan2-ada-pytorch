@@ -8,7 +8,7 @@
 
 # --- File Name: loss_lievae.py
 # --- Creation Date: 17-09-2021
-# --- Last Modified: Sun 19 Sep 2021 17:23:46 AEST
+# --- Last Modified: Sun 19 Sep 2021 17:25:56 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -119,7 +119,6 @@ class LieVaeLoss(Loss):
             ws_orig[:, cb:ce] = ws_tmp[:, cb:ce]
             cb = ce
         ws_orig.detach() # [b, num_ws, w_dim]
-        print('ws_orig:', ws_orig)
         return ws_orig
 
     def accumulate_gradients(self, phase, sync, gain):
