@@ -8,7 +8,7 @@
 
 # --- File Name: loss_lievae.py
 # --- Creation Date: 17-09-2021
-# --- Last Modified: Sun 19 Sep 2021 17:25:56 AEST
+# --- Last Modified: Sun 19 Sep 2021 17:30:19 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -42,7 +42,7 @@ def gaussian_kl(mu, logvar):
 #----------------------------------------------------------------------------
 class LieVaeLoss(Loss):
     def __init__(self, device, G_mapping, G_synthesis, V, batch_gpu=4, hessian_lamb=0., commute_lamb=0., n_colors=1,
-                 forward_eg_prob=0.2, beta=1., gfeat_rec_lamb=1., img_recons_lamb=0.):
+                 forward_eg_prob=0.2, beta=1., gfeat_rec_lamb=1., img_recons_lamb=0., truncation_psi=1):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -56,10 +56,11 @@ class LieVaeLoss(Loss):
         self.beta = beta
         self.gfeat_rec_lamb = gfeat_rec_lamb
         self.img_recons_lamb = img_recons_lamb
+        self.truncation_psi = truncation_psi
 
     def run_G_mapping(self, all_z, all_c):
         # with misc.ddp_sync(self.G_mapping, sync):
-        ws = [self.G_mapping(z, c) for z, c in zip(all_z.split(self.batch_gpu), all_z.split(self.batch_gpu))] # (b, num_ws, w_dim)
+        ws = [self.G_mapping(z, c, truncation_psi=self.truncation_psi) for z, c in zip(all_z.split(self.batch_gpu), all_z.split(self.batch_gpu))] # (b, num_ws, w_dim)
         ws = torch.cat(ws, dim=0)
         return ws
 
