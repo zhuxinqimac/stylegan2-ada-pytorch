@@ -8,7 +8,7 @@
 
 # --- File Name: loss_lievae.py
 # --- Creation Date: 17-09-2021
-# --- Last Modified: Tue 21 Sep 2021 02:27:51 AEST
+# --- Last Modified: Tue 21 Sep 2021 02:57:13 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -245,7 +245,9 @@ class LieVaeLoss(Loss):
                 # print('--done reports ...')
             with torch.autograd.profiler.record_function('VAEmain_backward'):
                 # print('--start backward ...')
-                (w_recons_loss + self.img_recons_lamb * img_recons_loss + self.beta * kl_loss \
+                # (w_recons_loss + self.img_recons_lamb * img_recons_loss + self.beta * kl_loss \
+                 # + self.gfeat_rec_lamb * gfeat_rec_loss).mean().mul(gain).backward()
+                (self.img_recons_lamb * img_recons_loss + self.beta * kl_loss \
                  + self.gfeat_rec_lamb * gfeat_rec_loss).mean().mul(gain).backward()
                 # print('--done backward ...')
 

@@ -8,7 +8,7 @@
 
 # --- File Name: networks_lievae.py
 # --- Creation Date: 17-09-2021
-# --- Last Modified: Tue 21 Sep 2021 02:11:04 AEST
+# --- Last Modified: Tue 21 Sep 2021 03:09:54 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
