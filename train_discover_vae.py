@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover_vae.py
 # --- Creation Date: 17-09-2021
-# --- Last Modified: Mon 20 Sep 2021 15:45:37 AEST
+# --- Last Modified: Mon 20 Sep 2021 22:35:55 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train VAE networks to discover the interpretable directions in the W space."""
@@ -39,14 +39,14 @@ KEY_BRIEF_NAMES = {'z': 'n_lat', 'gmat': 'group_mat_dim', 'emid': 'enc_middle_fe
                    'enpre': 'enc_n_pre_neck', 'enpos': 'enc_n_post_neck',
                    'dmid': 'dec_middle_feat', 'dnpos': 'dec_n_post_neck', 'hes': 'hessian_lamb', 'com': 'commute_lamb',
                    'gfrec': 'gfeat_rec_lamb', 'irec': 'img_recons_lamb', 'sig': 'signifi_lamb',
-                   'tpsi': 'truncation_psi', 'recn': 'recons_n_layer',
+                   'tpsi': 'truncation_psi', 'recn': 'recons_n_layer', 'mws': 'mean_num_ws',
                    'fegp': 'forward_eg_prob', 'beta': 'beta', 'ncol': 'loss_n_colors', 'lr': 'lrate',
                    'nper': 'n_samples_per', 'ssize': 'save_size', 'wals': 'trav_walk_scale'}
 KEY_DTYPES = {'n_lat': int, 'group_mat_dim': int, 'enc_middle_feat': int,
               'enc_n_pre_neck': int, 'enc_n_post_neck': int,
               'dec_middle_feat': int, 'dec_n_post_neck': int, 'hessian_lamb': float, 'commute_lamb': float,
               'gfeat_rec_lamb': float, 'img_recons_lamb': float, 'signifi_lamb': float,
-              'truncation_psi': float, 'recons_n_layer': int,
+              'truncation_psi': float, 'recons_n_layer': int, 'mean_num_ws': bool_own,
               'forward_eg_prob': float, 'beta': float, 'loss_n_colors': int, 'lrate': float,
               'n_samples_per': int, 'save_size': int, 'trav_walk_scale': float}
 
@@ -156,7 +156,7 @@ def setup_training_loop_kwargs(
                            n_lat=20, group_mat_dim=20, enc_middle_feat=512, enc_n_pre_neck=1, enc_n_post_neck=1,
                            dec_middle_feat=512, dec_n_post_neck=1, hessian_lamb=0., commute_lamb=0.,
                            forward_eg_prob=0.2, beta=1., img_recons_lamb=0., signifi_lamb=0.,
-                           truncation_psi=1, recons_n_layer=2,
+                           truncation_psi=1, recons_n_layer=2, mean_num_ws=True,
                            loss_n_colors=1, n_samples_per=7, save_size=128, trav_walk_scale=0.2),
     }
 
@@ -175,7 +175,7 @@ def setup_training_loop_kwargs(
         spec.gamma = 0.0002 * (res ** 2) / spec.mb # heuristic formula
         spec.ema = spec.mb * 10 / 32
 
-    args.V_kwargs = dnnlib.EasyDict(class_name='training.networks_lievae.LieGroupVAEonW', n_lat=spec.n_lat, mat_dim=spec.group_mat_dim)
+    args.V_kwargs = dnnlib.EasyDict(class_name='training.networks_lievae.LieGroupVAEonW', n_lat=spec.n_lat, mat_dim=spec.group_mat_dim, mean_num_ws=spec.mean_num_ws)
     args.V_kwargs.enc_kwargs = dnnlib.EasyDict(middle_feat=spec.enc_middle_feat, n_pre_neck=spec.enc_n_pre_neck, n_post_neck=spec.enc_n_post_neck)
     args.V_kwargs.dec_kwargs = dnnlib.EasyDict(middle_feat=spec.dec_middle_feat, n_post_group=spec.dec_n_post_neck)
     args.V_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', lr=spec.lrate, betas=[0, 0.99], eps=1e-8)

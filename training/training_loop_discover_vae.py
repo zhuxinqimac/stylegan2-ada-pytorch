@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover_vae.py
 # --- Creation Date: 17-09-2021
-# --- Last Modified: Fri 17 Sep 2021 22:37:31 AEST
+# --- Last Modified: Tue 21 Sep 2021 01:34:50 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -89,7 +89,7 @@ def training_loop(
     # Construct Navigator networks.
     if rank == 0:
         print('Constructing navigator networks...')
-    common_kwargs = dict(c_dim=G.c_dim, w_dim=G.w_dim)
+    common_kwargs = dict(c_dim=G.c_dim, w_dim=G.w_dim, num_ws=G.num_ws)
     V = dnnlib.util.construct_class_by_name(**V_kwargs, **common_kwargs).train().requires_grad_(False).to(device) # subclass of torch.nn.Module
 
     # Resume from existing pickle.
@@ -146,7 +146,7 @@ def training_loop(
     grid_c = None
     if rank == 0:
         print('Exporting sample images...')
-        walk_grid_size = (n_samples_per, V.n_lat) # (gw, gh)
+        walk_grid_size = (n_samples_per, V.num_ws * V.n_lat if not V.mean_num_ws else V.n_lat) # (gw, gh)
         z_origin = torch.randn([1, G.z_dim], device=device)
         c_origin = torch.randn([1, G.c_dim], device=device)
         w_origin = G.mapping(z_origin, c_origin, truncation_psi=0.7) # (1, num_ws, w_dim)
@@ -189,19 +189,23 @@ def training_loop(
     if progress_fn is not None:
         progress_fn(0, total_kimg)
     while True:
+        print('Starting training iteration...')
         # Execute training phases.
         for phase in phases:
             if batch_idx % phase.interval != 0:
                 continue
 
             # Initialize gradient accumulation.
+            print(f'rank{rank} Initialize gradient accumulation...')
             if phase.start_event is not None:
                 phase.start_event.record(torch.cuda.current_stream(device))
             
+            print(f'rank{rank} zero_grad...')
             phase.opt.zero_grad(set_to_none=True)
             phase.module.requires_grad_(True)
 
             # Accumulate gradients over multiple rounds.
+            print(f'rank{rank} accumulate gradients...')
             for round_idx in range(n_round):
                 sync = (round_idx == batch_size // (batch_gpu * num_gpus) - 1)
                 # sync = True
@@ -209,6 +213,7 @@ def training_loop(
                 loss.accumulate_gradients(phase=phase.name, sync=sync, gain=gain)
 
             # Update weights.
+            print(f'rank{rank} update weights...')
             phase.module.requires_grad_(False)
             with torch.autograd.profiler.record_function(phase.name + '_opt'):
                 for param in phase.module.parameters():
@@ -218,6 +223,7 @@ def training_loop(
             if phase.end_event is not None:
                 phase.end_event.record(torch.cuda.current_stream(device))
 
+        print(f'rank{rank} end rounds...')
         # Update state.
         cur_nimg += batch_size
         batch_idx += 1
@@ -254,6 +260,7 @@ def training_loop(
 
         # Save image snapshot.
         if (rank == 0) and (image_snapshot_ticks is not None) and (done or cur_tick % image_snapshot_ticks == 0):
+            print('Saving image snapshots...')
             z_origin = torch.randn([1, G.z_dim], device=device)
             c_origin = torch.randn([1, G.c_dim], device=device)
             w_origin = G.mapping(z_origin, c_origin, truncation_psi=0.7) # (1, num_ws, w_dim)
@@ -271,6 +278,7 @@ def training_loop(
         snapshot_pkl = None
         snapshot_data = None
         if (network_snapshot_ticks is not None) and (done or cur_tick % network_snapshot_ticks == 0):
+            print('Saving network snapshots...')
             snapshot_data = dict()
             for name, module in [('V', V)]:
                 if module is not None:
@@ -285,6 +293,7 @@ def training_loop(
                     pickle.dump(snapshot_data, f)
 
         # Collect statistics.
+        print('Collecting statistics...')
         for phase in phases:
             value = []
             if (phase.start_event is not None) and (phase.end_event is not None):
@@ -296,6 +305,7 @@ def training_loop(
 
         # Update logs.
         timestamp = time.time()
+        print('Updating logs...')
         if stats_jsonl is not None:
             fields = dict(stats_dict, timestamp=timestamp)
             stats_jsonl.write(json.dumps(fields) + '\n')
@@ -312,6 +322,7 @@ def training_loop(
             progress_fn(cur_nimg // 1000, total_kimg)
 
         # Update state.
+        print('Updating state...')
         cur_tick += 1
         tick_start_nimg = cur_nimg
         tick_start_time = time.time()

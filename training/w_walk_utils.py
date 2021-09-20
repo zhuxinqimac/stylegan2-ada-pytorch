@@ -8,7 +8,7 @@
 
 # --- File Name: w_walk_utils.py
 # --- Creation Date: 03-09-2021
-# --- Last Modified: Sat 18 Sep 2021 19:38:50 AEST
+# --- Last Modified: Tue 21 Sep 2021 00:34:02 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -156,40 +156,46 @@ def get_w_walk_VAE(w_origin, V, n_samples_per, trav_walk_scale=1.):
     # w_origin: (1, num_ws, w_dim)
     # gh, gw = V.n_lat, n_samples_per
     # return: (gh * gw, V.n_lat)
-    mulv, gfeat_orig = V.encode(w_origin) # [1, 2 * n_lat], [1, mat_dim * mat_dim]
-    mu = mulv.split(V.n_lat, dim=1)[0] # [1, n_lat]
+    mulv, gfeat_orig = V.encode(w_origin) # [1, (num_ws), 2 * n_lat], [1, (num_ws), mat_dim * mat_dim]
+    mu = mulv.split(V.n_lat, dim=-1)[0] # [1, (num_ws), n_lat]
+    if mu.ndim == 2:
+        mu = mu[:, np.newaxis, ...]
+        gfeat_orig = gfeat_orig[:, np.newaxis, ...] # [1, latent_num_ws, mat_dim * mat_dim], latent_num_ws == 1
+    latent_num_ws = mu.shape[1]
 
     # gfeat traversal
     all_ls = []
-    for lat_i in range(V.n_lat):
-        step_size = 4. / (n_samples_per - 1)
-        back_len = 2. + mu[0, lat_i]
-        steps_lat_i = [gfeat_orig.clone()[:, np.newaxis, ...]] # ls of [1, 1, mat_dim * mat_dim]
+    for ws_i in range(latent_num_ws):
+        for lat_i in range(V.n_lat):
+            step_size = 4. / (n_samples_per - 1)
+            back_len = 2. + mu[0, ws_i, lat_i]
+            steps_lat_i = [gfeat_orig.clone()[:, np.newaxis, ...]] # ls of [1, 1, latent_num_ws, mat_dim * mat_dim]
 
-        # Start walking
-        act_mat = torch.matrix_exp(-V.decoder.lie_alg_basis[lat_i][np.newaxis, ...] * step_size * trav_walk_scale) # [1, mat_dim, mat_dim]
-        step = gfeat_orig.clone().view(1, act_mat.shape[-2], act_mat.shape[-1]) # [1, mat_dim, mat_dim]
-        # Backward steps:
-        for _ in range(torch.clip((back_len / step_size).round().int(), 0, n_samples_per-1)):
-            step = torch.matmul(act_mat, step) # [1, mat_dim, mat_dim]
-            steps_lat_i = [step.flatten(1)[:, np.newaxis, ...]] + steps_lat_i # ls of [1, 1, mat_dim * mat_dim]
+            # Start walking
+            act_mat = torch.matrix_exp(-V.decoder.lie_alg_basis[ws_i, lat_i][np.newaxis, ...] * step_size * trav_walk_scale) # [1, mat_dim, mat_dim]
+            step = gfeat_orig.clone().view(1, latent_num_ws, act_mat.shape[-2], act_mat.shape[-1]) # [1, latent_num_ws, mat_dim, mat_dim]
+            # Backward steps:
+            for _ in range(torch.clip((back_len / step_size).round().int(), 0, n_samples_per-1)):
+                step[:, ws_i] = torch.matmul(act_mat, step[:, ws_i]) # [1, latent_num_ws, mat_dim, mat_dim]
+                steps_lat_i = [step.flatten(-2)[:, np.newaxis, ...]] + steps_lat_i # ls of [1, 1, latent_num_ws, mat_dim * mat_dim]
 
-        # Forward steps:
-        act_mat = torch.matrix_exp(V.decoder.lie_alg_basis[lat_i][np.newaxis, ...] * step_size * trav_walk_scale) # [1, mat_dim, mat_dim]
-        step = gfeat_orig.clone().view(1, act_mat.shape[-2], act_mat.shape[-1]) # [1, mat_dim, mat_dim]
-        for _ in range(n_samples_per-1 - torch.clip((back_len / step_size).round().int(), 0, n_samples_per-1)):
-            step = torch.matmul(act_mat, step) # [1, mat_dim, mat_dim]
-            steps_lat_i = steps_lat_i + [step.flatten(1)[:, np.newaxis, ...]] # ls of [1, 1, mat_dim * mat_dim]
+            # Forward steps:
+            act_mat = torch.matrix_exp(V.decoder.lie_alg_basis[ws_i, lat_i][np.newaxis, ...] * step_size * trav_walk_scale) # [1, mat_dim, mat_dim]
+            step = gfeat_orig.clone().view(1, latent_num_ws, act_mat.shape[-2], act_mat.shape[-1]) # [1, latent_num_ws, mat_dim, mat_dim]
+            for _ in range(n_samples_per-1 - torch.clip((back_len / step_size).round().int(), 0, n_samples_per-1)):
+                step[:, ws_i] = torch.matmul(act_mat, step[:, ws_i]) # [1, latent_num_ws, mat_dim, mat_dim]
+                steps_lat_i = steps_lat_i + [step.flatten(-2)[:, np.newaxis, ...]] # ls of [1, 1, latent_num_ws, mat_dim * mat_dim]
 
-        row_tensor = torch.cat(steps_lat_i, dim=1) # [1, n_samples_per, mat_dim * mat_dim]
-        all_ls.append(row_tensor)
-    gfeat_trav = torch.cat(all_ls, dim=0).view(V.n_lat * n_samples_per, gfeat_orig.shape[-1]) # [n_lat*n_samples_per, mat_dim * mat_dim]
-    w_trav_gfeat = V.decode_gfeat(gfeat_trav, tile_dim_1=w_origin.shape[1]) # [n_lat*n_samples_per, num_ws, w_dim]
+            row_tensor = torch.cat(steps_lat_i, dim=1) # [1, n_samples_per, latent_num_ws, mat_dim * mat_dim]
+            all_ls.append(row_tensor)
+    gfeat_trav = torch.cat(all_ls, dim=0).view(latent_num_ws * V.n_lat * n_samples_per, latent_num_ws, gfeat_orig.shape[-1]) # [latent_num_ws*n_lat*n_samples_per, latent_num_ws, mat_dim * mat_dim]
+    w_trav_gfeat = V.decode_gfeat(gfeat_trav.squeeze(), tile_dim_1=w_origin.shape[1] if V.mean_num_ws else None) # [latent_num_ws*n_lat*n_samples_per, num_ws, w_dim]
 
     # z traversal
-    z_trav = mu.repeat(V.n_lat*n_samples_per, 1).view(V.n_lat, n_samples_per, V.n_lat)
-    for i in range(V.n_lat):
-        z_trav[i, :, i] = torch.linspace(-2., 2., n_samples_per)
-    z_trav = z_trav.view(V.n_lat*n_samples_per, V.n_lat) # [n_lat*n_samples_per, n_lat]
-    w_trav = V.decode(z_trav, tile_dim_1=w_origin.shape[1]) # [n_lat*n_samples_per, num_ws, w_dim]
+    z_trav = mu.repeat(latent_num_ws*V.n_lat*n_samples_per, 1, 1).view(latent_num_ws, V.n_lat, n_samples_per, latent_num_ws, V.n_lat)
+    for ws_i in range(latent_num_ws):
+        for lat_i in range(V.n_lat):
+            z_trav[ws_i, lat_i, :, ws_i, lat_i] = torch.linspace(-2., 2., n_samples_per)
+    z_trav = z_trav.view(latent_num_ws*V.n_lat*n_samples_per, latent_num_ws, V.n_lat) # [latent_num_ws*n_lat*n_samples_per, latent_num_ws, n_lat]
+    w_trav = V.decode(z_trav.squeeze(), tile_dim_1=w_origin.shape[1] if V.mean_num_ws else None) # [latent_num_ws*n_lat*n_samples_per, num_ws, w_dim]
     return w_trav, w_trav_gfeat
