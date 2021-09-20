@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover_vae.py
 # --- Creation Date: 17-09-2021
-# --- Last Modified: Tue 21 Sep 2021 01:34:50 AEST
+# --- Last Modified: Tue 21 Sep 2021 02:14:13 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """

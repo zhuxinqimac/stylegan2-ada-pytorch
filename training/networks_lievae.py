@@ -8,7 +8,7 @@
 
 # --- File Name: networks_lievae.py
 # --- Creation Date: 17-09-2021
-# --- Last Modified: Tue 21 Sep 2021 02:01:26 AEST
+# --- Last Modified: Tue 21 Sep 2021 02:11:04 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -44,13 +44,13 @@ def init_alg_basis_multi(num_ws, z_dim, mat_dim, lie_alg_init_scale):
                                  requires_grad=True)
     return lie_alg_basis
 
-@misc.profiled_function
+# @misc.profiled_function
 def reparametrise_gaussian(mu, lv):
     std = torch.exp(0.5 * lv)
     eps = torch.randn_like(std)
     return mu + std * eps
 
-@misc.profiled_function
+# @misc.profiled_function
 def lat_to_group_multi(z, lie_alg_basis):
     '''
     z: [b, num_ws, z_dim]
@@ -67,7 +67,7 @@ def lat_to_group_multi(z, lie_alg_basis):
 #----------------------------------------------------------------------------
 # LieGroupMulti
 
-@persistence.persistent_class
+# @persistence.persistent_class
 class LieGroupMulti(nn.Module):
     def __init__(self,
                  z_dim,                      # Input latent (Z) dimensionality.
@@ -97,7 +97,7 @@ class LieGroupMulti(nn.Module):
 #----------------------------------------------------------------------------
 # BottleneckEncoder
 
-@persistence.persistent_class
+# @persistence.persistent_class
 class BottleneckEncoderonW(torch.nn.Module):
     def __init__(self,
         in_dim,                     # Input channel (feature) dim.
@@ -135,7 +135,7 @@ class BottleneckEncoderonW(torch.nn.Module):
 #----------------------------------------------------------------------------
 # LieGroupDecoder
 
-@persistence.persistent_class
+# @persistence.persistent_class
 class LieGroupDecoder(torch.nn.Module):
     def __init__(self,
         n_lat,                      # Num latent code.
@@ -186,7 +186,7 @@ class LieGroupDecoder(torch.nn.Module):
 #----------------------------------------------------------------------------
 # Main Navigator
 
-@persistence.persistent_class
+# @persistence.persistent_class
 class LieGroupVAEonW(torch.nn.Module):
     def __init__(self,
         n_lat,                      # Number of latent dim.

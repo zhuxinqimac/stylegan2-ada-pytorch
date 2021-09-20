@@ -8,7 +8,7 @@
 
 # --- File Name: loss_lievae.py
 # --- Creation Date: 17-09-2021
-# --- Last Modified: Tue 21 Sep 2021 01:41:19 AEST
+# --- Last Modified: Tue 21 Sep 2021 02:10:42 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -29,17 +29,17 @@ from training.loss_discover import get_color_cuts
 # from training.loss_group import calc_basis_outer, calc_commute_loss, calc_hessian_loss
 from training.networks_lievae import reparametrise_gaussian
 
-@misc.profiled_function
+# @misc.profiled_function
 def calc_recons_loss(target, x):
     return (target.flatten(1) - x.flatten(1)).square().sum(1) # [b]
 
-@misc.profiled_function
+# @misc.profiled_function
 def gaussian_kl(mu, logvar):
     kld = -0.5*(1 + logvar - mu.pow(2) - logvar.exp())
     kld = kld.flatten(1).sum(dim=-1)
     return kld
 
-@misc.profiled_function
+# @misc.profiled_function
 def calc_signifi_loss(lie_alg_basis):
     ''' lie_alg_basis: [n_lat, mat_dim, mat_dim] '''
     mat_dim = lie_alg_basis.shape[-1]
