@@ -8,7 +8,7 @@
 
 # --- File Name: loss_lievae.py
 # --- Creation Date: 17-09-2021
-# --- Last Modified: Tue 21 Sep 2021 02:10:42 AEST
+# --- Last Modified: Tue 21 Sep 2021 02:27:51 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -191,7 +191,7 @@ class LieVaeLoss(Loss):
         return ws_rec, mu, lv, gfeat, ggfeat
 
     def get_multicolor_ws(self, n_colors):
-        print('multicolor ws...')
+        # print('multicolor ws...')
         all_gen_z = torch.randn([n_colors*self.batch_gpu, self.G_mapping.z_dim], device=self.device)
         all_gen_z = list(all_gen_z.split(self.batch_gpu))
         all_gen_c = torch.randn([n_colors*self.batch_gpu, self.G_mapping.c_dim], device=self.device)
@@ -201,12 +201,12 @@ class LieVaeLoss(Loss):
         cut_iter = iter(get_color_cuts(n_colors, self.G_mapping.num_ws))
         cb = next(cut_iter)
         for gen_z, gen_c in zip(all_gen_z, all_gen_c):
-            print('---multicolor ws iter...')
+            # print('---multicolor ws iter...')
             ce = next(cut_iter)
             ws_tmp = self.run_G_mapping(gen_z, gen_c) # [b, num_ws, w_dim]
             ws_orig[:, cb:ce] = ws_tmp[:, cb:ce]
             cb = ce
-        print('done multicolor ws iter...')
+        # print('done multicolor ws iter...')
         ws_orig.detach() # [b, num_ws, w_dim]
         return ws_orig
 
@@ -219,39 +219,39 @@ class LieVaeLoss(Loss):
             ws_orig = self.get_multicolor_ws(self.n_colors) # [b(_gpu), num_ws, w_dim]
 
         if do_Vmain:
-            print('start Vmain...')
+            # print('start Vmain...')
             with torch.autograd.profiler.record_function('Compute_VAEmain_loss'):
-                print('--start run_V...')
+                # print('--start run_V...')
                 ws_rec, mu, logvar, gfeat, ggfeat = self.run_V(ws_orig, sync=True)
                 img_recons_loss = 0.
                 if self.img_recons_lamb > 0:
-                    print('--start run_G_synthesis...')
+                    # print('--start run_G_synthesis...')
                     imgs_orig = self.run_G_synthesis(ws_orig)
-                    print('--done run_G_synthesis 1...')
+                    # print('--done run_G_synthesis 1...')
                     imgs_rec = self.run_G_synthesis(ws_rec)
-                    print('--done run_G_synthesis 2...')
+                    # print('--done run_G_synthesis 2...')
                     img_recons_loss = calc_recons_loss(imgs_orig, imgs_rec)
-                    print('--done recons img loss ...')
+                    # print('--done recons img loss ...')
                     training_stats.report('Loss/vaemain/img_recons_loss', img_recons_loss)
                 w_recons_loss = calc_recons_loss(ws_orig, ws_rec)
-                print('--done recons w loss ...')
+                # print('--done recons w loss ...')
                 gfeat_rec_loss = calc_recons_loss(gfeat, ggfeat)
-                print('--done recons gfeat loss ...')
+                # print('--done recons gfeat loss ...')
                 kl_loss = gaussian_kl(mu, logvar)
-                print('--done kl loss ...')
+                # print('--done kl loss ...')
                 training_stats.report('Loss/vaemain/w_recons_loss', w_recons_loss)
                 training_stats.report('Loss/vaemain/gfeat_rec_loss', gfeat_rec_loss)
                 training_stats.report('Loss/vaemain/kl_loss', kl_loss)
-                print('--done reports ...')
+                # print('--done reports ...')
             with torch.autograd.profiler.record_function('VAEmain_backward'):
-                print('--start backward ...')
+                # print('--start backward ...')
                 (w_recons_loss + self.img_recons_lamb * img_recons_loss + self.beta * kl_loss \
                  + self.gfeat_rec_lamb * gfeat_rec_loss).mean().mul(gain).backward()
-                print('--done backward ...')
+                # print('--done backward ...')
 
         # Valg: Enforce commute or Hessian loss.
         if do_Valg:
-            print('start Valg...')
+            # print('start Valg...')
             with torch.autograd.profiler.record_function('Compute_Vregalg_loss'):
                 lie_alg_basis = self.V.module.decoder.lie_alg_basis if isinstance(self.V, torch.nn.parallel.DistributedDataParallel) else \
                     self.V.decoder.lie_alg_basis # [(num_ws), n_lat, mat_dim, mat_dim]
