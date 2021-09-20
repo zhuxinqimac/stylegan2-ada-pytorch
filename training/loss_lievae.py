@@ -8,7 +8,7 @@
 
 # --- File Name: loss_lievae.py
 # --- Creation Date: 17-09-2021
-# --- Last Modified: Sun 19 Sep 2021 17:30:19 AEST
+# --- Last Modified: Mon 20 Sep 2021 15:40:42 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -39,10 +39,21 @@ def gaussian_kl(mu, logvar):
     kld = kld.sum(dim=-1)
     return kld
 
+@misc.profiled_function
+def calc_signifi_loss(lie_alg_basis):
+    ''' lie_alg_basis: [n_lat, mat_dim, mat_dim] '''
+    mat_dim = lie_alg_basis.shape[-1]
+    lie_alg_basis_norm = torch.linalg.norm(lie_alg_basis * 1., dim=[1, 2])  # [n_lat]
+    # loss = (lie_alg_basis_norm - 1.).square().mean()
+    compare_tensor = torch.stack([1. - lie_alg_basis_norm, torch.zeros_like(lie_alg_basis_norm)], dim=1)
+    hinge_selected, _ = torch.max(compare_tensor, dim=1)
+    coef = float(mat_dim - 1)
+    return hinge_selected.mean() * coef
+
 #----------------------------------------------------------------------------
 class LieVaeLoss(Loss):
-    def __init__(self, device, G_mapping, G_synthesis, V, batch_gpu=4, hessian_lamb=0., commute_lamb=0., n_colors=1,
-                 forward_eg_prob=0.2, beta=1., gfeat_rec_lamb=1., img_recons_lamb=0., truncation_psi=1):
+    def __init__(self, device, G_mapping, G_synthesis, V, batch_gpu=4, hessian_lamb=0., commute_lamb=0., signifi_lamb=0., n_colors=1,
+                 forward_eg_prob=0.2, beta=1., gfeat_rec_lamb=1., img_recons_lamb=0., truncation_psi=1, recons_n_layer=2):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -51,12 +62,14 @@ class LieVaeLoss(Loss):
         self.batch_gpu = batch_gpu
         self.hessian_lamb = hessian_lamb
         self.commute_lamb = commute_lamb
+        self.signifi_lamb = signifi_lamb
         self.n_colors = n_colors
         self.forward_eg_prob = forward_eg_prob
         self.beta = beta
         self.gfeat_rec_lamb = gfeat_rec_lamb
         self.img_recons_lamb = img_recons_lamb
         self.truncation_psi = truncation_psi
+        self.recons_n_layer = recons_n_layer
 
     def run_G_mapping(self, all_z, all_c):
         # with misc.ddp_sync(self.G_mapping, sync):
@@ -67,9 +80,35 @@ class LieVaeLoss(Loss):
     def run_G_synthesis(self, all_ws):
         # ws: (b, num_ws, w_dim)
         # with misc.ddp_sync(self.G_synthesis, sync):
-        imgs = [self.G_synthesis(ws) for ws in all_ws.split(self.batch_gpu)] # (b, c, h, w)
+        # imgs = [self.G_synthesis(ws) for ws in all_ws.split(self.batch_gpu)] # (b, c, h, w)
+        imgs = [self.G_syn_forward(ws, n_layer=self.recons_n_layer, return_x=True) for ws in all_ws.split(self.batch_gpu)] # (b, c, h, w)
         imgs = torch.cat(imgs, dim=0)
         return imgs
+
+    def G_syn_forward(self, ws, n_layer='last', return_x=False, **block_kwargs):
+        # Partial forwarding fn in G.synthesis
+        net = self.G_synthesis
+
+        # Start forward...
+        block_ws = []
+        with torch.autograd.profiler.record_function('split_ws'):
+            misc.assert_shape(ws, [None, net.num_ws, net.w_dim])
+            ws = ws.to(torch.float32)
+            w_idx = 0
+            for res in net.block_resolutions:
+                block = getattr(net, f'b{res}')
+                block_ws.append(ws.narrow(1, w_idx, block.num_conv + block.num_torgb))
+                w_idx += block.num_conv
+
+        x = img = None
+        if n_layer == 'last':
+            n_layer = len(block_ws)
+        for i, (res, cur_ws) in enumerate(zip(net.block_resolutions, block_ws)):
+            if i >= n_layer:
+                break
+            block = getattr(net, f'b{res}')
+            x, img = block(x, img, cur_ws, **block_kwargs)
+        return x if return_x else img
     
     def get_mu_lv_z(self, mulv_ls, n_lat):
         mu, lv = torch.cat(mulv_ls, dim=0).split(n_lat, dim=1) # [b, n_lat], [b, n_lat]
@@ -152,8 +191,8 @@ class LieVaeLoss(Loss):
         # Valg: Enforce commute or Hessian loss.
         if do_Valg:
             with torch.autograd.profiler.record_function('Compute_Vregalg_loss'):
-                lie_alg_basis_outer = calc_basis_outer(self.V.module.decoder.lie_alg_basis
-                                                       if isinstance(self.V, torch.nn.parallel.DistributedDataParallel) else self.V.decoder.lie_alg_basis)
+                lie_alg_basis = self.V.module.decoder.lie_alg_basis if isinstance(self.V, torch.nn.parallel.DistributedDataParallel) else self.V.decoder.lie_alg_basis
+                lie_alg_basis_outer = calc_basis_outer(lie_alg_basis)
                 hessian_loss = 0.
                 if self.hessian_lamb > 0:
                     hessian_loss = self.hessian_lamb * calc_hessian_loss(lie_alg_basis_outer)
@@ -162,7 +201,11 @@ class LieVaeLoss(Loss):
                 if self.commute_lamb > 0:
                     commute_loss = self.commute_lamb * calc_commute_loss(lie_alg_basis_outer)
                     training_stats.report('Loss/liealg/commute_loss', commute_loss)
+                signifi_loss = 0.
+                if self.signifi_lamb > 0:
+                    signifi_loss = self.signifi_lamb * calc_signifi_loss(lie_alg_basis)
+                    training_stats.report('Loss/liealg/signifi_loss', signifi_loss)
             with torch.autograd.profiler.record_function('Vregalg_backward'):
-                (hessian_loss + commute_loss).mean().mul(gain).backward()
+                (hessian_loss + commute_loss + signifi_loss).mean().mul(gain).backward()
 
 #----------------------------------------------------------------------------
