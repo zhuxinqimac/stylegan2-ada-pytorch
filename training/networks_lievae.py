@@ -8,7 +8,7 @@
 
 # --- File Name: networks_lievae.py
 # --- Creation Date: 17-09-2021
-# --- Last Modified: Tue 21 Sep 2021 01:15:20 AEST
+# --- Last Modified: Tue 21 Sep 2021 02:01:26 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -32,7 +32,7 @@ def construct_conv1d_layers(in_dim, conv_layers, middle_feat, out_dim):
     in_f, out_f = in_dim, middle_feat
     for _ in range(conv_layers):
         net_ls.append(nn.Conv1d(in_f, out_f, 3, 1, 1))
-        net_ls.append(nn.ReLU(True))
+        net_ls.append(nn.ReLU())
         in_f = out_f
     net_ls.append(nn.Conv1d(in_f, out_dim, 3, 1, 1))
     return nn.Sequential(*net_ls)

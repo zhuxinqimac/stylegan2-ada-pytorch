@@ -8,7 +8,7 @@
 
 # --- File Name: w_walk_utils.py
 # --- Creation Date: 03-09-2021
-# --- Last Modified: Tue 21 Sep 2021 00:34:02 AEST
+# --- Last Modified: Tue 21 Sep 2021 01:54:07 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -172,7 +172,10 @@ def get_w_walk_VAE(w_origin, V, n_samples_per, trav_walk_scale=1.):
             steps_lat_i = [gfeat_orig.clone()[:, np.newaxis, ...]] # ls of [1, 1, latent_num_ws, mat_dim * mat_dim]
 
             # Start walking
-            act_mat = torch.matrix_exp(-V.decoder.lie_alg_basis[ws_i, lat_i][np.newaxis, ...] * step_size * trav_walk_scale) # [1, mat_dim, mat_dim]
+            if V.mean_num_ws:
+                act_mat = torch.matrix_exp(-V.decoder.lie_alg_basis[lat_i][np.newaxis, ...] * step_size * trav_walk_scale) # [1, mat_dim, mat_dim]
+            else:
+                act_mat = torch.matrix_exp(-V.decoder.lie_alg_basis[ws_i, lat_i][np.newaxis, ...] * step_size * trav_walk_scale) # [1, mat_dim, mat_dim]
             step = gfeat_orig.clone().view(1, latent_num_ws, act_mat.shape[-2], act_mat.shape[-1]) # [1, latent_num_ws, mat_dim, mat_dim]
             # Backward steps:
             for _ in range(torch.clip((back_len / step_size).round().int(), 0, n_samples_per-1)):
@@ -180,7 +183,10 @@ def get_w_walk_VAE(w_origin, V, n_samples_per, trav_walk_scale=1.):
                 steps_lat_i = [step.flatten(-2)[:, np.newaxis, ...]] + steps_lat_i # ls of [1, 1, latent_num_ws, mat_dim * mat_dim]
 
             # Forward steps:
-            act_mat = torch.matrix_exp(V.decoder.lie_alg_basis[ws_i, lat_i][np.newaxis, ...] * step_size * trav_walk_scale) # [1, mat_dim, mat_dim]
+            if V.mean_num_ws:
+                act_mat = torch.matrix_exp(V.decoder.lie_alg_basis[lat_i][np.newaxis, ...] * step_size * trav_walk_scale) # [1, mat_dim, mat_dim]
+            else:
+                act_mat = torch.matrix_exp(V.decoder.lie_alg_basis[ws_i, lat_i][np.newaxis, ...] * step_size * trav_walk_scale) # [1, mat_dim, mat_dim]
             step = gfeat_orig.clone().view(1, latent_num_ws, act_mat.shape[-2], act_mat.shape[-1]) # [1, latent_num_ws, mat_dim, mat_dim]
             for _ in range(n_samples_per-1 - torch.clip((back_len / step_size).round().int(), 0, n_samples_per-1)):
                 step[:, ws_i] = torch.matmul(act_mat, step[:, ws_i]) # [1, latent_num_ws, mat_dim, mat_dim]
