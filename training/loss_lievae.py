@@ -8,7 +8,7 @@
 
 # --- File Name: loss_lievae.py
 # --- Creation Date: 17-09-2021
-# --- Last Modified: Tue 21 Sep 2021 17:25:38 AEST
+# --- Last Modified: Tue 21 Sep 2021 21:55:56 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -31,6 +31,9 @@ from training.networks_lievae import reparametrise_gaussian
 
 # @misc.profiled_function
 def calc_recons_loss(target, x):
+    if isinstance(target, list):
+        losses = [(t_i.flatten(1) - x[i].flatten(1)).square().sum(1) for i, t_i in enumerate(target)]
+        return torch.stack(losses, dim=1).sum(1) # [b]
     return (target.flatten(1) - x.flatten(1)).square().sum(1) # [b]
 
 # @misc.profiled_function
@@ -127,9 +130,12 @@ class LieVaeLoss(Loss):
     def run_G_synthesis(self, all_ws):
         # ws: (b, num_ws, w_dim)
         # with misc.ddp_sync(self.G_synthesis, sync):
-        # imgs = [self.G_synthesis(ws) for ws in all_ws.split(self.batch_gpu)] # (b, c, h, w)
-        imgs = [self.G_syn_forward(ws, n_layer=self.recons_n_layer, return_x=self.return_x) for ws in all_ws.split(self.batch_gpu)] # (b, c, h, w)
-        imgs = torch.cat(imgs, dim=0)
+        # imgs: (b, c, h, w) or [(b, c1, h1, w1), (b, c2, h2, w2), ...]
+        imgs = [self.G_syn_forward(ws, n_layer=self.recons_n_layer, return_x=self.return_x) for ws in all_ws.split(self.batch_gpu)] # (b, c, h, w) or [[f1, f2], [f1, f2], ...]
+        if self.return_x:
+            imgs = [torch.cat(fm_ls, dim=0) for fm_ls in zip(*imgs)] # [(b, c1, h1, w1), (b, c2, h2, w2), ...]
+        else:
+            imgs = torch.cat(imgs, dim=0)
         return imgs
 
     def G_syn_forward(self, ws, n_layer='last', return_x=False, **block_kwargs):
@@ -150,12 +156,14 @@ class LieVaeLoss(Loss):
         x = img = None
         if n_layer == 'last':
             n_layer = len(block_ws)
+        xs = []
         for i, (res, cur_ws) in enumerate(zip(net.block_resolutions, block_ws)):
             if i >= n_layer:
                 break
             block = getattr(net, f'b{res}')
             x, img = block(x, img, cur_ws, **block_kwargs)
-        return x if return_x else img
+            xs.append(x)
+        return xs if return_x else img
     
     def get_mu_lv_z(self, mulv_ls, n_lat):
         mu, lv = torch.cat(mulv_ls, dim=0).split(n_lat, dim=-1) # [b, (num_ws), n_lat], [b, (num_ws), n_lat]
