@@ -8,7 +8,7 @@
 
 # --- File Name: w_walk_utils.py
 # --- Creation Date: 03-09-2021
-# --- Last Modified: Tue 21 Sep 2021 01:54:07 AEST
+# --- Last Modified: Tue 21 Sep 2021 23:37:09 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -151,7 +151,7 @@ def get_SVD(G, url, device, rank, n_samples=1000000, batch=256, cache=True, cach
 
     return w_avg.to(device), s_values.to(device), v_mat.to(device), s_values_normed.to(device)
 
-def get_w_walk_VAE(w_origin, V, n_samples_per, trav_walk_scale=1.):
+def get_w_walk_VAE(w_origin, V, n_samples_per, trav_walk_scale=1., bound=2.):
     # w_walk = get_w_walk_VAE(w_origin, V, n_samples_per).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
     # w_origin: (1, num_ws, w_dim)
     # gh, gw = V.n_lat, n_samples_per
@@ -168,7 +168,7 @@ def get_w_walk_VAE(w_origin, V, n_samples_per, trav_walk_scale=1.):
     for ws_i in range(latent_num_ws):
         for lat_i in range(V.n_lat):
             step_size = 4. / (n_samples_per - 1)
-            back_len = 2. + mu[0, ws_i, lat_i]
+            back_len = bound + mu[0, ws_i, lat_i]
             steps_lat_i = [gfeat_orig.clone()[:, np.newaxis, ...]] # ls of [1, 1, latent_num_ws, mat_dim * mat_dim]
 
             # Start walking
@@ -201,7 +201,7 @@ def get_w_walk_VAE(w_origin, V, n_samples_per, trav_walk_scale=1.):
     z_trav = mu.repeat(latent_num_ws*V.n_lat*n_samples_per, 1, 1).view(latent_num_ws, V.n_lat, n_samples_per, latent_num_ws, V.n_lat)
     for ws_i in range(latent_num_ws):
         for lat_i in range(V.n_lat):
-            z_trav[ws_i, lat_i, :, ws_i, lat_i] = torch.linspace(-2., 2., n_samples_per)
+            z_trav[ws_i, lat_i, :, ws_i, lat_i] = torch.linspace(-bound, bound, n_samples_per)
     z_trav = z_trav.view(latent_num_ws*V.n_lat*n_samples_per, latent_num_ws, V.n_lat) # [latent_num_ws*n_lat*n_samples_per, latent_num_ws, n_lat]
     w_trav = V.decode(z_trav.squeeze(), tile_dim_1=w_origin.shape[1] if V.mean_num_ws else None) # [latent_num_ws*n_lat*n_samples_per, num_ws, w_dim]
     return w_trav, w_trav_gfeat
