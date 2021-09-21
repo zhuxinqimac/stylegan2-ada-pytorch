@@ -8,7 +8,7 @@
 
 # --- File Name: w_walk_utils.py
 # --- Creation Date: 03-09-2021
-# --- Last Modified: Tue 21 Sep 2021 23:37:41 AEST
+# --- Last Modified: Tue 21 Sep 2021 23:39:22 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -167,7 +167,7 @@ def get_w_walk_VAE(w_origin, V, n_samples_per, trav_walk_scale=1., bound=4.):
     all_ls = []
     for ws_i in range(latent_num_ws):
         for lat_i in range(V.n_lat):
-            step_size = 4. / (n_samples_per - 1)
+            step_size = 2 * bound / (n_samples_per - 1)
             back_len = bound + mu[0, ws_i, lat_i]
             steps_lat_i = [gfeat_orig.clone()[:, np.newaxis, ...]] # ls of [1, 1, latent_num_ws, mat_dim * mat_dim]
 
