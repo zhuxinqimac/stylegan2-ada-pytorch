@@ -8,7 +8,7 @@
 
 # --- File Name: w_walk_utils.py
 # --- Creation Date: 03-09-2021
-# --- Last Modified: Tue 21 Sep 2021 23:37:09 AEST
+# --- Last Modified: Tue 21 Sep 2021 23:37:41 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -151,7 +151,7 @@ def get_SVD(G, url, device, rank, n_samples=1000000, batch=256, cache=True, cach
 
     return w_avg.to(device), s_values.to(device), v_mat.to(device), s_values_normed.to(device)
 
-def get_w_walk_VAE(w_origin, V, n_samples_per, trav_walk_scale=1., bound=2.):
+def get_w_walk_VAE(w_origin, V, n_samples_per, trav_walk_scale=1., bound=4.):
     # w_walk = get_w_walk_VAE(w_origin, V, n_samples_per).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
     # w_origin: (1, num_ws, w_dim)
     # gh, gw = V.n_lat, n_samples_per
