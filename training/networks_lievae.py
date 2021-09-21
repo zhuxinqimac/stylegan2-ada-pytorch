@@ -8,7 +8,7 @@
 
 # --- File Name: networks_lievae.py
 # --- Creation Date: 17-09-2021
-# --- Last Modified: Tue 21 Sep 2021 03:09:54 AEST
+# --- Last Modified: Tue 21 Sep 2021 14:42:26 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -25,16 +25,27 @@ from training.networks import FullyConnectedLayer
 from training.networks import normalize_2nd_moment
 from training.networks_navigator import construct_fc_layers
 from training.networks_liegan import LieGroupCore
+from training.networks_uneven import GroupFullyConnectedLayer
 
 
 def construct_conv1d_layers(in_dim, conv_layers, middle_feat, out_dim):
     net_ls = []
     in_f, out_f = in_dim, middle_feat
     for _ in range(conv_layers):
-        net_ls.append(nn.Conv1d(in_f, out_f, 3, 1, 1))
+        net_ls.append(nn.Conv1d(in_f, out_f, 1, 1, 0))
         net_ls.append(nn.ReLU())
         in_f = out_f
-    net_ls.append(nn.Conv1d(in_f, out_dim, 3, 1, 1))
+    net_ls.append(nn.Conv1d(in_f, out_dim, 1, 1, 0))
+    return nn.Sequential(*net_ls)
+
+def construct_group_mlp_layers(in_dim, gmlp_layers, middle_feat, out_dim, groups, act='relu'):
+    net_ls = []
+    in_f, out_f = in_dim, middle_feat
+    print('Using group mlp...')
+    for _ in range(gmlp_layers):
+        net_ls.append(GroupFullyConnectedLayer(in_f*groups, out_f*groups, activation=act, groups=groups))
+        in_f = out_f
+    net_ls.append(GroupFullyConnectedLayer(in_f*groups, out_dim*groups, activation='linear', groups=groups))
     return nn.Sequential(*net_ls)
 
 def init_alg_basis_multi(num_ws, z_dim, mat_dim, lie_alg_init_scale):
@@ -90,7 +101,7 @@ class LieGroupMulti(nn.Module):
         '''
         _ = c # Ignore c
 
-        # print('Not splitting group...')
+        print('z.shape:', z.shape)
         lie_group = lat_to_group_multi(z, self.lie_alg_basis) # [b, num_ws, mat_dim, mat_dim]
         return lie_group
 
@@ -118,18 +129,26 @@ class BottleneckEncoderonW(torch.nn.Module):
             self.to_neck_net = construct_fc_layers(in_dim, n_pre_neck, middle_feat, bottleneck_dim)
             self.neck_to_lat_net = construct_fc_layers(bottleneck_dim, n_post_neck, middle_feat, n_lat * 2)
         else:
-            self.to_neck_net = construct_conv1d_layers(in_dim, n_pre_neck, middle_feat, bottleneck_dim)
-            self.neck_to_lat_net = construct_conv1d_layers(bottleneck_dim, n_post_neck, middle_feat, n_lat * 2)
+            # self.to_neck_net = construct_conv1d_layers(in_dim, n_pre_neck, middle_feat, bottleneck_dim)
+            # self.neck_to_lat_net = construct_conv1d_layers(bottleneck_dim, n_post_neck, middle_feat, n_lat * 2)
+            self.to_neck_net = construct_group_mlp_layers(in_dim, n_pre_neck, middle_feat, bottleneck_dim, groups=num_ws)
+            self.neck_to_lat_net = construct_group_mlp_layers(bottleneck_dim, n_post_neck, middle_feat, n_lat * 2, groups=num_ws)
 
     def forward(self, x):
         # x: [b, num_ws, in_dim]
         if self.mean_num_ws:
             x = x.mean(1)
-        x = x.transpose(1, 2) if not self.mean_num_ws else x
+        print('x.shape:', x.shape)
+        # x = x.transpose(2, 1) if not self.mean_num_ws else x
+        print('--enc after transpose x.shape:', x.shape)
         neck = self.to_neck_net(x)
+        print('--enc neck.shape:', neck.shape)
         mulv = self.neck_to_lat_net(neck)
-        neck = neck.transpose(2, 1) if not self.mean_num_ws else neck
-        mulv = mulv.transpose(2, 1) if not self.mean_num_ws else mulv
+        print('--enc mulv.shape:', mulv.shape)
+        # neck = neck.transpose(2, 1) if not self.mean_num_ws else neck
+        # mulv = mulv.transpose(2, 1) if not self.mean_num_ws else mulv
+        print('--enc out neck.shape:', neck.shape)
+        print('--enc out mulv.shape:', mulv.shape)
         return mulv, neck
 
 #----------------------------------------------------------------------------
@@ -159,16 +178,17 @@ class LieGroupDecoder(torch.nn.Module):
         if mean_num_ws:
             self.gfeat_to_out = construct_fc_layers(mat_dim*mat_dim, n_post_group, middle_feat, out_dim)
         else:
-            self.gfeat_to_out = construct_conv1d_layers(mat_dim*mat_dim, n_post_group, middle_feat, out_dim)
+            # self.gfeat_to_out = construct_conv1d_layers(mat_dim*mat_dim, n_post_group, middle_feat, out_dim)
+            self.gfeat_to_out = construct_group_mlp_layers(mat_dim*mat_dim, n_post_group, middle_feat, out_dim, groups=num_ws)
 
     @property
     def lie_alg_basis(self):
         return self.core.lie_alg_basis # [z_dim, mat_dim, mat_dim]
 
     def decode_gfeat(self, gfeat, tile_dim_1=None):
-        gfeat = gfeat.transpose(2, 1) if gfeat.ndim == 3 else gfeat
+        # gfeat = gfeat.transpose(2, 1) if gfeat.ndim == 3 else gfeat
         x_out = self.gfeat_to_out(gfeat) # [b, (num_ws), out_dim]
-        x_out = x_out.transpose(2, 1) if x_out.ndim == 3 else x_out
+        # x_out = x_out.transpose(2, 1) if x_out.ndim == 3 else x_out
 
         if tile_dim_1 is not None:
             assert gfeat.ndim == 2 and self.mean_num_ws
@@ -228,10 +248,13 @@ class LieGroupVAEonW(torch.nn.Module):
 
     def forward(self, ws_in):
         # ws_in: [b, num_ws, w_dim]
+        print('ws_in.shape:', ws_in.shape)
         mulv, _ = self.encode(ws_in) # [b, (num_ws), n_lat * 2]
+        print('mulv.shape:', mulv.shape)
 
         mu, lv = mulv.split(self.n_lat, dim=-1) # [b, (num_ws), n_lat], [b, (num_ws), n_lat]
         z = reparametrise_gaussian(mu, lv) # [b, (num_ws), n_lat]
+        print('z.shape:', z.shape)
 
         ws_rec = self.decode(z, tile_dim_1=ws_in.shape[1] if self.mean_num_ws else None) # [b, num_ws, w_dim]
         assert ws_in.shape == ws_rec.shape
