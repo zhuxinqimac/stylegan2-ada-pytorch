@@ -8,7 +8,7 @@
 
 # --- File Name: networks_lievae.py
 # --- Creation Date: 17-09-2021
-# --- Last Modified: Tue 21 Sep 2021 14:42:26 AEST
+# --- Last Modified: Tue 21 Sep 2021 16:02:21 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -41,7 +41,7 @@ def construct_conv1d_layers(in_dim, conv_layers, middle_feat, out_dim):
 def construct_group_mlp_layers(in_dim, gmlp_layers, middle_feat, out_dim, groups, act='relu'):
     net_ls = []
     in_f, out_f = in_dim, middle_feat
-    print('Using group mlp...')
+    # print('Using group mlp...')
     for _ in range(gmlp_layers):
         net_ls.append(GroupFullyConnectedLayer(in_f*groups, out_f*groups, activation=act, groups=groups))
         in_f = out_f
@@ -101,7 +101,7 @@ class LieGroupMulti(nn.Module):
         '''
         _ = c # Ignore c
 
-        print('z.shape:', z.shape)
+        # print('z.shape:', z.shape)
         lie_group = lat_to_group_multi(z, self.lie_alg_basis) # [b, num_ws, mat_dim, mat_dim]
         return lie_group
 
@@ -138,17 +138,17 @@ class BottleneckEncoderonW(torch.nn.Module):
         # x: [b, num_ws, in_dim]
         if self.mean_num_ws:
             x = x.mean(1)
-        print('x.shape:', x.shape)
+        # print('x.shape:', x.shape)
         # x = x.transpose(2, 1) if not self.mean_num_ws else x
-        print('--enc after transpose x.shape:', x.shape)
+        # print('--enc after transpose x.shape:', x.shape)
         neck = self.to_neck_net(x)
-        print('--enc neck.shape:', neck.shape)
+        # print('--enc neck.shape:', neck.shape)
         mulv = self.neck_to_lat_net(neck)
-        print('--enc mulv.shape:', mulv.shape)
+        # print('--enc mulv.shape:', mulv.shape)
         # neck = neck.transpose(2, 1) if not self.mean_num_ws else neck
         # mulv = mulv.transpose(2, 1) if not self.mean_num_ws else mulv
-        print('--enc out neck.shape:', neck.shape)
-        print('--enc out mulv.shape:', mulv.shape)
+        # print('--enc out neck.shape:', neck.shape)
+        # print('--enc out mulv.shape:', mulv.shape)
         return mulv, neck
 
 #----------------------------------------------------------------------------
@@ -248,13 +248,13 @@ class LieGroupVAEonW(torch.nn.Module):
 
     def forward(self, ws_in):
         # ws_in: [b, num_ws, w_dim]
-        print('ws_in.shape:', ws_in.shape)
+        # print('ws_in.shape:', ws_in.shape)
         mulv, _ = self.encode(ws_in) # [b, (num_ws), n_lat * 2]
-        print('mulv.shape:', mulv.shape)
+        # print('mulv.shape:', mulv.shape)
 
         mu, lv = mulv.split(self.n_lat, dim=-1) # [b, (num_ws), n_lat], [b, (num_ws), n_lat]
         z = reparametrise_gaussian(mu, lv) # [b, (num_ws), n_lat]
-        print('z.shape:', z.shape)
+        # print('z.shape:', z.shape)
 
         ws_rec = self.decode(z, tile_dim_1=ws_in.shape[1] if self.mean_num_ws else None) # [b, num_ws, w_dim]
         assert ws_in.shape == ws_rec.shape
