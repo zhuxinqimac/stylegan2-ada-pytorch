@@ -8,7 +8,7 @@
 
 # --- File Name: loss_lievae.py
 # --- Creation Date: 17-09-2021
-# --- Last Modified: Tue 21 Sep 2021 16:01:21 AEST
+# --- Last Modified: Tue 21 Sep 2021 16:09:05 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -98,7 +98,7 @@ def calc_commute_loss(lie_alg_basis_outer):
 #----------------------------------------------------------------------------
 class LieVaeLoss(Loss):
     def __init__(self, device, G_mapping, G_synthesis, V, batch_gpu=4, hessian_lamb=0., commute_lamb=0., signifi_lamb=0., n_colors=1,
-                 forward_eg_prob=0.2, beta=1., gfeat_rec_lamb=1., img_recons_lamb=0., truncation_psi=1, recons_n_layer=2):
+                 forward_eg_prob=0.2, beta=1., gfeat_rec_lamb=1., img_recons_lamb=0., truncation_psi=1, recons_n_layer=2, return_x=True):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -115,6 +115,7 @@ class LieVaeLoss(Loss):
         self.img_recons_lamb = img_recons_lamb
         self.truncation_psi = truncation_psi
         self.recons_n_layer = recons_n_layer
+        self.return_x = return_x
 
     def run_G_mapping(self, all_z, all_c):
         # with misc.ddp_sync(self.G_mapping, sync):
@@ -126,7 +127,7 @@ class LieVaeLoss(Loss):
         # ws: (b, num_ws, w_dim)
         # with misc.ddp_sync(self.G_synthesis, sync):
         # imgs = [self.G_synthesis(ws) for ws in all_ws.split(self.batch_gpu)] # (b, c, h, w)
-        imgs = [self.G_syn_forward(ws, n_layer=self.recons_n_layer, return_x=True) for ws in all_ws.split(self.batch_gpu)] # (b, c, h, w)
+        imgs = [self.G_syn_forward(ws, n_layer=self.recons_n_layer, return_x=self.return_x) for ws in all_ws.split(self.batch_gpu)] # (b, c, h, w)
         imgs = torch.cat(imgs, dim=0)
         return imgs
 
