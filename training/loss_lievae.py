@@ -8,7 +8,7 @@
 
 # --- File Name: loss_lievae.py
 # --- Creation Date: 17-09-2021
-# --- Last Modified: Tue 21 Sep 2021 16:09:05 AEST
+# --- Last Modified: Tue 21 Sep 2021 17:25:38 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -98,7 +98,7 @@ def calc_commute_loss(lie_alg_basis_outer):
 #----------------------------------------------------------------------------
 class LieVaeLoss(Loss):
     def __init__(self, device, G_mapping, G_synthesis, V, batch_gpu=4, hessian_lamb=0., commute_lamb=0., signifi_lamb=0., n_colors=1,
-                 forward_eg_prob=0.2, beta=1., gfeat_rec_lamb=1., img_recons_lamb=0., truncation_psi=1, recons_n_layer=2, return_x=True):
+                 forward_eg_prob=0.2, beta=1., gfeat_rec_lamb=1., img_recons_lamb=0., w_recons_lamb=0., truncation_psi=1, recons_n_layer=2, return_x=True):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -113,6 +113,7 @@ class LieVaeLoss(Loss):
         self.beta = beta
         self.gfeat_rec_lamb = gfeat_rec_lamb
         self.img_recons_lamb = img_recons_lamb
+        self.w_recons_lamb = w_recons_lamb
         self.truncation_psi = truncation_psi
         self.recons_n_layer = recons_n_layer
         self.return_x = return_x
@@ -246,7 +247,7 @@ class LieVaeLoss(Loss):
                 # print('--done reports ...')
             with torch.autograd.profiler.record_function('VAEmain_backward'):
                 # print('--start backward ...')
-                (w_recons_loss + self.img_recons_lamb * img_recons_loss + self.beta * kl_loss \
+                (self.w_recons_lamb * w_recons_loss + self.img_recons_lamb * img_recons_loss + self.beta * kl_loss \
                  + self.gfeat_rec_lamb * gfeat_rec_loss).mean().mul(gain).backward()
                 # (self.img_recons_lamb * img_recons_loss + self.beta * kl_loss \
                  # + self.gfeat_rec_lamb * gfeat_rec_loss).mean().mul(gain).backward()
