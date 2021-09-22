@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover_vae.py
 # --- Creation Date: 17-09-2021
-# --- Last Modified: Tue 21 Sep 2021 02:27:18 AEST
+# --- Last Modified: Wed 22 Sep 2021 14:33:37 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -67,6 +67,7 @@ def training_loop(
     gan_network_pkl         = None,     # The Generator network pkl.
     save_size               = 128,      # Image size to save per image in traversal.
     trav_walk_scale         = 1,        # Traversal walking scale.
+    trav_walk_bound         = 2,        # Traversal walking bound.
 ):
     # Initialize.
     start_time = time.time()
@@ -150,7 +151,7 @@ def training_loop(
         z_origin = torch.randn([1, G.z_dim], device=device)
         c_origin = torch.randn([1, G.c_dim], device=device)
         w_origin = G.mapping(z_origin, c_origin, truncation_psi=0.7) # (1, num_ws, w_dim)
-        w_walk_z, w_walk_gfeat = get_w_walk_VAE(w_origin, V, n_samples_per, trav_walk_scale) # (gh * gw, num_ws, w_dim)
+        w_walk_z, w_walk_gfeat = get_w_walk_VAE(w_origin, V, n_samples_per, trav_walk_scale, trav_walk_bound) # (gh * gw, num_ws, w_dim)
         for w_walk, name in zip([w_walk_z, w_walk_gfeat], ['z', 'gfeat']):
             images = torch.cat([G.synthesis(w, noise_mode='const') for w in w_walk.split(batch_gpu)]) # (gh * gw, c, h, w)
             if save_size < images.size(-1):
@@ -264,7 +265,7 @@ def training_loop(
             z_origin = torch.randn([1, G.z_dim], device=device)
             c_origin = torch.randn([1, G.c_dim], device=device)
             w_origin = G.mapping(z_origin, c_origin, truncation_psi=0.7) # (1, num_ws, w_dim)
-            w_walk_z, w_walk_gfeat = get_w_walk_VAE(w_origin, V, n_samples_per, trav_walk_scale) # (gh * gw, num_ws, w_dim)
+            w_walk_z, w_walk_gfeat = get_w_walk_VAE(w_origin, V, n_samples_per, trav_walk_scale, trav_walk_bound) # (gh * gw, num_ws, w_dim)
             for w_walk, name in zip([w_walk_z, w_walk_gfeat], ['z', 'gfeat']):
                 images = torch.cat([G.synthesis(w, noise_mode='const') for w in w_walk.split(batch_gpu)]) # (gh * gw, c, h, w)
                 if save_size < images.size(-1):

@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover_vae.py
 # --- Creation Date: 17-09-2021
-# --- Last Modified: Tue 21 Sep 2021 17:27:12 AEST
+# --- Last Modified: Wed 22 Sep 2021 14:34:15 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train VAE networks to discover the interpretable directions in the W space."""
@@ -41,14 +41,14 @@ KEY_BRIEF_NAMES = {'z': 'n_lat', 'gmat': 'group_mat_dim', 'emid': 'enc_middle_fe
                    'gfrec': 'gfeat_rec_lamb', 'irec': 'img_recons_lamb', 'wrec': 'w_recons_lamb', 'sig': 'signifi_lamb', 'recx': 'rec_return_x',
                    'tpsi': 'truncation_psi', 'recn': 'recons_n_layer', 'mws': 'mean_num_ws',
                    'fegp': 'forward_eg_prob', 'beta': 'beta', 'ncol': 'loss_n_colors', 'lr': 'lrate',
-                   'nper': 'n_samples_per', 'ssize': 'save_size', 'wals': 'trav_walk_scale'}
+                   'nper': 'n_samples_per', 'ssize': 'save_size', 'wals': 'trav_walk_scale', 'walb': 'trav_walk_bound'}
 KEY_DTYPES = {'n_lat': int, 'group_mat_dim': int, 'enc_middle_feat': int,
               'enc_n_pre_neck': int, 'enc_n_post_neck': int,
               'dec_middle_feat': int, 'dec_n_post_neck': int, 'hessian_lamb': float, 'commute_lamb': float,
               'gfeat_rec_lamb': float, 'img_recons_lamb': float, 'w_recons_lamb': float, 'signifi_lamb': float, 'rec_return_x': bool_own,
               'truncation_psi': float, 'recons_n_layer': int, 'mean_num_ws': bool_own,
               'forward_eg_prob': float, 'beta': float, 'loss_n_colors': int, 'lrate': float,
-              'n_samples_per': int, 'save_size': int, 'trav_walk_scale': float}
+              'n_samples_per': int, 'save_size': int, 'trav_walk_scale': float, 'trav_walk_bound': float}
 
 def parse_cfg(cfg):
     '''
@@ -157,7 +157,7 @@ def setup_training_loop_kwargs(
                            dec_middle_feat=512, dec_n_post_neck=1, hessian_lamb=0., commute_lamb=0.,
                            forward_eg_prob=0.2, beta=1., img_recons_lamb=0., w_recons_lamb=1., signifi_lamb=0., rec_return_x=True,
                            truncation_psi=1, recons_n_layer=2, mean_num_ws=True,
-                           loss_n_colors=1, n_samples_per=7, save_size=128, trav_walk_scale=0.2),
+                           loss_n_colors=1, n_samples_per=7, save_size=128, trav_walk_scale=0.2, trav_walk_bound=2),
     }
 
     # assert cfg in cfg_specs
@@ -192,6 +192,7 @@ def setup_training_loop_kwargs(
     args.n_samples_per = spec.n_samples_per
     args.save_size = spec.save_size
     args.trav_walk_scale = spec.trav_walk_scale
+    args.trav_walk_bound = spec.trav_walk_bound
 
     if kimg is not None:
         assert isinstance(kimg, int)
