@@ -8,7 +8,7 @@
 
 # --- File Name: w_walk_utils.py
 # --- Creation Date: 03-09-2021
-# --- Last Modified: Thu 23 Sep 2021 16:23:12 AEST
+# --- Last Modified: Thu 23 Sep 2021 21:09:48 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -150,7 +150,7 @@ def get_w_walk_SVD_step_per_w(w_origin, M, n_samples_per, step_size, w_avg, s_va
                     dirs = M(step) # [1, num_ws, n_lat, w_dim]
                 var_dir = F.one_hot(torch.tensor([ws_i]), num_ws).float().to(dirs.device) # [1, num_ws]
                 var_dir = var_dir[:, :, np.newaxis] * dirs[:, ws_i:ws_i+1, lat_i] # [1, num_ws, w_dim]
-                print('var_dir.norm(dim=-1):', var_dir.norm(dim=-1))
+                # print('var_dir.norm(dim=-1):', var_dir.norm(dim=-1))
                 step = step - step_size_t * step_size * var_dir # [1, num_ws, w_dim]
                 steps_lat_i = [step[:, np.newaxis, ...]] + steps_lat_i # list of [1, 1, num_ws, w_dim]
             step = w_origin.clone() # [1, num_ws, w_dim]
@@ -161,7 +161,7 @@ def get_w_walk_SVD_step_per_w(w_origin, M, n_samples_per, step_size, w_avg, s_va
                     dirs = M(step) # [1, num_ws, n_lat, w_dim]
                 var_dir = F.one_hot(torch.tensor([ws_i]), num_ws).float().to(dirs.device) # [1, num_ws]
                 var_dir = var_dir[:, :, np.newaxis] * dirs[:, ws_i:ws_i+1, lat_i] # [1, num_ws, w_dim]
-                print('var_dir.norm(dim=-1):', var_dir.norm(dim=-1))
+                # print('var_dir.norm(dim=-1):', var_dir.norm(dim=-1))
                 step = step + step_size_t * step_size * var_dir # [1, num_ws, w_dim]
                 steps_lat_i = steps_lat_i + [step[:, np.newaxis, ...]] # list of [1, 1, num_ws, w_dim]
             row_tensor = torch.cat(steps_lat_i, dim=1) # [1, n_samples_per, num_ws, w_dim]
