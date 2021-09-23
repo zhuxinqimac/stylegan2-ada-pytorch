@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Thu 23 Sep 2021 21:05:49 AEST
+# --- Last Modified: Thu 23 Sep 2021 21:20:16 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -479,12 +479,12 @@ class DiscoverLoss(Loss):
                     print('delta.shape:', delta.shape)
                     w_idx = self.sample_batch_pos_neg_dirs(b // 2, self.num_ws).to(delta.device) # (b//2, 2)
                     print('w_idx.shape:', w_idx.shape)
-                    delta_w_q = torch.gather(delta[:b//2], 1, w_idx[:, 0].view(b//2, 1, 1, 1).repeat(1, 1, self.nv_dim, self.w_dim)).squeeze() # [b//2, nv_dim, w_dim]
-                    delta_w_pos = torch.gather(delta[b//2:], 1, w_idx[:, 0].view(b//2, 1, 1, 1).repeat(1, 1, self.nv_dim, self.w_dim)).squeeze() # [b//2, nv_dim, w_dim]
+                    delta_w_q = torch.gather(delta[:b//2], 1, w_idx[:, 0].view(b//2, 1, 1, 1).repeat(1, 1, self.nv_dim, self.w_dim))[:, 0] # [b//2, nv_dim, w_dim]
+                    delta_w_pos = torch.gather(delta[b//2:], 1, w_idx[:, 0].view(b//2, 1, 1, 1).repeat(1, 1, self.nv_dim, self.w_dim))[:, 0]# [b//2, nv_dim, w_dim]
                     if self.neg_on_self:
-                        delta_w_neg = torch.gather(delta[:b//2], 1, w_idx[:, 1].view(b//2, 1, 1, 1).repeat(1, 1, self.nv_dim, self.w_dim)).squeeze() # [b//2, nv_dim, w_dim]
+                        delta_w_neg = torch.gather(delta[:b//2], 1, w_idx[:, 1].view(b//2, 1, 1, 1).repeat(1, 1, self.nv_dim, self.w_dim))[:, 0]# [b//2, nv_dim, w_dim]
                     else:
-                        delta_w_neg = torch.gather(delta[b//2:], 1, w_idx[:, 1].view(b//2, 1, 1, 1).repeat(1, 1, self.nv_dim, self.w_dim)).squeeze() # [b//2, nv_dim, w_dim]
+                        delta_w_neg = torch.gather(delta[b//2:], 1, w_idx[:, 1].view(b//2, 1, 1, 1).repeat(1, 1, self.nv_dim, self.w_dim))[:, 0]# [b//2, nv_dim, w_dim]
                     q_w_idx_onehot = F.one_hot(w_idx[:, 0], self.num_ws).float().to(delta.device) # [b//2, num_ws]
                     pos_w_idx_onehot = F.one_hot(w_idx[:, 0], self.num_ws).float().to(delta.device) # [b//2, num_ws]
                     neg_w_idx_onehot = F.one_hot(w_idx[:, 1], self.num_ws).float().to(delta.device) # [b//2, num_ws]
@@ -493,9 +493,9 @@ class DiscoverLoss(Loss):
                     pos_neg_idx = self.sample_batch_pos_neg_dirs(b // 2, self.nv_dim).to(delta.device) # (b//2, 2)
                     print('delta_w_q.shape:', delta_w_q.shape)
                     print('pos_neg_idx[:, 0].shape:', pos_neg_idx[:, 0].shape)
-                    delta_q_per_w = torch.gather(delta_w_q, 1, pos_neg_idx[:, 0].view(b//2, 1, 1).repeat(1, 1, self.w_dim)).squeeze() # [b//2, w_dim]
-                    delta_pos_per_w = torch.gather(delta_w_pos, 1, pos_neg_idx[:, 0].view(b//2, 1, 1).repeat(1, 1, self.w_dim)).squeeze() # [b//2, w_dim]
-                    delta_neg_per_w = torch.gather(delta_w_neg, 1, pos_neg_idx[:, 1].view(b//2, 1, 1).repeat(1, 1, self.w_dim)).squeeze() # [b//2, w_dim]
+                    delta_q_per_w = torch.gather(delta_w_q, 1, pos_neg_idx[:, 0].view(b//2, 1, 1).repeat(1, 1, self.w_dim))[:, 0] # [b//2, w_dim]
+                    delta_pos_per_w = torch.gather(delta_w_pos, 1, pos_neg_idx[:, 0].view(b//2, 1, 1).repeat(1, 1, self.w_dim))[:, 0] # [b//2, w_dim]
+                    delta_neg_per_w = torch.gather(delta_w_neg, 1, pos_neg_idx[:, 1].view(b//2, 1, 1).repeat(1, 1, self.w_dim))[:, 0] # [b//2, w_dim]
                     delta_q = q_w_idx_onehot[:, :, np.newaxis] * delta_q_per_w[:, np.newaxis, ...] # [b//2, num_ws, w_dim]
                     delta_pos = pos_w_idx_onehot[:, :, np.newaxis] * delta_pos_per_w[:, np.newaxis, ...] # [b//2, num_ws, w_dim]
                     delta_neg = neg_w_idx_onehot[:, :, np.newaxis] * delta_neg_per_w[:, np.newaxis, ...] # [b//2, num_ws, w_dim]
@@ -506,12 +506,12 @@ class DiscoverLoss(Loss):
                     print('---Mcontrast per_w_dir, delta_neg.shape:', delta_neg.shape)
                 else:
                     pos_neg_idx = self.sample_batch_pos_neg_dirs(b // 2, self.nv_dim).to(delta.device) # (b//2, 2)
-                    delta_q = torch.gather(delta[:b//2], 1, pos_neg_idx[:, 0].view(b//2, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim)).squeeze() # [b//2, num_ws, w_dim]
-                    delta_pos = torch.gather(delta[b//2:], 1, pos_neg_idx[:, 0].view(b//2, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim)).squeeze() # [b//2, num_ws, w_dim]
+                    delta_q = torch.gather(delta[:b//2], 1, pos_neg_idx[:, 0].view(b//2, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim))[:, 0] # [b//2, num_ws, w_dim]
+                    delta_pos = torch.gather(delta[b//2:], 1, pos_neg_idx[:, 0].view(b//2, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim))[:, 0] # [b//2, num_ws, w_dim]
                     if self.neg_on_self:
-                        delta_neg = torch.gather(delta[:b//2], 1, pos_neg_idx[:, 1].view(b//2, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim)).squeeze() # [b//2, num_ws, w_dim]
+                        delta_neg = torch.gather(delta[:b//2], 1, pos_neg_idx[:, 1].view(b//2, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim))[:, 0] # [b//2, num_ws, w_dim]
                     else:
-                        delta_neg = torch.gather(delta[b//2:], 1, pos_neg_idx[:, 1].view(b//2, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim)).squeeze() # [b//2, num_ws, w_dim]
+                        delta_neg = torch.gather(delta[b//2:], 1, pos_neg_idx[:, 1].view(b//2, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim))[:, 0] # [b//2, num_ws, w_dim]
                     step_scale_pos = self.get_dir_scale(delta_pos)
                     step_scale_neg = self.get_dir_scale(delta_neg)
 
@@ -552,15 +552,15 @@ class DiscoverLoss(Loss):
                     # now delta is [b, num_ws, nv_dim, w_dim]
                     # --- sample varied w_idx
                     w_idx = self.sample_batch_pos_neg_dirs(b, self.num_ws, without_repeat=False).to(delta.device) # (b, 2)
-                    delta_w_1 = torch.gather(delta, 1, w_idx[:, 0].view(b, 1, 1, 1).repeat(1, 1, self.nv_dim, self.w_dim)).squeeze() # [b, nv_dim, w_dim]
-                    delta_w_2 = torch.gather(delta, 1, w_idx[:, 1].view(b, 1, 1, 1).repeat(1, 1, self.nv_dim, self.w_dim)).squeeze() # [b, nv_dim, w_dim]
+                    delta_w_1 = torch.gather(delta, 1, w_idx[:, 0].view(b, 1, 1, 1).repeat(1, 1, self.nv_dim, self.w_dim))[:, 0] # [b, nv_dim, w_dim]
+                    delta_w_2 = torch.gather(delta, 1, w_idx[:, 1].view(b, 1, 1, 1).repeat(1, 1, self.nv_dim, self.w_dim))[:, 0] # [b, nv_dim, w_dim]
                     w_1_idx_onehot = F.one_hot(w_idx[:, 0], self.num_ws).float().to(delta.device) # [b, num_ws]
                     w_2_idx_onehot = F.one_hot(w_idx[:, 1], self.num_ws).float().to(delta.device) # [b, num_ws]
 
                     # --- sample the varied dir_idx on the varied w_idx
                     dirs_idx = self.sample_batch_pos_neg_dirs(b, self.nv_dim, without_repeat=False).to(delta.device) # (b, 2)
-                    delta_1_per_w = torch.gather(delta_w_1, 1, dirs_idx[:, 0].view(b, 1, 1).repeat(1, 1, self.w_dim)).squeeze() # [b, w_dim]
-                    delta_2_per_w = torch.gather(delta_w_2, 1, dirs_idx[:, 1].view(b, 1, 1).repeat(1, 1, self.w_dim)).squeeze() # [b, w_dim]
+                    delta_1_per_w = torch.gather(delta_w_1, 1, dirs_idx[:, 0].view(b, 1, 1).repeat(1, 1, self.w_dim))[:, 0] # [b, w_dim]
+                    delta_2_per_w = torch.gather(delta_w_2, 1, dirs_idx[:, 1].view(b, 1, 1).repeat(1, 1, self.w_dim))[:, 0] # [b, w_dim]
                     delta_1 = w_1_idx_onehot[:, :, np.newaxis] * delta_1_per_w[:, np.newaxis, ...] # [b, num_ws, w_dim]
                     delta_2 = w_2_idx_onehot[:, :, np.newaxis] * delta_2_per_w[:, np.newaxis, ...] # [b, num_ws, w_dim]
                     step_scale_1 = self.get_dir_scale(delta_1_per_w[:, np.newaxis, ...])
@@ -569,8 +569,8 @@ class DiscoverLoss(Loss):
                     print('---Mcompose per_w_dir, delta_2.shape:', delta_2.shape)
                 else:
                     dirs_idx = self.sample_batch_pos_neg_dirs(b, self.nv_dim, without_repeat=False).to(delta.device) # (b, 2)
-                    delta_1 = torch.gather(delta, 1, dirs_idx[:, 0].view(b, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim)).squeeze() # [b, num_ws, w_dim]
-                    delta_2 = torch.gather(delta, 1, dirs_idx[:, 1].view(b, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim)).squeeze() # [b, num_ws, w_dim]
+                    delta_1 = torch.gather(delta, 1, dirs_idx[:, 0].view(b, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim))[:, 0] # [b, num_ws, w_dim]
+                    delta_2 = torch.gather(delta, 1, dirs_idx[:, 1].view(b, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim))[:, 0] # [b, num_ws, w_dim]
                     step_scale_1 = self.get_dir_scale(delta_1)
                     step_scale_2 = self.get_dir_scale(delta_2)
 
@@ -612,18 +612,18 @@ class DiscoverLoss(Loss):
                         # now delta is [b, num_ws, nv_dim, w_dim]
                         # --- sample varied w_idx
                         w_idx = self.sample_batch_pos_neg_dirs(b, self.num_ws, without_repeat=False).to(delta.device) # (b, 2)
-                        delta_w_1 = torch.gather(delta, 1, w_idx[:, 0].view(b, 1, 1, 1).repeat(1, 1, self.nv_dim, self.w_dim)).squeeze() # [b, nv_dim, w_dim]
+                        delta_w_1 = torch.gather(delta, 1, w_idx[:, 0].view(b, 1, 1, 1).repeat(1, 1, self.nv_dim, self.w_dim))[:, 0] # [b, nv_dim, w_dim]
                         w_1_idx_onehot = F.one_hot(w_idx[:, 0], self.num_ws).float().to(delta.device) # [b, num_ws]
 
                         # --- sample the varied dir_idx on the varied w_idx
                         dirs_idx = self.sample_batch_pos_neg_dirs(b, self.nv_dim).to(delta.device) # (b, 2)
-                        delta_1_per_w = torch.gather(delta_w_1, 1, dirs_idx[:, 0].view(b, 1, 1).repeat(1, 1, self.w_dim)).squeeze() # [b, w_dim]
+                        delta_1_per_w = torch.gather(delta_w_1, 1, dirs_idx[:, 0].view(b, 1, 1).repeat(1, 1, self.w_dim))[:, 0] # [b, w_dim]
                         delta_1 = w_1_idx_onehot[:, :, np.newaxis] * delta_1_per_w[:, np.newaxis, ...] # [b, num_ws, w_dim]
                         step_scale_1 = self.get_dir_scale(delta_1_per_w[:, np.newaxis, ...])
                         print('---Msignificance per_w_dir, delta_1.shape:', delta_1.shape)
                     else:
                         dirs_idx = self.sample_batch_pos_neg_dirs(b, self.nv_dim, without_repeat=False).to(delta.device) # (b, 2)
-                        delta_1 = torch.gather(delta, 1, dirs_idx[:, 0].view(b, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim)).squeeze() # [b, num_ws, w_dim]
+                        delta_1 = torch.gather(delta, 1, dirs_idx[:, 0].view(b, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim))[:, 0] # [b, num_ws, w_dim]
                         step_scale_1 = self.get_dir_scale(delta_1)
 
                     # Sample variation scales.
@@ -667,18 +667,18 @@ class DiscoverLoss(Loss):
                     # now delta is [b, num_ws, nv_dim, w_dim]
                     # --- sample varied w_idx
                     w_idx = torch.randint(self.num_ws, size=[b]).to(delta.device) # (b)
-                    delta_w_1 = torch.gather(delta, 1, w_idx.view(b, 1, 1, 1).repeat(1, 1, self.nv_dim, self.w_dim)).squeeze() # [b, nv_dim, w_dim]
+                    delta_w_1 = torch.gather(delta, 1, w_idx.view(b, 1, 1, 1).repeat(1, 1, self.nv_dim, self.w_dim))[:, 0] # [b, nv_dim, w_dim]
                     w_1_idx_onehot = F.one_hot(w_idx, self.num_ws).float().to(delta.device) # [b, num_ws]
 
                     # --- sample the varied dir_idx on the varied w_idx
                     dirs_idx = torch.randint(self.nv_dim, size=[b]).to(delta.device) # (b)
-                    delta_1_per_w = torch.gather(delta_w_1, 1, dirs_idx.view(b, 1, 1).repeat(1, 1, self.w_dim)).squeeze() # [b, w_dim]
+                    delta_1_per_w = torch.gather(delta_w_1, 1, dirs_idx.view(b, 1, 1).repeat(1, 1, self.w_dim))[:, 0] # [b, w_dim]
                     delta_1 = w_1_idx_onehot[:, :, np.newaxis] * delta_1_per_w[:, np.newaxis, ...] # [b, num_ws, w_dim]
                     step_scale = self.get_dir_scale(delta_1_per_w[:, np.newaxis, ...])
                     print('---Msim per_w_dir, delta_1.shape:', delta_1.shape)
                 else:
                     dirs_idx = torch.randint(self.nv_dim, size=[b]).to(delta.device) # [b]
-                    delta_1 = torch.gather(delta, 1, dirs_idx.view(b, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim)).squeeze() # [b, num_ws, w_dim]
+                    delta_1 = torch.gather(delta, 1, dirs_idx.view(b, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim))[:, 0] # [b, num_ws, w_dim]
                     step_scale = self.get_dir_scale(delta_1)
 
                 # Sample variation scales.
@@ -710,15 +710,15 @@ class DiscoverLoss(Loss):
                     # now delta is [b, num_ws, nv_dim, w_dim]
                     # --- sample varied w_idx
                     w_idx = self.sample_batch_pos_neg_dirs(b, self.num_ws, without_repeat=False).to(delta.device) # (b, 2)
-                    delta_w_1 = torch.gather(delta, 1, w_idx[:, 0].view(b, 1, 1, 1).repeat(1, 1, self.nv_dim, self.w_dim)).squeeze() # [b, nv_dim, w_dim]
-                    delta_w_2 = torch.gather(delta, 1, w_idx[:, 1].view(b, 1, 1, 1).repeat(1, 1, self.nv_dim, self.w_dim)).squeeze() # [b, nv_dim, w_dim]
+                    delta_w_1 = torch.gather(delta, 1, w_idx[:, 0].view(b, 1, 1, 1).repeat(1, 1, self.nv_dim, self.w_dim))[:, 0] # [b, nv_dim, w_dim]
+                    delta_w_2 = torch.gather(delta, 1, w_idx[:, 1].view(b, 1, 1, 1).repeat(1, 1, self.nv_dim, self.w_dim))[:, 0] # [b, nv_dim, w_dim]
                     w_1_idx_onehot = F.one_hot(w_idx[:, 0], self.num_ws).float().to(delta.device) # [b, num_ws]
                     w_2_idx_onehot = F.one_hot(w_idx[:, 1], self.num_ws).float().to(delta.device) # [b, num_ws]
 
                     # --- sample the varied dir_idx on the varied w_idx
                     dirs_idx = self.sample_batch_pos_neg_dirs(b, self.nv_dim, without_repeat=False).to(delta.device) # (b, 2)
-                    delta_1_per_w = torch.gather(delta_w_1, 1, dirs_idx[:, 0].view(b, 1, 1).repeat(1, 1, self.w_dim)).squeeze() # [b, w_dim]
-                    delta_2_per_w = torch.gather(delta_w_2, 1, dirs_idx[:, 1].view(b, 1, 1).repeat(1, 1, self.w_dim)).squeeze() # [b, w_dim]
+                    delta_1_per_w = torch.gather(delta_w_1, 1, dirs_idx[:, 0].view(b, 1, 1).repeat(1, 1, self.w_dim))[:, 0] # [b, w_dim]
+                    delta_2_per_w = torch.gather(delta_w_2, 1, dirs_idx[:, 1].view(b, 1, 1).repeat(1, 1, self.w_dim))[:, 0] # [b, w_dim]
                     delta_1 = w_1_idx_onehot[:, :, np.newaxis] * delta_1_per_w[:, np.newaxis, ...] # [b, num_ws, w_dim]
                     delta_2 = w_2_idx_onehot[:, :, np.newaxis] * delta_2_per_w[:, np.newaxis, ...] # [b, num_ws, w_dim]
                     step_scale_1 = self.get_dir_scale(delta_1_per_w[:, np.newaxis, ...])
@@ -727,8 +727,8 @@ class DiscoverLoss(Loss):
                     print('---Mcomp per_w_dir, delta_2.shape:', delta_2.shape)
                 else:
                     dirs_idx = self.sample_batch_pos_neg_dirs(b, self.nv_dim, without_repeat=False).to(delta.device) # (b, 2)
-                    delta_1 = torch.gather(delta, 1, dirs_idx[:, 0].view(b, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim)).squeeze() # [b, num_ws, w_dim]
-                    delta_2 = torch.gather(delta, 1, dirs_idx[:, 1].view(b, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim)).squeeze() # [b, num_ws, w_dim]
+                    delta_1 = torch.gather(delta, 1, dirs_idx[:, 0].view(b, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim))[:, 0] # [b, num_ws, w_dim]
+                    delta_2 = torch.gather(delta, 1, dirs_idx[:, 1].view(b, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim))[:, 0] # [b, num_ws, w_dim]
                     step_scale_1 = self.get_dir_scale(delta_1)
                     step_scale_2 = self.get_dir_scale(delta_2)
 
