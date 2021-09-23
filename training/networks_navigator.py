@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 14 Sep 2021 00:13:22 AEST
+# --- Last Modified: Fri 24 Sep 2021 02:34:11 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -31,6 +31,10 @@ def construct_fc_layers(in_dim, fc_layers, middle_feat, out_dim, act='relu'):
         in_f = out_f
     net_ls.append(FullyConnectedLayer(in_f, out_dim, activation='linear'))
     return nn.Sequential(*net_ls)
+
+@misc.profiled_function
+def normalize_2nd_moment_to_one(x, dim=1, eps=1e-8):
+    return x * (x.square().sum(dim=dim, keepdim=True) + eps).rsqrt()
 
 #----------------------------------------------------------------------------
 # Attentioners
@@ -316,7 +320,8 @@ class Navigator(torch.nn.Module):
         # To output delta per nv_dim in W space.
         ws_atts = self.att_net(ws_in) # [b, nv_dim, num_ws]
         per_w_dir = self.nav_net(ws_in) # [b, nv_dim, w_dim]
-        per_w_dir = normalize_2nd_moment(per_w_dir, dim=-1)
+        # per_w_dir = normalize_2nd_moment(per_w_dir, dim=-1)
+        per_w_dir = normalize_2nd_moment_to_one(per_w_dir, dim=-1)
 
         dirs = ws_atts[:, :, :, np.newaxis] * per_w_dir[:, :, np.newaxis, ...] # [b, nv_dim, num_ws, w_dim]
         return dirs
