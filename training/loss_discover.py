@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Thu 23 Sep 2021 21:00:40 AEST
+# --- Last Modified: Thu 23 Sep 2021 21:05:49 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -476,7 +476,9 @@ class DiscoverLoss(Loss):
                 if self.per_w_dir:
                     # now delta is [b, num_ws, nv_dim, w_dim]
                     # --- sample varied w_idx
+                    print('delta.shape:', delta.shape)
                     w_idx = self.sample_batch_pos_neg_dirs(b // 2, self.num_ws).to(delta.device) # (b//2, 2)
+                    print('w_idx.shape:', w_idx.shape)
                     delta_w_q = torch.gather(delta[:b//2], 1, w_idx[:, 0].view(b//2, 1, 1, 1).repeat(1, 1, self.nv_dim, self.w_dim)).squeeze() # [b//2, nv_dim, w_dim]
                     delta_w_pos = torch.gather(delta[b//2:], 1, w_idx[:, 0].view(b//2, 1, 1, 1).repeat(1, 1, self.nv_dim, self.w_dim)).squeeze() # [b//2, nv_dim, w_dim]
                     if self.neg_on_self:
