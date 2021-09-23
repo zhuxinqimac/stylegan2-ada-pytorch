@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Thu 23 Sep 2021 16:51:19 AEST
+# --- Last Modified: Thu 23 Sep 2021 20:59:38 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -488,6 +488,8 @@ class DiscoverLoss(Loss):
                     neg_w_idx_onehot = F.one_hot(w_idx[:, 1], self.num_ws).float().to(delta.device) # [b//2, num_ws]
 
                     # --- sample the varied dir_idx on the varied w_idx
+                    print('delta_w_q.shape:', delta_w_q.shape)
+                    print('pos_neg_idx[:, 0].shape:', pos_neg_idx[:, 0].shape)
                     pos_neg_idx = self.sample_batch_pos_neg_dirs(b // 2, self.nv_dim).to(delta.device) # (b//2, 2)
                     delta_q_per_w = torch.gather(delta_w_q, 1, pos_neg_idx[:, 0].view(b//2, 1, 1).repeat(1, 1, self.w_dim)).squeeze() # [b//2, w_dim]
                     delta_pos_per_w = torch.gather(delta_w_pos, 1, pos_neg_idx[:, 0].view(b//2, 1, 1).repeat(1, 1, self.w_dim)).squeeze() # [b//2, w_dim]
