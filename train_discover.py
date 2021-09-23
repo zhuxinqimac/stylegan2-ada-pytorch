@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Thu 23 Sep 2021 15:41:17 AEST
+# --- Last Modified: Fri 24 Sep 2021 00:32:11 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -163,8 +163,8 @@ def setup_training_loop_kwargs(
         'basic':      dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05,
                            nv_dim=20, att_type='fixed', nav_type='fixed', att_middle_feat=128, nav_middle_feat=128,
                            att_fc_layers=1, nav_fc_layers=1, att_layers=5, norm_on_depth=False,
-                           compose_lamb=1, contrast_lamb=0, significance_lamb=0., Sim_lambda=0, Comp_lambda=0,
-                           loss_n_colors=1, div_lamb=0, norm_lamb=0, var_sample_scale=1, var_sample_mean=0.,
+                           compose_lamb=0, contrast_lamb=0, significance_lamb=0., Sim_lambda=0, Comp_lambda=0,
+                           loss_n_colors=5, div_lamb=0, norm_lamb=0, var_sample_scale=1, var_sample_mean=0.,
                            sensor_used_layers=5, use_norm_mask=True, divide_mask_sum=True, use_dynamic_scale=True, use_norm_as_mask=False,
                            diff_avg_lerp_rate=0.01, lerp_lamb=0., lerp_norm=False, neg_lamb=1., pos_lamb=1., neg_on_self=False, use_catdiff=False,
                            n_samples_per=7, sensor_type='alex', save_size=128, trav_walk_scale=0.2, recursive_walk=True, show_normD=True, per_w_dir=True),
