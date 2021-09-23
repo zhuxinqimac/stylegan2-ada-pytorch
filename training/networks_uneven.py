@@ -8,7 +8,7 @@
 
 # --- File Name: networks_uneven.py
 # --- Creation Date: 20-04-2021
-# --- Last Modified: Wed 28 Apr 2021 15:46:26 AEST
+# --- Last Modified: Thu 23 Sep 2021 20:53:39 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -17,6 +17,7 @@ Uneven Networks. Code borrowed from stylegan2-ada-pytorch network from Nvidia.
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch_utils import misc
 from torch_utils import persistence
 from torch_utils.ops import conv2d_resample
@@ -64,7 +65,9 @@ class GroupFullyConnectedLayer(torch.nn.Module):
                 b = b * self.bias_gain
 
         batch_size = x.size(0)
-        x = torch.bmm(x.view(-1, 1, self.per_group_in), w.repeat(batch_size, 1, 1)) # x: (b*groups, 1, in), w: (b*groups, in, out)
+        assert x.shape[-1] == self.per_group_in
+        # x = torch.bmm(x.view(batch_size * self.groups, 1, self.per_group_in), w.repeat(batch_size, 1, 1)) # x: (b*groups, 1, in), w: (b*groups, in, out)
+        x = torch.matmul(x.view(batch_size, self.groups, 1, self.per_group_in), w[np.newaxis, ...]) # x: (b, groups, 1, in), w: (1, groups, in, out)
         x = x.view(batch_size, self.groups * self.per_group_out)
         if self.activation == 'linear' and b is not None:
             # x = torch.addmm(b.unsqueeze(0), x, w.t())

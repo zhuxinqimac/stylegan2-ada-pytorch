@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator_per_w.py
 # --- Creation Date: 23-09-2021
-# --- Last Modified: Thu 23 Sep 2021 16:26:45 AEST
+# --- Last Modified: Thu 23 Sep 2021 20:38:21 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -91,7 +91,7 @@ class Ada1wNavigatorNet(NoneNavigatorNet):
         # ws_in: [b, num_ws, w_dim]
         # return: [b, num_ws, nv_dim, w_dim]
         b = ws_in.shape[0]
-        logits = self.net(ws_in.mean(1))
+        logits = self.net(ws_in)
         ws_dirs = logits.view(b, self.num_ws, self.nv_dim, self.w_dim)
         return ws_dirs
 
