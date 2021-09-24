@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 24 Sep 2021 20:47:13 AEST
+# --- Last Modified: Sat 25 Sep 2021 01:35:43 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -468,13 +468,14 @@ class DiscoverLoss(Loss):
 
 
     def get_dir_scale(self, delta):
-        # delta: [b, num_ws, w_dim]
-        s_values_x2 = self.s_values_normed * 2 # Based on range [-2, 2]
-        dir_in_pca = torch.matmul(delta.mean(1), self.v_mat) # [b, q]
-        dir_in_pca_norm = F.normalize(dir_in_pca, dim=1) # [b, q]
-        coef_t = 1. / (dir_in_pca_norm.square() / s_values_x2[np.newaxis, ...].square()).sum(1, keepdim=True).sqrt() # [b, 1], 1/(x^2/a^2 + y^2/b^2, ...).sqrt()
-        dir_len_semi = torch.linalg.norm(dir_in_pca_norm * coef_t, dim=-1) # [b]
-        return dir_len_semi
+        # # delta: [b, num_ws, w_dim]
+        # s_values_x2 = self.s_values_normed * 2 # Based on range [-2, 2]
+        # dir_in_pca = torch.matmul(delta.mean(1), self.v_mat) # [b, q]
+        # dir_in_pca_norm = F.normalize(dir_in_pca, dim=1) # [b, q]
+        # coef_t = 1. / (dir_in_pca_norm.square() / s_values_x2[np.newaxis, ...].square()).sum(1, keepdim=True).sqrt() # [b, 1], 1/(x^2/a^2 + y^2/b^2, ...).sqrt()
+        # dir_len_semi = torch.linalg.norm(dir_in_pca_norm * coef_t, dim=-1) # [b]
+        # return dir_len_semi
+        return torch.ones(delta.shape[0]).to(delta.device)
 
     def accumulate_gradients(self, phase, sync, gain):
         assert phase in ['Mall', 'Mcompose', 'Mdiverse', 'Mcontrast']

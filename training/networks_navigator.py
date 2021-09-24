@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 24 Sep 2021 16:27:45 AEST
+# --- Last Modified: Sat 25 Sep 2021 01:28:03 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -54,13 +54,14 @@ class NoneAttentioner(torch.nn.Module):
         self.w_dim = w_dim
         self.att_layers = num_ws if att_layers=='all' else att_layers
         assert self.att_layers <= num_ws
-        self.att_logits = nn.Parameter(torch.ones([]), requires_grad=True)
+        # self.att_logits = nn.Parameter(torch.ones([]), requires_grad=True)
 
     def forward(self, ws_in):
         # ws_in: [b, num_ws, w_dim]
         # return: [b, nv_dim, num_ws]
-        fake_scaler = self.att_logits / self.att_logits
-        ws_atts = fake_scaler * torch.ones([ws_in.shape[0], self.nv_dim, self.att_layers], dtype=ws_in.dtype).to(ws_in.device) / self.att_layers
+        # fake_scaler = self.att_logits / self.att_logits
+        # ws_atts = fake_scaler * torch.ones([ws_in.shape[0], self.nv_dim, self.att_layers], dtype=ws_in.dtype).to(ws_in.device) / self.att_layers
+        ws_atts = torch.ones([ws_in.shape[0], self.nv_dim, self.att_layers], dtype=ws_in.dtype).to(ws_in.device) / self.att_layers
         ws_atts = torch.cat([ws_atts, torch.zeros([ws_in.shape[0], self.nv_dim,
                                                    self.num_ws - self.att_layers], dtype=ws_in.dtype).to(ws_in.device)], dim=-1) # [1, nv_dim, num_ws]
         return ws_atts
