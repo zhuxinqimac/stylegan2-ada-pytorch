@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 24 Sep 2021 20:38:57 AEST
+# --- Last Modified: Sat 25 Sep 2021 00:57:53 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -176,7 +176,7 @@ def training_loop(
         z_origin = torch.randn([1, G.z_dim], device=device)
         c_origin = torch.randn([1, G.c_dim], device=device)
         w_origin = G.mapping(z_origin, c_origin, truncation_psi=0.7) # (1, num_ws, w_dim)
-        for w_scale in [0.2, 0.5, 1, 5]:
+        for w_scale in [0.2, 0.5, 1, 2, 5]:
             # w_walk = get_w_walk(w_origin, M, n_samples_per, trav_walk_scale, recursive_walk=recursive_walk).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
             if per_w_dir:
                 w_walk = get_w_walk_SVD_step_per_w(w_origin, M, n_samples_per, w_scale * trav_walk_scale, w_avg=w_avg, s_values_normed=s_values_normed, v_mat=v_mat, recursive_walk=recursive_walk).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
@@ -288,7 +288,7 @@ def training_loop(
             z_origin = torch.randn([1, G.z_dim], device=device)
             c_origin = torch.randn([1, G.c_dim], device=device)
             w_origin = G.mapping(z_origin, c_origin, truncation_psi=0.7) # (1, num_ws, w_dim)
-            for w_scale in [0.2, 0.5, 1, 5]:
+            for w_scale in [0.2, 0.5, 1, 2, 5]:
                 # w_walk = get_w_walk(w_origin, M, n_samples_per, trav_walk_scale, recursive_walk=recursive_walk).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
                 if per_w_dir:
                     w_walk = get_w_walk_SVD_step_per_w(w_origin, M, n_samples_per, w_scale * trav_walk_scale, w_avg=w_avg, s_values_normed=s_values_normed, v_mat=v_mat, recursive_walk=recursive_walk).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
