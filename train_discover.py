@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 24 Sep 2021 00:32:11 AEST
+# --- Last Modified: Fri 24 Sep 2021 20:32:30 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -204,7 +204,7 @@ def setup_training_loop_kwargs(
                                        divide_mask_sum=spec.divide_mask_sum, use_dynamic_scale=spec.use_dynamic_scale, use_norm_as_mask=spec.use_norm_as_mask,
                                        diff_avg_lerp_rate=spec.diff_avg_lerp_rate, lerp_lamb=spec.lerp_lamb, lerp_norm=spec.lerp_norm,
                                        neg_lamb=spec.neg_lamb, pos_lamb=spec.pos_lamb, neg_on_self=spec.neg_on_self, use_catdiff=spec.use_catdiff,
-                                       per_w_dir=spec.per_w_dir)
+                                       per_w_dir=spec.per_w_dir, sensor_type=spec.sensor_type)
     args.total_kimg = spec.kimg
     args.batch_size = spec.mb
     args.batch_gpu = spec.mb // spec.ref_gpus
@@ -216,8 +216,6 @@ def setup_training_loop_kwargs(
     args.recursive_walk = spec.recursive_walk
     args.show_normD = spec.show_normD
     args.per_w_dir = spec.per_w_dir
-
-    args.loss_kwargs.S_L = 7 if args.sensor_type == 'squeeze' else 5
 
     if kimg is not None:
         assert isinstance(kimg, int)

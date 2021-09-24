@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Thu 23 Sep 2021 23:42:14 AEST
+# --- Last Modified: Fri 24 Sep 2021 20:47:13 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -70,7 +70,7 @@ def normalize_img(img, device):
 
 #----------------------------------------------------------------------------
 class DiscoverLoss(Loss):
-    def __init__(self, device, G_mapping, G_synthesis, M, S, S_L, norm_on_depth,
+    def __init__(self, device, G_mapping, G_synthesis, M, S, norm_on_depth,
                  compose_lamb=0., contrast_lamb=1., significance_lamb=0., batch_gpu=4, n_colors=1,
                  div_lamb=0., norm_lamb=0., var_sample_scale=1.,
                  var_sample_mean=0., sensor_used_layers=5, use_norm_mask=True,
@@ -78,7 +78,7 @@ class DiscoverLoss(Loss):
                  diff_avg_lerp_rate=0.01, lerp_lamb=0., lerp_norm=False,
                  neg_lamb=1., pos_lamb=1., neg_on_self=False, use_catdiff=False,
                  Sim_pkl=None, Comp_pkl=None, Sim_lambda=0., Comp_lambda=0.,
-                 s_values_normed=None, v_mat=None, per_w_dir=False):
+                 s_values_normed=None, v_mat=None, per_w_dir=False, sensor_type='alex'):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -94,7 +94,6 @@ class DiscoverLoss(Loss):
             self.w_dim = self.M.w_dim
         self.per_w_dir = per_w_dir
         self.S = S
-        self.S_L = S_L
 
         self.Sim = None
         self.Comp = None
@@ -133,6 +132,15 @@ class DiscoverLoss(Loss):
         self.pos_lamb = pos_lamb
         self.neg_on_self = neg_on_self
         self.use_catdiff = use_catdiff
+
+        if sensor_type == 'discrim':
+            img = self.run_G_synthesis(torch.randn(1, self.num_ws, self.w_dim).to(self.device)) # [1, c, h, w]
+            self.S_L = int(np.log2(img.shape[-2])) - 2
+            self.use_discrim_as_S = True
+        else:
+            self.S_L = 7 if sensor_type == 'squeeze' else 5
+            self.use_discrim_as_S = False
+        print('loss S_L:', self.S_L)
         assert self.sensor_used_layers <= self.S_L
 
         self.diff_avg_lerp_rate = diff_avg_lerp_rate
@@ -173,12 +181,29 @@ class DiscoverLoss(Loss):
         if all_imgs.size(1) == 1:
             all_imgs = all_imgs.repeat(1, 3, 1, 1)
         for i, imgs in enumerate(all_imgs.split(self.batch_gpu)):
-            feats_tmp_ls = self.S.forward(imgs) # [f1, f2, f3]
+            if self.use_discrim_as_S:
+                feats_tmp_ls = self.discrim_forward(imgs, None)
+            else:
+                feats_tmp_ls = self.S.forward(imgs) # [f1, f2, f3]
             if i == 0:
                 feats_ls = feats_tmp_ls
             else:
                 feats_ls = [torch.cat([feats, feats_tmp_ls[j]]) for j, feats in enumerate(feats_ls)]
         return feats_ls
+
+    def discrim_forward(self, img, c, **block_kwargs):
+        feat_ls = []
+        x = None
+        for res in self.S.block_resolutions:
+            block = getattr(self.S, f'b{res}')
+            x, img = block(x, img, **block_kwargs)
+            feat_ls.append(x)
+
+        # cmap = None
+        # if self.S.c_dim > 0:
+            # cmap = self.S.mapping(None, c)
+        # x = self.S.b4(x, img, cmap)
+        return feat_ls
 
     def run_Sim(self, img):
         # print('Using Sim net...')
@@ -354,7 +379,7 @@ class DiscoverLoss(Loss):
             loss = 0
         else:
             diff_q_ls, diff_pos_ls, diff_neg_ls = [], [], []
-        for kk in range(self.S_L - self.sensor_used_layers, self.S_L):
+        for kk in range(max(0, self.S_L - self.sensor_used_layers), self.S_L):
             if not self.norm_on_depth:
                 diff_q, diff_pos, diff_neg = self.extract_diff_L(outs[kk])
                 loss_kk = self.extract_loss_L(diff_q, diff_pos, diff_neg, kk, pos_neg_idx)
@@ -379,17 +404,17 @@ class DiscoverLoss(Loss):
     def extract_catdiff_loss(self, outs, pos_neg_idx):
         diff_q_ls, diff_pos_ls, diff_neg_ls = [], [], []
         # res = [F.interpolate(diffs[kk], size=(16, 16)) for kk in range(self.L)]
-        for kk in range(self.S_L - self.sensor_used_layers, self.S_L):
+        for kk in range(max(0, self.S_L - self.sensor_used_layers), self.S_L):
             diff_q_kk, diff_pos_kk, diff_neg_kk = self.extract_diff_L(outs[kk])
             diff_q_ls.append(diff_q_kk)
             diff_pos_ls.append(diff_pos_kk)
             diff_neg_ls.append(diff_neg_kk)
         res_q = [F.interpolate(diff_q_ls[kk], size=(32, 32), mode='bilinear', align_corners=False) \
-                 for kk in range(self.S_L - self.sensor_used_layers, self.S_L)]
+                 for kk in range(max(0, self.S_L - self.sensor_used_layers), self.S_L)]
         res_pos = [F.interpolate(diff_pos_ls[kk], size=(32, 32), mode='bilinear', align_corners=False) \
-                   for kk in range(self.S_L - self.sensor_used_layers, self.S_L)]
+                   for kk in range(max(0, self.S_L - self.sensor_used_layers), self.S_L)]
         res_neg = [F.interpolate(diff_neg_ls[kk], size=(32, 32), mode='bilinear', align_corners=False) \
-                   for kk in range(self.S_L - self.sensor_used_layers, self.S_L)]
+                   for kk in range(max(0, self.S_L - self.sensor_used_layers), self.S_L)]
         res_q = torch.cat(res_q, dim=1) # (b//2, c_sum, h, w)
         res_pos = torch.cat(res_pos, dim=1)
         res_neg = torch.cat(res_neg, dim=1)
@@ -604,7 +629,7 @@ class DiscoverLoss(Loss):
                     imgs_all = imgs_all.repeat(1, 3, 1, 1)
                 imgs_orig, imgs_1, imgs_2, imgs_1p2 = imgs_all.split(b)
                 outs_orig, outs_1, outs_2, outs_1p2 \
-                    = self.S.forward(imgs_orig), self.S.forward(imgs_1), self.S.forward(imgs_2), self.S.forward(imgs_1p2) # list [f1, f2, f3, ...]
+                    = self.run_S(imgs_orig), self.run_S(imgs_1), self.run_S(imgs_2), self.run_S(imgs_1p2) # list [f1, f2, f3, ...]
                 diff_1, diff_2, diff_1p2 = get_diff(outs_orig, outs_1), get_diff(outs_orig, outs_2), get_diff(outs_orig, outs_1p2)
                 loss_compose = extract_compose_loss(diff_1, diff_2, diff_1p2)
                 training_stats.report('Loss/M/loss_compose', loss_compose)
@@ -649,7 +674,7 @@ class DiscoverLoss(Loss):
                     if imgs_all.size(1) == 1:
                         imgs_all = imgs_all.repeat(1, 3, 1, 1)
                     imgs_orig, imgs_1 = imgs_all.split(b)
-                    outs_orig, outs_1 = self.S.forward(imgs_orig), self.S.forward(imgs_1) # list [f1, f2, f3, ...]
+                    outs_orig, outs_1 = self.run_S(imgs_orig), self.run_S(imgs_1) # list [f1, f2, f3, ...]
                     diff_1 = get_diff(outs_orig, outs_1)
 
             with torch.autograd.profiler.record_function('Msignificance_loss'):

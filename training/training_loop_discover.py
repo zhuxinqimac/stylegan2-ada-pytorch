@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 24 Sep 2021 17:15:19 AEST
+# --- Last Modified: Fri 24 Sep 2021 20:38:57 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -88,6 +88,10 @@ def training_loop(
     with dnnlib.util.open_url(gan_network_pkl) as f:
         network_dict = legacy.load_network_pkl(f)
         G = network_dict['G_ema'].requires_grad_(False).to(device) # subclass of torch.nn.Module
+        if sensor_type == 'discrim':
+            if rank == 0:
+                print('Loading S (discrim) networks...')
+            S = network_dict['D'].requires_grad_(False).to(device) # subclass of torch.nn.Module
 
     w_avg, s_values, v_mat, s_values_normed = get_SVD(G, gan_network_pkl, device, rank)
     M_kwargs.nav_kwargs.s_values = s_values_normed
@@ -95,10 +99,11 @@ def training_loop(
     M_kwargs.nav_kwargs.w_avg = w_avg
 
     # Load Sensor networks.
-    if rank == 0:
-        print('Loading S networks...')
-    S_raw = lpips.LPIPS(net=sensor_type, lpips=False).net
-    S = S_raw.requires_grad_(False).to(device) # subclass of torch.nn.Module
+    if sensor_type != 'discrim':
+        if rank == 0:
+            print('Loading S networks...')
+        S_raw = lpips.LPIPS(net=sensor_type, lpips=False).net
+        S = S_raw.requires_grad_(False).to(device) # subclass of torch.nn.Module
 
     # Construct Navigator networks.
     if rank == 0:
@@ -126,6 +131,7 @@ def training_loop(
         img = misc.print_module_summary(G, [z, c])
         w = torch.empty([batch_gpu, M.num_ws, M.w_dim], device=device)
         misc.print_module_summary(M, [w])
+        misc.print_module_summary(S, [img, c] if sensor_type == 'discrim' else [img])
 
     # Distribute across GPUs.
     if rank == 0:
@@ -170,7 +176,7 @@ def training_loop(
         z_origin = torch.randn([1, G.z_dim], device=device)
         c_origin = torch.randn([1, G.c_dim], device=device)
         w_origin = G.mapping(z_origin, c_origin, truncation_psi=0.7) # (1, num_ws, w_dim)
-        for w_scale in [0.5, 1, 5, 10]:
+        for w_scale in [0.2, 0.5, 1, 5]:
             # w_walk = get_w_walk(w_origin, M, n_samples_per, trav_walk_scale, recursive_walk=recursive_walk).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
             if per_w_dir:
                 w_walk = get_w_walk_SVD_step_per_w(w_origin, M, n_samples_per, w_scale * trav_walk_scale, w_avg=w_avg, s_values_normed=s_values_normed, v_mat=v_mat, recursive_walk=recursive_walk).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
@@ -282,7 +288,7 @@ def training_loop(
             z_origin = torch.randn([1, G.z_dim], device=device)
             c_origin = torch.randn([1, G.c_dim], device=device)
             w_origin = G.mapping(z_origin, c_origin, truncation_psi=0.7) # (1, num_ws, w_dim)
-            for w_scale in [0.5, 1, 5, 10]:
+            for w_scale in [0.2, 0.5, 1, 5]:
                 # w_walk = get_w_walk(w_origin, M, n_samples_per, trav_walk_scale, recursive_walk=recursive_walk).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
                 if per_w_dir:
                     w_walk = get_w_walk_SVD_step_per_w(w_origin, M, n_samples_per, w_scale * trav_walk_scale, w_avg=w_avg, s_values_normed=s_values_normed, v_mat=v_mat, recursive_walk=recursive_walk).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
