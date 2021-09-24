@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator_per_w.py
 # --- Creation Date: 23-09-2021
-# --- Last Modified: Thu 23 Sep 2021 20:38:21 AEST
+# --- Last Modified: Fri 24 Sep 2021 17:10:14 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -164,6 +164,6 @@ class PerWNavigator(torch.nn.Module):
         # ws_in: [b, num_ws, w_dim]
         # Output: [b, num_ws, nv_dim, w_dim]
         dirs = self.nav_net(ws_in) # [b, num_ws, nv_dim, w_dim]
-        # dirs = normalize_2nd_moment(dirs, dim=-1)
-        dirs = normalize_2nd_moment_to_one(dirs, dim=-1)
+        dirs = normalize_2nd_moment(dirs, dim=-1)
+        # dirs = normalize_2nd_moment_to_one(dirs, dim=-1)
         return dirs
