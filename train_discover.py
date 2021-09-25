@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 24 Sep 2021 20:32:30 AEST
+# --- Last Modified: Sat 25 Sep 2021 16:00:18 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -43,7 +43,7 @@ KEY_BRIEF_NAMES = {'z': 'nv_dim', 'at': 'att_type', 'nt': 'nav_type', 'amf': 'at
                    'divmsum': 'divide_mask_sum', 'dys': 'use_dynamic_scale', 'norasm': 'use_norm_as_mask', 'lr': 'lrate',
                    'lerprt': 'diff_avg_lerp_rate', 'lerp': 'lerp_lamb', 'lerpnm': 'lerp_norm', 'neg': 'neg_lamb', 'pos': 'pos_lamb',
                    'nself': 'neg_on_self', 'catd': 'use_catdiff', 'nper': 'n_samples_per', 'sensor': 'sensor_type', 'ssize': 'save_size',
-                   'wals': 'trav_walk_scale', 'recw': 'recursive_walk', 'shownm': 'show_normD', 'perw': 'per_w_dir'}
+                   'wals': 'trav_walk_scale', 'recw': 'recursive_walk', 'shownm': 'show_normD', 'perw': 'per_w_dir', 'pcas': 'use_pca_scale'}
 KEY_DTYPES = {'nv_dim': int, 'att_type': str, 'nav_type': str, 'att_middle_feat': int, 'nav_middle_feat': int,
               'att_fc_layers': int, 'nav_fc_layers': int, 'att_layers': int, 'norm_on_depth': bool_own,
               'compose_lamb': float, 'contrast_lamb': float, 'significance_lamb': float, 'Sim_lambda': float, 'Comp_lambda': float,
@@ -52,7 +52,7 @@ KEY_DTYPES = {'nv_dim': int, 'att_type': str, 'nav_type': str, 'att_middle_feat'
               'divide_mask_sum': bool_own, 'use_dynamic_scale': bool_own, 'use_norm_as_mask': bool_own, 'lrate': float,
               'diff_avg_lerp_rate': float, 'lerp_lamb': float, 'lerp_norm': bool_own, 'neg_lamb': float, 'pos_lamb': float,
               'neg_on_self': bool_own, 'use_catdiff': bool_own, 'n_samples_per': int, 'sensor_type': str, 'save_size': int,
-              'trav_walk_scale': float, 'recursive_walk': bool_own, 'show_normD': bool_own, 'per_w_dir': bool_own}
+              'trav_walk_scale': float, 'recursive_walk': bool_own, 'show_normD': bool_own, 'per_w_dir': bool_own, 'use_pca_scale': bool_own}
 
 def parse_cfg(cfg):
     '''
@@ -167,7 +167,8 @@ def setup_training_loop_kwargs(
                            loss_n_colors=5, div_lamb=0, norm_lamb=0, var_sample_scale=1, var_sample_mean=0.,
                            sensor_used_layers=5, use_norm_mask=True, divide_mask_sum=True, use_dynamic_scale=True, use_norm_as_mask=False,
                            diff_avg_lerp_rate=0.01, lerp_lamb=0., lerp_norm=False, neg_lamb=1., pos_lamb=1., neg_on_self=False, use_catdiff=False,
-                           n_samples_per=7, sensor_type='alex', save_size=128, trav_walk_scale=0.2, recursive_walk=True, show_normD=True, per_w_dir=True),
+                           n_samples_per=7, sensor_type='alex', save_size=128, trav_walk_scale=0.2, recursive_walk=True, show_normD=True, per_w_dir=True,
+                           use_pca_scale=False),
         # 'stylegan2': dict(ref_gpus=8,  kimg=25000,  mb=32, mbstd=4,  fmaps=1,   lrate=0.002),
     }
 
@@ -204,7 +205,7 @@ def setup_training_loop_kwargs(
                                        divide_mask_sum=spec.divide_mask_sum, use_dynamic_scale=spec.use_dynamic_scale, use_norm_as_mask=spec.use_norm_as_mask,
                                        diff_avg_lerp_rate=spec.diff_avg_lerp_rate, lerp_lamb=spec.lerp_lamb, lerp_norm=spec.lerp_norm,
                                        neg_lamb=spec.neg_lamb, pos_lamb=spec.pos_lamb, neg_on_self=spec.neg_on_self, use_catdiff=spec.use_catdiff,
-                                       per_w_dir=spec.per_w_dir, sensor_type=spec.sensor_type)
+                                       per_w_dir=spec.per_w_dir, sensor_type=spec.sensor_type, use_pca_scale=spec.use_pca_scale)
     args.total_kimg = spec.kimg
     args.batch_size = spec.mb
     args.batch_gpu = spec.mb // spec.ref_gpus

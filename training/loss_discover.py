@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 25 Sep 2021 01:35:43 AEST
+# --- Last Modified: Sat 25 Sep 2021 15:57:29 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -78,7 +78,7 @@ class DiscoverLoss(Loss):
                  diff_avg_lerp_rate=0.01, lerp_lamb=0., lerp_norm=False,
                  neg_lamb=1., pos_lamb=1., neg_on_self=False, use_catdiff=False,
                  Sim_pkl=None, Comp_pkl=None, Sim_lambda=0., Comp_lambda=0.,
-                 s_values_normed=None, v_mat=None, per_w_dir=False, sensor_type='alex'):
+                 s_values_normed=None, v_mat=None, per_w_dir=False, sensor_type='alex', use_pca_scale=False):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -110,6 +110,7 @@ class DiscoverLoss(Loss):
 
         self.s_values_normed = s_values_normed
         self.v_mat = v_mat
+        self.use_pca_scale = use_pca_scale
 
         self.n_colors = n_colors
         self.batch_gpu = batch_gpu
@@ -468,13 +469,14 @@ class DiscoverLoss(Loss):
 
 
     def get_dir_scale(self, delta):
-        # # delta: [b, num_ws, w_dim]
-        # s_values_x2 = self.s_values_normed * 2 # Based on range [-2, 2]
-        # dir_in_pca = torch.matmul(delta.mean(1), self.v_mat) # [b, q]
-        # dir_in_pca_norm = F.normalize(dir_in_pca, dim=1) # [b, q]
-        # coef_t = 1. / (dir_in_pca_norm.square() / s_values_x2[np.newaxis, ...].square()).sum(1, keepdim=True).sqrt() # [b, 1], 1/(x^2/a^2 + y^2/b^2, ...).sqrt()
-        # dir_len_semi = torch.linalg.norm(dir_in_pca_norm * coef_t, dim=-1) # [b]
-        # return dir_len_semi
+        # delta: [b, num_ws, w_dim]
+        if self.use_pca_scale:
+            s_values_x2 = self.s_values_normed * 2 # Based on range [-2, 2]
+            dir_in_pca = torch.matmul(delta.mean(1), self.v_mat) # [b, q]
+            dir_in_pca_norm = F.normalize(dir_in_pca, dim=1) # [b, q]
+            coef_t = 1. / (dir_in_pca_norm.square() / s_values_x2[np.newaxis, ...].square()).sum(1, keepdim=True).sqrt() # [b, 1], 1/(x^2/a^2 + y^2/b^2, ...).sqrt()
+            dir_len_semi = torch.linalg.norm(dir_in_pca_norm * coef_t, dim=-1) # [b]
+            return dir_len_semi
         return torch.ones(delta.shape[0]).to(delta.device)
 
     def accumulate_gradients(self, phase, sync, gain):
