@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 25 Sep 2021 15:57:29 AEST
+# --- Last Modified: Sun 26 Sep 2021 22:45:31 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -78,7 +78,8 @@ class DiscoverLoss(Loss):
                  diff_avg_lerp_rate=0.01, lerp_lamb=0., lerp_norm=False,
                  neg_lamb=1., pos_lamb=1., neg_on_self=False, use_catdiff=False,
                  Sim_pkl=None, Comp_pkl=None, Sim_lambda=0., Comp_lambda=0.,
-                 s_values_normed=None, v_mat=None, per_w_dir=False, sensor_type='alex', use_pca_scale=False):
+                 s_values_normed=None, v_mat=None, per_w_dir=False, sensor_type='alex', use_pca_scale=False,
+                 mask_after_square=False, union_spatial=False):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -94,6 +95,8 @@ class DiscoverLoss(Loss):
             self.w_dim = self.M.w_dim
         self.per_w_dir = per_w_dir
         self.S = S
+        self.mask_after_square = mask_after_square
+        self.union_spatial = union_spatial
 
         self.Sim = None
         self.Comp = None
@@ -259,15 +262,27 @@ class DiscoverLoss(Loss):
         return diff_q, diff_pos, diff_neg
 
     def extract_loss_L_by_maskdiff(self, diff_q, diff_pos, diff_neg, mask_q, mask_pos, mask_neg, idx):
-        mask_pos_comb = mask_q * mask_pos
-        mask_neg_comb = mask_q * mask_neg
+        if self.union_spatial:
+            mask_pos_comb = mask_q + mask_pos
+            mask_neg_comb = mask_q + mask_neg
+        else:
+            mask_pos_comb = mask_q * mask_pos
+            mask_neg_comb = mask_q * mask_neg
 
         if self.use_norm_mask:
-            cos_sim_pos = self.cos_fn(diff_q, diff_pos) * mask_pos_comb
-            cos_sim_neg = self.cos_fn(diff_q, diff_neg) * mask_neg_comb
+            if self.mask_after_square:
+                cos_sim_pos = self.cos_fn(diff_q, diff_pos)
+                cos_sim_neg = self.cos_fn(diff_q, diff_neg)
+            else:
+                cos_sim_pos = self.cos_fn(diff_q, diff_pos) * mask_pos_comb
+                cos_sim_neg = self.cos_fn(diff_q, diff_neg) * mask_neg_comb
             if self.divide_mask_sum:
-                loss_pos = (-cos_sim_pos**2).sum(dim=[1,2]) / (mask_pos_comb.sum(dim=[1,2]) + 1e-6) # (0.5batch)
-                loss_neg = (cos_sim_neg**2).sum(dim=[1,2]) / (mask_neg_comb.sum(dim=[1,2]) + 1e-6)
+                if self.mask_after_square:
+                    loss_pos = (-cos_sim_pos**2 * mask_pos_comb).sum(dim=[1,2]) / (mask_pos_comb.sum(dim=[1,2]) + 1e-6) # (0.5batch)
+                    loss_neg = (cos_sim_neg**2 * mask_neg_comb).sum(dim=[1,2]) / (mask_neg_comb.sum(dim=[1,2]) + 1e-6)
+                else:
+                    loss_pos = (-cos_sim_pos**2).sum(dim=[1,2]) / (mask_pos_comb.sum(dim=[1,2]) + 1e-6) # (0.5batch)
+                    loss_neg = (cos_sim_neg**2).sum(dim=[1,2]) / (mask_neg_comb.sum(dim=[1,2]) + 1e-6)
             else:
                 loss_pos = (-cos_sim_pos**2).mean(dim=[1,2]) # (0.5batch)
                 loss_neg = (cos_sim_neg**2).mean(dim=[1,2])
