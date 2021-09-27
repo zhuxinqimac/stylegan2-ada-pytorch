@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 25 Sep 2021 01:28:03 AEST
+# --- Last Modified: Mon 27 Sep 2021 17:11:02 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -22,6 +22,7 @@ from torch_utils import misc
 from torch_utils import persistence
 from training.networks import FullyConnectedLayer
 from training.networks import normalize_2nd_moment
+from training.gaussian_filter import GaussianSmoothing
 
 def construct_fc_layers(in_dim, fc_layers, middle_feat, out_dim, act='relu'):
     net_ls = []
@@ -73,11 +74,15 @@ class FixedAttentioner(NoneAttentioner):
         num_ws,                     # Number of intermediate latents for synthesis net input.
         w_dim,                      # Intermediate latent (W) dimensionality.
         att_layers,                 # Number of ws attention layers.
+        filter_size=0,              # Kernel size if use GaussianSmoothing (0 means not using it).
         **kwargs,
     ):
         super().__init__(nv_dim, num_ws, w_dim, att_layers)
         self.att_logits = nn.Parameter(torch.normal(mean=torch.zeros(nv_dim, self.att_layers), std=1),
                                        requires_grad=True)
+        if filter_size > 0:
+            self.filter_size = filter_size
+            self.filter = GaussianSmoothing(nv_dim, filter_size, 1, dim=1)
 
     def forward(self, ws_in):
         # ws_in: [b, num_ws, w_dim]
@@ -85,6 +90,8 @@ class FixedAttentioner(NoneAttentioner):
         ws_atts = torch.softmax(self.att_logits, dim=-1).view(1, self.nv_dim, self.att_layers)
         ws_atts = torch.cat([ws_atts, torch.zeros([1, self.nv_dim, self.num_ws - self.att_layers],
                                                   dtype=ws_in.dtype).to(ws_in.device)], dim=-1) # [1, nv_dim, num_ws]
+        if self.filter_size > 0:
+            ws_atts = self.filter(F.pad(ws_atts, [(self.filter_size-1)//2, (self.filter_size-1)//2], 'reflect'))
         ws_atts = ws_atts.repeat(ws_in.shape[0], 1, 1).to(ws_in.device)
         return ws_atts
 
@@ -97,6 +104,7 @@ class Ada1wAttentioner(NoneAttentioner):
         att_layers,                 # Number of ws attention layers.
         middle_feat=128,            # Intermediate feature dims in self.net.
         att_fc_layers=1,            # Number of FC layers.
+        filter_size=0,              # Kernel size if use GaussianSmoothing (0 means not using it).
         **kwargs,
     ):
         '''
@@ -104,6 +112,9 @@ class Ada1wAttentioner(NoneAttentioner):
         '''
         super().__init__(nv_dim, num_ws, w_dim, att_layers)
         self.net = construct_fc_layers(w_dim, att_fc_layers, middle_feat, nv_dim * self.att_layers)
+        if filter_size > 0:
+            self.filter_size = filter_size
+            self.filter = GaussianSmoothing(nv_dim, filter_size, 1, dim=1)
 
     def forward(self, ws_in):
         # ws_in: [b, num_ws, w_dim]
@@ -111,6 +122,8 @@ class Ada1wAttentioner(NoneAttentioner):
         b = ws_in.shape[0]
         logits = self.net(ws_in.mean(1))
         ws_atts = torch.softmax(logits.view(b, self.nv_dim, self.att_layers), dim=-1)
+        if self.filter_size > 0:
+            ws_atts = self.filter(F.pad(ws_atts, [(self.filter_size-1)//2, (self.filter_size-1)//2], 'reflect'))
         ws_atts = torch.cat([ws_atts, torch.zeros([b, self.nv_dim, self.num_ws - self.att_layers],
                                                   dtype=ws_in.dtype).to(ws_in.device)], dim=-1) # [b, nv_dim, num_ws]
         return ws_atts
@@ -124,6 +137,7 @@ class AdaALLwAttentioner(NoneAttentioner):
         att_layers,                 # Number of ws attention layers.
         middle_feat=128,            # Intermediate feature dims in self.net.
         att_fc_layers=1,            # Number of FC layers.
+        filter_size=0,              # Kernel size if use GaussianSmoothing (0 means not using it).
         **kwargs,
     ):
         '''
@@ -133,6 +147,9 @@ class AdaALLwAttentioner(NoneAttentioner):
         # self.net = nn.Sequential(FullyConnectedLayer(num_ws * w_dim, middle_feat, activation='relu'),
                                  # FullyConnectedLayer(middle_feat, nv_dim * self.att_layers, activation='linear'))
         self.net = construct_fc_layers(num_ws * w_dim, att_fc_layers, middle_feat, nv_dim * self.att_layers)
+        if filter_size > 0:
+            self.filter_size = filter_size
+            self.filter = GaussianSmoothing(nv_dim, filter_size, 1, dim=1)
 
     def forward(self, ws_in):
         # ws_in: [b, num_ws, w_dim]
@@ -140,6 +157,8 @@ class AdaALLwAttentioner(NoneAttentioner):
         b = ws_in.shape[0]
         logits = self.net(ws_in.flatten(1))
         ws_atts = torch.softmax(logits.view(b, self.nv_dim, self.att_layers), dim=-1)
+        if self.filter_size > 0:
+            ws_atts = self.filter(F.pad(ws_atts, [(self.filter_size-1)//2, (self.filter_size-1)//2], 'reflect'))
         ws_atts = torch.cat([ws_atts, torch.zeros([b, self.nv_dim, self.num_ws - self.att_layers],
                                                   dtype=ws_in.dtype).to(ws_in.device)], dim=-1) # [b, nv_dim, num_ws]
         return ws_atts
