@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 27 Sep 2021 17:11:02 AEST
+# --- Last Modified: Mon 27 Sep 2021 21:22:23 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -158,6 +158,7 @@ class AdaALLwAttentioner(NoneAttentioner):
         logits = self.net(ws_in.flatten(1))
         ws_atts = torch.softmax(logits.view(b, self.nv_dim, self.att_layers), dim=-1)
         if self.filter_size > 0:
+            print('using att_filter')
             ws_atts = self.filter(F.pad(ws_atts, [(self.filter_size-1)//2, (self.filter_size-1)//2], 'reflect'))
         ws_atts = torch.cat([ws_atts, torch.zeros([b, self.nv_dim, self.num_ws - self.att_layers],
                                                   dtype=ws_in.dtype).to(ws_in.device)], dim=-1) # [b, nv_dim, num_ws]
