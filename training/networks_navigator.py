@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 27 Sep 2021 21:27:10 AEST
+# --- Last Modified: Tue 28 Sep 2021 02:03:41 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -75,6 +75,7 @@ class FixedAttentioner(NoneAttentioner):
         w_dim,                      # Intermediate latent (W) dimensionality.
         att_layers,                 # Number of ws attention layers.
         filter_size=0,              # Kernel size if use GaussianSmoothing (0 means not using it).
+        filter_std=1,               # Kernel std if use GaussianSmoothing.
         **kwargs,
     ):
         super().__init__(nv_dim, num_ws, w_dim, att_layers)
@@ -82,7 +83,8 @@ class FixedAttentioner(NoneAttentioner):
                                        requires_grad=True)
         if filter_size > 0:
             self.filter_size = filter_size
-            self.filter = GaussianSmoothing(nv_dim, filter_size, 1, dim=1)
+            self.filter_std = filter_std
+            self.filter = GaussianSmoothing(nv_dim, filter_size, filter_std, dim=1)
 
     def forward(self, ws_in):
         # ws_in: [b, num_ws, w_dim]
@@ -105,6 +107,7 @@ class Ada1wAttentioner(NoneAttentioner):
         middle_feat=128,            # Intermediate feature dims in self.net.
         att_fc_layers=1,            # Number of FC layers.
         filter_size=0,              # Kernel size if use GaussianSmoothing (0 means not using it).
+        filter_std=1,               # Kernel std if use GaussianSmoothing.
         **kwargs,
     ):
         '''
@@ -114,7 +117,8 @@ class Ada1wAttentioner(NoneAttentioner):
         self.net = construct_fc_layers(w_dim, att_fc_layers, middle_feat, nv_dim * self.att_layers)
         if filter_size > 0:
             self.filter_size = filter_size
-            self.filter = GaussianSmoothing(nv_dim, filter_size, 1, dim=1)
+            self.filter_std = filter_std
+            self.filter = GaussianSmoothing(nv_dim, filter_size, filter_std, dim=1)
 
     def forward(self, ws_in):
         # ws_in: [b, num_ws, w_dim]
@@ -138,6 +142,7 @@ class AdaALLwAttentioner(NoneAttentioner):
         middle_feat=128,            # Intermediate feature dims in self.net.
         att_fc_layers=1,            # Number of FC layers.
         filter_size=0,              # Kernel size if use GaussianSmoothing (0 means not using it).
+        filter_std=1,               # Kernel std if use GaussianSmoothing.
         **kwargs,
     ):
         '''
@@ -149,7 +154,8 @@ class AdaALLwAttentioner(NoneAttentioner):
         self.net = construct_fc_layers(num_ws * w_dim, att_fc_layers, middle_feat, nv_dim * self.att_layers)
         if filter_size > 0:
             self.filter_size = filter_size
-            self.filter = GaussianSmoothing(nv_dim, filter_size, 1, dim=1)
+            self.filter_std = filter_std
+            self.filter = GaussianSmoothing(nv_dim, filter_size, filter_std, dim=1)
 
     def forward(self, ws_in):
         # ws_in: [b, num_ws, w_dim]
