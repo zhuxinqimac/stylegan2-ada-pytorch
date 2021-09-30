@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 01 Oct 2021 02:28:35 AEST
+# --- Last Modified: Fri 01 Oct 2021 02:31:44 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -579,7 +579,6 @@ class DiscoverLoss(Loss):
                 # Sample variation scales.
                 if self.use_dynamic_scale:
                     if self.use_pca_sign:
-                        print('using pca_sign ')
                         q_pos_randn = torch.randn(b//2, device=delta.device).abs()
                         scale_q = ((q_pos_randn * self.var_sample_scale * step_scale_pos + self.var_sample_mean) * step_sign_q).view(b//2, 1, 1)
                         scale_pos = ((q_pos_randn * self.var_sample_scale * step_scale_pos + self.var_sample_mean) * step_sign_pos).view(b//2, 1, 1)
