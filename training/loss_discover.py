@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sun 26 Sep 2021 22:45:31 AEST
+# --- Last Modified: Fri 01 Oct 2021 01:55:11 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -78,7 +78,8 @@ class DiscoverLoss(Loss):
                  diff_avg_lerp_rate=0.01, lerp_lamb=0., lerp_norm=False,
                  neg_lamb=1., pos_lamb=1., neg_on_self=False, use_catdiff=False,
                  Sim_pkl=None, Comp_pkl=None, Sim_lambda=0., Comp_lambda=0.,
-                 s_values_normed=None, v_mat=None, per_w_dir=False, sensor_type='alex', use_pca_scale=False,
+                 s_values_normed=None, v_mat=None, w_avg=None, per_w_dir=False, sensor_type='alex',
+                 use_pca_scale=False, use_pca_sign=False,
                  mask_after_square=False, union_spatial=False):
         super().__init__()
         self.device = device
@@ -113,7 +114,9 @@ class DiscoverLoss(Loss):
 
         self.s_values_normed = s_values_normed
         self.v_mat = v_mat
+        self.w_avg = w_avg
         self.use_pca_scale = use_pca_scale
+        self.use_pca_sign = use_pca_sign
 
         self.n_colors = n_colors
         self.batch_gpu = batch_gpu
@@ -494,6 +497,15 @@ class DiscoverLoss(Loss):
             return dir_len_semi
         return torch.ones(delta.shape[0]).to(delta.device)
 
+    def get_dir_sign(self, ws_origin, delta):
+        # ws_orig: [b, num_ws, w_dim]
+        # delta: [b, num_ws, w_dim]
+        if self.use_pca_sign:
+            w_in_pca = torch.matmul(ws_origin.mean(1) - self.w_avg[np.newaxis, ...], self.v_mat) # [b, q]
+            dir_in_pca = torch.matmul(delta.mean(1), self.v_mat) # [b, q]
+            return -(w_in_pca * dir_in_pca).sum(1).sign() # [b]
+        return torch.ones(delta.shape[0]).to(delta.device)
+
     def accumulate_gradients(self, phase, sync, gain):
         assert phase in ['Mall', 'Mcompose', 'Mdiverse', 'Mcontrast']
         do_Mcompose = (phase in ['Mall', 'Mcompose']) and (self.compose_lamb != 0)
@@ -560,11 +572,17 @@ class DiscoverLoss(Loss):
                         delta_neg = torch.gather(delta[b//2:], 1, pos_neg_idx[:, 1].view(b//2, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim))[:, 0] # [b//2, num_ws, w_dim]
                     step_scale_pos = self.get_dir_scale(delta_pos)
                     step_scale_neg = self.get_dir_scale(delta_neg)
+                    step_sign_pos = self.get_dir_sign(ws_orig, delta_pos)
+                    step_sign_neg = self.get_dir_sign(ws_orig, delta_neg)
 
                 # Sample variation scales.
                 if self.use_dynamic_scale:
-                    scale_pos = (torch.randn(b//2, device=delta.device) * self.var_sample_scale * step_scale_pos + self.var_sample_mean).view(b//2, 1, 1)
-                    scale_neg = (torch.randn(b//2, device=delta.device) * self.var_sample_scale * step_scale_neg + self.var_sample_mean).view(b//2, 1, 1)
+                    if self.use_pca_sign:
+                        scale_pos = ((torch.randn(b//2, device=delta.device).abs() * self.var_sample_scale * step_scale_pos + self.var_sample_mean) * step_sign_pos).view(b//2, 1, 1)
+                        scale_neg = ((torch.randn(b//2, device=delta.device).abs() * self.var_sample_scale * step_scale_neg + self.var_sample_mean) * step_sign_neg).view(b//2, 1, 1)
+                    else:
+                        scale_pos = (torch.randn(b//2, device=delta.device) * self.var_sample_scale * step_scale_pos + self.var_sample_mean).view(b//2, 1, 1)
+                        scale_neg = (torch.randn(b//2, device=delta.device) * self.var_sample_scale * step_scale_neg + self.var_sample_mean).view(b//2, 1, 1)
                 else:
                     scale_pos = (self.var_sample_scale * step_scale_pos).view(b//2, 1, 1)
                     scale_neg = (self.var_sample_scale * step_scale_neg).view(b//2, 1, 1)

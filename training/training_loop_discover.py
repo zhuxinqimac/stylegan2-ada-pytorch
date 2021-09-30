@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 25 Sep 2021 00:57:53 AEST
+# --- Last Modified: Fri 01 Oct 2021 01:35:16 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -152,7 +152,7 @@ def training_loop(
     # Setup training phases.
     if rank == 0:
         print('Setting up training phases...')
-    loss = dnnlib.util.construct_class_by_name(device=device, s_values_normed=s_values_normed, v_mat=v_mat,
+    loss = dnnlib.util.construct_class_by_name(device=device, s_values_normed=s_values_normed, v_mat=v_mat, w_avg=w_avg,
                                                **ddp_modules, **loss_kwargs) # subclass of training.loss.Loss
     phases = []
     for name, module, opt_kwargs in [('M', M, M_opt_kwargs)]:
