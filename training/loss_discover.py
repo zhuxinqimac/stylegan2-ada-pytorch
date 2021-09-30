@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 01 Oct 2021 02:19:16 AEST
+# --- Last Modified: Fri 01 Oct 2021 02:28:35 AEST
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -572,24 +572,29 @@ class DiscoverLoss(Loss):
                         delta_neg = torch.gather(delta[b//2:], 1, pos_neg_idx[:, 1].view(b//2, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim))[:, 0] # [b//2, num_ws, w_dim]
                     step_scale_pos = self.get_dir_scale(delta_pos)
                     step_scale_neg = self.get_dir_scale(delta_neg)
-                    step_sign_pos = self.get_dir_sign(ws_orig, delta_pos)
-                    step_sign_neg = self.get_dir_sign(ws_orig, delta_neg)
+                    step_sign_q = self.get_dir_sign(ws_orig[:b//2], delta_q)
+                    step_sign_pos = self.get_dir_sign(ws_orig[b//2:], delta_pos)
+                    step_sign_neg = self.get_dir_sign(ws_orig[:b//2] if self.neg_on_self else ws_orig[b//2:], delta_neg)
 
                 # Sample variation scales.
                 if self.use_dynamic_scale:
                     if self.use_pca_sign:
                         print('using pca_sign ')
-                        scale_pos = ((torch.randn(b//2, device=delta.device).abs() * self.var_sample_scale * step_scale_pos + self.var_sample_mean) * step_sign_pos).view(b//2, 1, 1)
+                        q_pos_randn = torch.randn(b//2, device=delta.device).abs()
+                        scale_q = ((q_pos_randn * self.var_sample_scale * step_scale_pos + self.var_sample_mean) * step_sign_q).view(b//2, 1, 1)
+                        scale_pos = ((q_pos_randn * self.var_sample_scale * step_scale_pos + self.var_sample_mean) * step_sign_pos).view(b//2, 1, 1)
                         scale_neg = ((torch.randn(b//2, device=delta.device).abs() * self.var_sample_scale * step_scale_neg + self.var_sample_mean) * step_sign_neg).view(b//2, 1, 1)
                     else:
                         scale_pos = (torch.randn(b//2, device=delta.device) * self.var_sample_scale * step_scale_pos + self.var_sample_mean).view(b//2, 1, 1)
                         scale_neg = (torch.randn(b//2, device=delta.device) * self.var_sample_scale * step_scale_neg + self.var_sample_mean).view(b//2, 1, 1)
+                        scale_q = scale_pos
                 else:
                     scale_pos = (self.var_sample_scale * step_scale_pos).view(b//2, 1, 1)
                     scale_neg = (self.var_sample_scale * step_scale_neg).view(b//2, 1, 1)
+                    scale_q = scale_pos
 
                 # Apply both positive and negative variations to ws.
-                ws_q = ws_orig[:b//2] + (delta_q * scale_pos) # (b//2, num_ws, w_dim)
+                ws_q = ws_orig[:b//2] + (delta_q * scale_q) # (b//2, num_ws, w_dim)
                 ws_pos = ws_orig[b//2:] + (delta_pos * scale_pos) # (b//2, num_ws, w_dim)
                 if self.neg_on_self:
                     ws_neg = ws_orig[:b//2] + (delta_neg * scale_neg) # (b//2, num_ws, w_dim)
