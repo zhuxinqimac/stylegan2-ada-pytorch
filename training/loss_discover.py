@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 04 Oct 2021 00:39:05 AEDT
+# --- Last Modified: Mon 04 Oct 2021 00:46:01 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -582,12 +582,14 @@ class DiscoverLoss(Loss):
                     if self.use_pca_sign:
                         if self.use_uniform:
                             q_pos_randn = torch.rand(b//2, device=delta.device) / 2.
-                            print('using uniform')
                         else:
                             q_pos_randn = torch.randn(b//2, device=delta.device).abs()
                         scale_q = ((q_pos_randn * self.var_sample_scale * step_scale_pos + self.var_sample_mean) * step_sign_q).view(b//2, 1, 1)
                         scale_pos = ((q_pos_randn * self.var_sample_scale * step_scale_pos + self.var_sample_mean) * step_sign_pos).view(b//2, 1, 1)
-                        scale_neg = ((torch.randn(b//2, device=delta.device).abs() * self.var_sample_scale * step_scale_neg + self.var_sample_mean) * step_sign_neg).view(b//2, 1, 1)
+                        if self.use_uniform:
+                            scale_neg = ((torch.rand(b//2, device=delta.device) / 2. * self.var_sample_scale * step_scale_neg + self.var_sample_mean) * step_sign_neg).view(b//2, 1, 1)
+                        else:
+                            scale_neg = ((torch.randn(b//2, device=delta.device).abs() * self.var_sample_scale * step_scale_neg + self.var_sample_mean) * step_sign_neg).view(b//2, 1, 1)
                     else:
                         scale_pos = (torch.randn(b//2, device=delta.device) * self.var_sample_scale * step_scale_pos + self.var_sample_mean).view(b//2, 1, 1)
                         scale_neg = (torch.randn(b//2, device=delta.device) * self.var_sample_scale * step_scale_neg + self.var_sample_mean).view(b//2, 1, 1)
