@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 01 Oct 2021 02:31:44 AEST
+# --- Last Modified: Mon 04 Oct 2021 00:39:05 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -79,7 +79,7 @@ class DiscoverLoss(Loss):
                  neg_lamb=1., pos_lamb=1., neg_on_self=False, use_catdiff=False,
                  Sim_pkl=None, Comp_pkl=None, Sim_lambda=0., Comp_lambda=0.,
                  s_values_normed=None, v_mat=None, w_avg=None, per_w_dir=False, sensor_type='alex',
-                 use_pca_scale=False, use_pca_sign=False,
+                 use_pca_scale=False, use_pca_sign=False, use_uniform=False,
                  mask_after_square=False, union_spatial=False):
         super().__init__()
         self.device = device
@@ -98,6 +98,7 @@ class DiscoverLoss(Loss):
         self.S = S
         self.mask_after_square = mask_after_square
         self.union_spatial = union_spatial
+        self.use_uniform = use_uniform
 
         self.Sim = None
         self.Comp = None
@@ -579,7 +580,11 @@ class DiscoverLoss(Loss):
                 # Sample variation scales.
                 if self.use_dynamic_scale:
                     if self.use_pca_sign:
-                        q_pos_randn = torch.randn(b//2, device=delta.device).abs()
+                        if self.use_uniform:
+                            q_pos_randn = torch.rand(b//2, device=delta.device) / 2.
+                            print('using uniform')
+                        else:
+                            q_pos_randn = torch.randn(b//2, device=delta.device).abs()
                         scale_q = ((q_pos_randn * self.var_sample_scale * step_scale_pos + self.var_sample_mean) * step_sign_q).view(b//2, 1, 1)
                         scale_pos = ((q_pos_randn * self.var_sample_scale * step_scale_pos + self.var_sample_mean) * step_sign_pos).view(b//2, 1, 1)
                         scale_neg = ((torch.randn(b//2, device=delta.device).abs() * self.var_sample_scale * step_scale_neg + self.var_sample_mean) * step_sign_neg).view(b//2, 1, 1)
@@ -647,8 +652,12 @@ class DiscoverLoss(Loss):
 
                 # Sample variation scales.
                 if self.use_dynamic_scale:
-                    scale_1 = (torch.randn(b, device=delta.device) * self.var_sample_scale * step_scale_1 + self.var_sample_mean).view(b, 1, 1)
-                    scale_2 = (torch.randn(b, device=delta.device) * self.var_sample_scale * step_scale_2 + self.var_sample_mean).view(b, 1, 1)
+                    if self.use_uniform:
+                        scale_1 = ((torch.rand(b, device=delta.device) - 0.5) * 2. * self.var_sample_scale * step_scale_1 + self.var_sample_mean).view(b, 1, 1)
+                        scale_2 = ((torch.rand(b, device=delta.device) - 0.5) * 2. * self.var_sample_scale * step_scale_2 + self.var_sample_mean).view(b, 1, 1)
+                    else:
+                        scale_1 = (torch.randn(b, device=delta.device) * self.var_sample_scale * step_scale_1 + self.var_sample_mean).view(b, 1, 1)
+                        scale_2 = (torch.randn(b, device=delta.device) * self.var_sample_scale * step_scale_2 + self.var_sample_mean).view(b, 1, 1)
                 else:
                     scale_1 = (self.var_sample_scale * step_scale_1).view(b, 1, 1)
                     scale_2 = (self.var_sample_scale * step_scale_2).view(b, 1, 1)
@@ -699,7 +708,10 @@ class DiscoverLoss(Loss):
 
                     # Sample variation scales.
                     if self.use_dynamic_scale:
-                        scale_1 = (torch.randn(b, device=delta.device) * self.var_sample_scale * step_scale_1 + self.var_sample_mean).view(b, 1, 1)
+                        if self.use_uniform:
+                            scale_1 = ((torch.rand(b, device=delta.device) - 0.5) * 2. * self.var_sample_scale * step_scale_1 + self.var_sample_mean).view(b, 1, 1)
+                        else:
+                            scale_1 = (torch.randn(b, device=delta.device) * self.var_sample_scale * step_scale_1 + self.var_sample_mean).view(b, 1, 1)
                     else:
                         scale_1 = (self.var_sample_scale * step_scale_1).view(b, 1, 1)
 
@@ -754,7 +766,10 @@ class DiscoverLoss(Loss):
 
                 # Sample variation scales.
                 if self.use_dynamic_scale:
-                    scale_1 = (torch.randn(b, device=delta.device) * self.var_sample_scale * step_scale + self.var_sample_mean).view(b, 1, 1)
+                    if self.use_uniform:
+                        scale_1 = ((torch.rand(b, device=delta.device) - 0.5) * 2. * self.var_sample_scale * step_scale + self.var_sample_mean).view(b, 1, 1)
+                    else:
+                        scale_1 = (torch.randn(b, device=delta.device) * self.var_sample_scale * step_scale + self.var_sample_mean).view(b, 1, 1)
                 else:
                     scale_1 = (self.var_sample_scale * step_scale).view(b, 1, 1)
 
@@ -807,8 +822,12 @@ class DiscoverLoss(Loss):
 
                 # Sample variation scales.
                 if self.use_dynamic_scale:
-                    scale_1 = (torch.randn(b, device=delta.device) * self.var_sample_scale * step_scale_1 + self.var_sample_mean).view(b, 1, 1)
-                    scale_2 = (torch.randn(b, device=delta.device) * self.var_sample_scale * step_scale_2 + self.var_sample_mean).view(b, 1, 1)
+                    if self.use_uniform:
+                        scale_1 = ((torch.rand(b, device=delta.device) - 0.5) * 2. * self.var_sample_scale * step_scale_1 + self.var_sample_mean).view(b, 1, 1)
+                        scale_2 = ((torch.rand(b, device=delta.device) - 0.5) * 2. * self.var_sample_scale * step_scale_2 + self.var_sample_mean).view(b, 1, 1)
+                    else:
+                        scale_1 = (torch.randn(b, device=delta.device) * self.var_sample_scale * step_scale_1 + self.var_sample_mean).view(b, 1, 1)
+                        scale_2 = (torch.randn(b, device=delta.device) * self.var_sample_scale * step_scale_2 + self.var_sample_mean).view(b, 1, 1)
                 else:
                     scale_1 = (self.var_sample_scale * step_scale_1).view(b, 1, 1)
                     scale_2 = (self.var_sample_scale * step_scale_2).view(b, 1, 1)
