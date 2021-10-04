@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 01 Oct 2021 01:35:16 AEST
+# --- Last Modified: Mon 04 Oct 2021 22:38:38 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -99,7 +99,7 @@ def training_loop(
     M_kwargs.nav_kwargs.w_avg = w_avg
 
     # Load Sensor networks.
-    if sensor_type != 'discrim':
+    if (loss_kwargs.contrast_lamb != 0 or loss_kwargs.compose_lamb != 0 or loss_kwargs.significance_lamb != 0) and (sensor_type != 'discrim'):
         if rank == 0:
             print('Loading S networks...')
         S_raw = lpips.LPIPS(net=sensor_type, lpips=False).net
@@ -111,6 +111,10 @@ def training_loop(
     common_kwargs = dict(c_dim=G.c_dim, w_dim=G.w_dim, num_ws=G.num_ws)
     M = dnnlib.util.construct_class_by_name(**M_kwargs, **common_kwargs).train().requires_grad_(False).to(device) # subclass of torch.nn.Module
 
+    R = None
+    if loss_kwargs.recog_lamb != 0:
+        R = dnnlib.util.construct_class_by_name(**R_kwargs, **common_kwargs).train().requires_grad_(False).to(device) # subclass of torch.nn.Module
+
     # Resume from existing pickle.
     if (resume_pkl is not None) and (rank == 0):
         print(f'Resuming from "{resume_pkl}"')
@@ -118,8 +122,9 @@ def training_loop(
             # resume_data = legacy.load_network_pkl(f)
         with open(resume_pkl, 'rb') as f:
             resume_data = pickle.load(f)
-        for name, module in [('M', M)]:
-            misc.copy_params_and_buffers(resume_data[name], module, require_all=False)
+        for name, module in [('M', M), ('R', R)]:
+            if module is not None:
+                misc.copy_params_and_buffers(resume_data[name], module, require_all=False)
 
     if rank == 0:
         print('Passed resume')
@@ -132,14 +137,16 @@ def training_loop(
         w = torch.empty([batch_gpu, M.num_ws, M.w_dim], device=device)
         misc.print_module_summary(M, [w])
         misc.print_module_summary(S, [img, c] if sensor_type == 'discrim' else [img])
+        if R is not None:
+            misc.print_module_summary(R, [torch.cat([img, img], dim=1)])
 
     # Distribute across GPUs.
     if rank == 0:
         print(f'Distributing across {num_gpus} GPUs...')
     ddp_modules = dict()
-    for name, module in [('G_mapping', G.mapping), ('G_synthesis', G.synthesis), ('M', M), ('S', S)]:
+    for name, module in [('G_mapping', G.mapping), ('G_synthesis', G.synthesis), ('M', M), ('S', S), ('R', R)]:
         if (num_gpus > 1) and (module is not None) and len(list(module.parameters())) != 0:
-            if name == 'M':
+            if (name == 'M') or (name == 'R' and module is not None):
                 module.requires_grad_(True)
                 module = torch.nn.parallel.DistributedDataParallel(module, device_ids=[device], broadcast_buffers=False)
                 module.requires_grad_(False)
@@ -155,9 +162,18 @@ def training_loop(
     loss = dnnlib.util.construct_class_by_name(device=device, s_values_normed=s_values_normed, v_mat=v_mat, w_avg=w_avg,
                                                **ddp_modules, **loss_kwargs) # subclass of training.loss.Loss
     phases = []
-    for name, module, opt_kwargs in [('M', M, M_opt_kwargs)]:
-        opt = dnnlib.util.construct_class_by_name(params=module.parameters(), **opt_kwargs) # subclass of torch.optim.Optimizer
-        phases += [dnnlib.EasyDict(name=name+'all', module=module, opt=opt, interval=1)]
+    # for name, module, opt_kwargs in [('M', M, M_opt_kwargs)]:
+        # opt = dnnlib.util.construct_class_by_name(params=module.parameters(), **opt_kwargs) # subclass of torch.optim.Optimizer
+        # phases += [dnnlib.EasyDict(name=name+'all', module=module, opt=opt, interval=1)]
+    if R is None:
+        opt = dnnlib.util.construct_class_by_name(params=M.parameters(), **M_opt_kwargs) # subclass of torch.optim.Optimizer
+        phases += [dnnlib.EasyDict(name='Mall', module=M, opt=opt, interval=1)]
+    else:
+        module_param = []
+        for subm in [M, R]:
+            module_param += list(subm.parameters())
+        opt = dnnlib.util.construct_class_by_name(params=module_param, **M_opt_kwargs) # subclass of torch.optim.Optimizer
+        phases += [dnnlib.EasyDict(name='Mall', module=[M, R], opt=opt, interval=1)]
 
     for phase in phases:
         phase.start_event = None
@@ -231,7 +247,10 @@ def training_loop(
                 phase.start_event.record(torch.cuda.current_stream(device))
             
             phase.opt.zero_grad(set_to_none=True)
-            phase.module.requires_grad_(True)
+            # phase.module.requires_grad_(True)
+            for subm in phase.module if isinstance(phase.module, list) else [phase.module]:
+                if subm is not None:
+                    subm.requires_grad_(True)
 
             # Accumulate gradients over multiple rounds.
             for round_idx in range(n_round):
@@ -240,12 +259,24 @@ def training_loop(
                 loss.accumulate_gradients(phase=phase.name, sync=sync, gain=gain)
 
             # Update weights.
-            phase.module.requires_grad_(False)
+            for subm in phase.module if isinstance(phase.module, list) else [phase.module]:
+                if subm is not None:
+                    subm.requires_grad_(False)
             with torch.autograd.profiler.record_function(phase.name + '_opt'):
-                for param in phase.module.parameters():
-                    if param.grad is not None:
-                        misc.nan_to_num(param.grad, nan=0, posinf=1e5, neginf=-1e5, out=param.grad)
+                def param_nan_to_num(mod):
+                    for param in mod.parameters():
+                        if param.grad is not None:
+                            misc.nan_to_num(param.grad, nan=0, posinf=1e5, neginf=-1e5, out=param.grad)
+                for subm in phase.module if isinstance(phase.module, list) else [phase.module]:
+                    if subm is not None:
+                        param_nan_to_num(subm)
                 phase.opt.step()
+            # phase.module.requires_grad_(False)
+            # with torch.autograd.profiler.record_function(phase.name + '_opt'):
+                # for param in phase.module.parameters():
+                    # if param.grad is not None:
+                        # misc.nan_to_num(param.grad, nan=0, posinf=1e5, neginf=-1e5, out=param.grad)
+                # phase.opt.step()
             if phase.end_event is not None:
                 phase.end_event.record(torch.cuda.current_stream(device))
 
@@ -308,7 +339,7 @@ def training_loop(
         snapshot_data = None
         if (network_snapshot_ticks is not None) and (done or cur_tick % network_snapshot_ticks == 0):
             snapshot_data = dict()
-            for name, module in [('M', M)]:
+            for name, module in [('M', M), ('R', R)]:
                 if module is not None:
                     if num_gpus > 1:
                         misc.check_ddp_consistency(module, ignore_regex=r'.*\.w_avg')

@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 04 Oct 2021 00:46:01 AEDT
+# --- Last Modified: Mon 04 Oct 2021 21:37:41 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -70,7 +70,7 @@ def normalize_img(img, device):
 
 #----------------------------------------------------------------------------
 class DiscoverLoss(Loss):
-    def __init__(self, device, G_mapping, G_synthesis, M, S, norm_on_depth,
+    def __init__(self, device, G_mapping, G_synthesis, M, S, norm_on_depth, R=None,
                  compose_lamb=0., contrast_lamb=1., significance_lamb=0., batch_gpu=4, n_colors=1,
                  div_lamb=0., norm_lamb=0., var_sample_scale=1.,
                  var_sample_mean=0., sensor_used_layers=5, use_norm_mask=True,
@@ -80,7 +80,7 @@ class DiscoverLoss(Loss):
                  Sim_pkl=None, Comp_pkl=None, Sim_lambda=0., Comp_lambda=0.,
                  s_values_normed=None, v_mat=None, w_avg=None, per_w_dir=False, sensor_type='alex',
                  use_pca_scale=False, use_pca_sign=False, use_uniform=False,
-                 mask_after_square=False, union_spatial=False):
+                 mask_after_square=False, union_spatial=False, recog_lamb=0., vs_lamb=0.25):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -99,6 +99,7 @@ class DiscoverLoss(Loss):
         self.mask_after_square = mask_after_square
         self.union_spatial = union_spatial
         self.use_uniform = use_uniform
+        self.R = R
 
         self.Sim = None
         self.Comp = None
@@ -140,6 +141,8 @@ class DiscoverLoss(Loss):
         self.pos_lamb = pos_lamb
         self.neg_on_self = neg_on_self
         self.use_catdiff = use_catdiff
+        self.recog_lamb = recog_lamb
+        self.vs_lamb = vs_lamb
 
         if sensor_type == 'discrim':
             img = self.run_G_synthesis(torch.randn(1, self.num_ws, self.w_dim).to(self.device)) # [1, c, h, w]
@@ -212,6 +215,14 @@ class DiscoverLoss(Loss):
             # cmap = self.S.mapping(None, c)
         # x = self.S.b4(x, img, cmap)
         return feat_ls
+
+    def run_R(self, img_pairs, sync):
+        with misc.ddp_sync(self.R, sync):
+            vd_vs_ls = [self.R(img_pair) for img_pair in img_pairs.split(self.batch_gpu)]
+        vd, vs = zip(*vd_vs_ls)
+        vd = torch.cat(vd, dim=0)
+        vs = torch.cat(vs, dim=0)
+        return vd, vs
 
     def run_Sim(self, img):
         # print('Using Sim net...')
@@ -507,12 +518,25 @@ class DiscoverLoss(Loss):
             return -(w_in_pca * dir_in_pca).sum(1).sign() # [b]
         return torch.ones(delta.shape[0]).to(delta.device)
 
+    def calc_recog_loss(self, vd, vs, dirs_idx, scale_q):
+        '''
+        vd: [b, nv_dim]
+        vs: [b, 1]
+        dirs_idx: [b]
+        scale_q: [b, 1]
+        '''
+        loss_vd = F.cross_entropy(vd, dirs_idx)
+        loss_vs = F.l1_loss(vs, scale_q)
+        print('using recog_loss')
+        return loss_vd + self.vs_lamb * loss_vs
+
     def accumulate_gradients(self, phase, sync, gain):
         assert phase in ['Mall', 'Mcompose', 'Mdiverse', 'Mcontrast']
         do_Mcompose = (phase in ['Mall', 'Mcompose']) and (self.compose_lamb != 0)
         do_Msignificance = (phase in ['Mall', 'Msignificance']) and (self.significance_lamb != 0)
         do_Mdiverse = (phase in ['Mall', 'Mdiverse']) and (self.div_lamb != 0)
         do_Mcontrast = (phase in ['Mall', 'Mcontrast']) and (self.contrast_lamb != 0)
+        do_Mrecog = (phase in ['Mall', 'Mrecog']) and (self.recog_lamb != 0) and (self.R is not None)
         do_Msim = (phase in ['Mall', 'Msim']) and (self.Sim_lambda != 0) and (self.Sim is not None)
         do_Mcomp = (phase in ['Mall', 'Mcomp']) and (self.Comp_lambda != 0) and (self.Comp is not None)
 
@@ -620,6 +644,44 @@ class DiscoverLoss(Loss):
                 else:
                     loss_contrast = self.extract_diff_loss(outs_all, pos_neg_idx)
             loss_all += self.contrast_lamb * loss_contrast.mean()
+
+        if do_Mrecog:
+            # print('Using recognize loss...')
+            with torch.autograd.profiler.record_function('Mrecog_sample_q'):
+                # Sample directions for varied sample.
+                dirs_idx = torch.randint(self.nv_dim, size=[b]).to(delta.device) # [b]
+                delta_q = torch.gather(delta, 1, dirs_idx.view(b, 1, 1, 1).repeat(1, 1, self.num_ws, self.w_dim))[:, 0] # [b, num_ws, w_dim]
+                step_scale_q = self.get_dir_scale(delta_q)
+                step_sign_q = self.get_dir_sign(ws_orig, delta_q)
+
+                # Sample variation scales.
+                if self.use_dynamic_scale:
+                    if self.use_pca_sign:
+                        if self.use_uniform:
+                            q_randn = torch.rand(b, device=delta.device) / 2.
+                        else:
+                            q_randn = torch.randn(b, device=delta.device).abs()
+                        scale_q = ((q_randn * self.var_sample_scale * step_scale_pos + self.var_sample_mean) * step_sign_q).view(b, 1, 1)
+                    else:
+                        scale_q = (torch.randn(b, device=delta.device) * self.var_sample_scale * step_scale_pos + self.var_sample_mean).view(b, 1, 1)
+                else:
+                    scale_q = (self.var_sample_scale * step_scale_pos).view(b, 1, 1)
+
+                # Apply both positive and negative variations to ws.
+                ws_q = ws_orig + (delta_q * scale_q) # (b, num_ws, w_dim)
+
+            with torch.autograd.profiler.record_function('Mrecog_generate_imgs'):
+                # Generate images.
+                ws_all = torch.cat([ws_orig, ws_q], dim=0) # (2 * b, num_ws, w_dim)
+                imgs_all = self.run_G_synthesis(ws_all) # (2 * b, c, h, w)
+
+            with torch.autograd.profiler.record_function('Mrecog_loss'):
+                # Contrast loss
+                _, ic, ih, iw = imgs_all.shape
+                img_pairs_all = imgs_all.view(2, b, ic, ih, iw).transpose(1, 0, 2, 3, 4).view(b, 2 * ic, ih, iw)
+                vd, vs = self.run_R(img_pairs_all, sync=True)
+                loss_recog = self.calc_recog_loss(vd, vs, dirs_idx, scale_q[:, 0])
+            loss_all += self.recog_lamb * loss_recog.mean()
 
         if do_Mcompose:
             # print('Using compose loss...')
