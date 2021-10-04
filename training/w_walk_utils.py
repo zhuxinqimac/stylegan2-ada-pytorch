@@ -8,7 +8,7 @@
 
 # --- File Name: w_walk_utils.py
 # --- Creation Date: 03-09-2021
-# --- Last Modified: Thu 23 Sep 2021 21:09:48 AEST
+# --- Last Modified: Mon 04 Oct 2021 16:17:15 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -94,17 +94,19 @@ def get_w_walk_SVD_step(w_origin, M, n_samples_per, step_size, w_avg, s_values_n
             dirs = M(step)
         # Backward steps:
         for _ in range(torch.clip((back_len / step_size_t).round().int(), 0, n_samples_per-1)):
-            if recursive_walk:
-                dirs = M(step) # [1, n_lat, num_ws, w_dim]
-            step = step - step_size_t * step_size * dirs[:, lat_i] # [1, num_ws, w_dim]
+            for _ in range(step_size // 0.01):
+                if recursive_walk:
+                    dirs = M(step) # [1, n_lat, num_ws, w_dim]
+                step = step - step_size_t * 0.01 * dirs[:, lat_i] # [1, num_ws, w_dim]
             steps_lat_i = [step[:, np.newaxis, ...]] + steps_lat_i # list of [1, 1, num_ws, w_dim]
         step = w_origin.clone() # [1, num_ws, w_dim]
 
         # Forward steps:
         for _ in range(n_samples_per-1 - torch.clip((back_len / step_size_t).round().int(), 0, n_samples_per-1)):
-            if recursive_walk:
-                dirs = M(step) # [1, n_lat, num_ws, w_dim]
-            step = step + step_size_t * step_size * dirs[:, lat_i] # [1, num_ws, w_dim]
+            for _ in range(step_size // 0.01):
+                if recursive_walk:
+                    dirs = M(step) # [1, n_lat, num_ws, w_dim]
+                step = step + step_size_t * 0.01 * dirs[:, lat_i] # [1, num_ws, w_dim]
             steps_lat_i = steps_lat_i + [step[:, np.newaxis, ...]] # list of [1, 1, num_ws, w_dim]
         row_tensor = torch.cat(steps_lat_i, dim=1) # [1, n_samples_per, num_ws, w_dim]
         all_ls.append(row_tensor)
