@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 05 Oct 2021 20:29:09 AEDT
+# --- Last Modified: Wed 06 Oct 2021 00:47:12 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -616,8 +616,12 @@ class DiscoverLoss(Loss):
                         else:
                             scale_neg = ((torch.randn(b//2, device=delta.device).abs() * self.var_sample_scale * step_scale_neg + self.var_sample_mean) * step_sign_neg).view(b//2, 1, 1)
                     else:
-                        scale_pos = (torch.randn(b//2, device=delta.device) * self.var_sample_scale * step_scale_pos + self.var_sample_mean).view(b//2, 1, 1)
-                        scale_neg = (torch.randn(b//2, device=delta.device) * self.var_sample_scale * step_scale_neg + self.var_sample_mean).view(b//2, 1, 1)
+                        if self.use_uniform:
+                            scale_pos = ((torch.rand(b//2, device=delta.device) - 0.5) * 2. * self.var_sample_scale * step_scale_pos + self.var_sample_mean).view(b//2, 1, 1)
+                            scale_neg = ((torch.rand(b//2, device=delta.device) - 0.5) * 2. * self.var_sample_scale * step_scale_neg + self.var_sample_mean).view(b//2, 1, 1)
+                        else:
+                            scale_pos = (torch.randn(b//2, device=delta.device) * self.var_sample_scale * step_scale_pos + self.var_sample_mean).view(b//2, 1, 1)
+                            scale_neg = (torch.randn(b//2, device=delta.device) * self.var_sample_scale * step_scale_neg + self.var_sample_mean).view(b//2, 1, 1)
                         scale_q = scale_pos
                 else:
                     scale_pos = (self.var_sample_scale * step_scale_pos).view(b//2, 1, 1)
@@ -664,7 +668,10 @@ class DiscoverLoss(Loss):
                             q_randn = torch.randn(b, device=delta.device).abs()
                         scale_q = ((q_randn * self.var_sample_scale * step_scale_q + self.var_sample_mean) * step_sign_q).view(b, 1, 1)
                     else:
-                        scale_q = (torch.randn(b, device=delta.device) * self.var_sample_scale * step_scale_q + self.var_sample_mean).view(b, 1, 1)
+                        if self.use_uniform:
+                            scale_q = ((torch.rand(b, device=delta.device) - 0.5) * 2. * self.var_sample_scale * step_scale_q + self.var_sample_mean).view(b, 1, 1)
+                        else:
+                            scale_q = (torch.randn(b, device=delta.device) * self.var_sample_scale * step_scale_q + self.var_sample_mean).view(b, 1, 1)
                 else:
                     scale_q = (self.var_sample_scale * step_scale_q).view(b, 1, 1)
 
