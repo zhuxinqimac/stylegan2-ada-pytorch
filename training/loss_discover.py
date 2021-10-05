@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 04 Oct 2021 21:37:41 AEDT
+# --- Last Modified: Tue 05 Oct 2021 20:29:09 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -70,7 +70,7 @@ def normalize_img(img, device):
 
 #----------------------------------------------------------------------------
 class DiscoverLoss(Loss):
-    def __init__(self, device, G_mapping, G_synthesis, M, S, norm_on_depth, R=None,
+    def __init__(self, device, G_mapping, G_synthesis, M, S=None, norm_on_depth=True, R=None,
                  compose_lamb=0., contrast_lamb=1., significance_lamb=0., batch_gpu=4, n_colors=1,
                  div_lamb=0., norm_lamb=0., var_sample_scale=1.,
                  var_sample_mean=0., sensor_used_layers=5, use_norm_mask=True,
@@ -527,7 +527,8 @@ class DiscoverLoss(Loss):
         '''
         loss_vd = F.cross_entropy(vd, dirs_idx)
         loss_vs = F.l1_loss(vs, scale_q)
-        print('using recog_loss')
+        training_stats.report('Loss/recog/loss_vd', loss_vd)
+        training_stats.report('Loss/recog/loss_vs', loss_vs)
         return loss_vd + self.vs_lamb * loss_vs
 
     def accumulate_gradients(self, phase, sync, gain):
@@ -661,13 +662,13 @@ class DiscoverLoss(Loss):
                             q_randn = torch.rand(b, device=delta.device) / 2.
                         else:
                             q_randn = torch.randn(b, device=delta.device).abs()
-                        scale_q = ((q_randn * self.var_sample_scale * step_scale_pos + self.var_sample_mean) * step_sign_q).view(b, 1, 1)
+                        scale_q = ((q_randn * self.var_sample_scale * step_scale_q + self.var_sample_mean) * step_sign_q).view(b, 1, 1)
                     else:
-                        scale_q = (torch.randn(b, device=delta.device) * self.var_sample_scale * step_scale_pos + self.var_sample_mean).view(b, 1, 1)
+                        scale_q = (torch.randn(b, device=delta.device) * self.var_sample_scale * step_scale_q + self.var_sample_mean).view(b, 1, 1)
                 else:
-                    scale_q = (self.var_sample_scale * step_scale_pos).view(b, 1, 1)
+                    scale_q = (self.var_sample_scale * step_scale_q).view(b, 1, 1)
 
-                # Apply both positive and negative variations to ws.
+                # Apply variations to ws.
                 ws_q = ws_orig + (delta_q * scale_q) # (b, num_ws, w_dim)
 
             with torch.autograd.profiler.record_function('Mrecog_generate_imgs'):
@@ -678,7 +679,7 @@ class DiscoverLoss(Loss):
             with torch.autograd.profiler.record_function('Mrecog_loss'):
                 # Contrast loss
                 _, ic, ih, iw = imgs_all.shape
-                img_pairs_all = imgs_all.view(2, b, ic, ih, iw).transpose(1, 0, 2, 3, 4).view(b, 2 * ic, ih, iw)
+                img_pairs_all = imgs_all.view(2, b, ic, ih, iw).transpose(1, 0).reshape(b, 2 * ic, ih, iw)
                 vd, vs = self.run_R(img_pairs_all, sync=True)
                 loss_recog = self.calc_recog_loss(vd, vs, dirs_idx, scale_q[:, 0])
             loss_all += self.recog_lamb * loss_recog.mean()

@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 04 Oct 2021 21:39:34 AEDT
+# --- Last Modified: Tue 05 Oct 2021 18:02:39 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -47,7 +47,7 @@ KEY_BRIEF_NAMES = {'z': 'nv_dim', 'at': 'att_type', 'nt': 'nav_type', 'amf': 'at
                    'wals': 'trav_walk_scale', 'recw': 'recursive_walk', 'shownm': 'show_normD', 'perw': 'per_w_dir',
                    'pcas': 'use_pca_scale', 'pcan': 'use_pca_sign',
                    'mafsq': 'mask_after_square', 'usp': 'union_spatial', 'uni': 'use_uniform',
-                   'recg': 'recog_lamb', 'vs': 'vs_lamb'}
+                   'recg': 'recog_lamb', 'vs': 'vs_lamb', 'Rch': 'R_ch_in', 'Rna': 'R_net_name', 'Rpre': 'R_pretrained'}
 KEY_DTYPES = {'nv_dim': int, 'att_type': str, 'nav_type': str, 'att_middle_feat': int, 'nav_middle_feat': int,
               'att_fc_layers': int, 'nav_fc_layers': int, 'att_layers': int,
               'att_gaussian_size': int, 'att_gaussian_std': float, 'norm_on_depth': bool_own,
@@ -60,7 +60,7 @@ KEY_DTYPES = {'nv_dim': int, 'att_type': str, 'nav_type': str, 'att_middle_feat'
               'trav_walk_scale': float, 'recursive_walk': bool_own, 'show_normD': bool_own, 'per_w_dir': bool_own,
               'use_pca_scale': bool_own, 'use_pca_sign': bool_own,
               'mask_after_square': bool_own, 'union_spatial': bool_own, 'use_uniform': bool_own,
-              'recog_lamb': float, 'vs_lamb': float}
+              'recog_lamb': float, 'vs_lamb': float, 'R_ch_in': int, 'R_net_name': str, 'R_pretrained': bool_own}
 
 def parse_cfg(cfg):
     '''
@@ -170,14 +170,14 @@ def setup_training_loop_kwargs(
         'auto':      dict(ref_gpus=-1, kimg=25000,  mb=-1, mbstd=-1, fmaps=-1,  lrate=-1,     gamma=-1,   ema=-1,  ramp=0.05, map=2), # Populated dynamically based on resolution and GPU count.
         'basic':      dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05,
                            nv_dim=20, att_type='fixed', nav_type='fixed', att_middle_feat=128, nav_middle_feat=128,
-                           att_fc_layers=1, nav_fc_layers=1, att_layers=5, att_gaussian_size=0, att_gaussian_std=1, norm_on_depth=False,
+                           att_fc_layers=1, nav_fc_layers=1, att_layers=5, att_gaussian_size=0, att_gaussian_std=1, norm_on_depth=True,
                            compose_lamb=0, contrast_lamb=0, significance_lamb=0., Sim_lambda=0, Comp_lambda=0,
                            loss_n_colors=5, div_lamb=0, norm_lamb=0, var_sample_scale=1, var_sample_mean=0.,
                            sensor_used_layers=5, use_norm_mask=True, divide_mask_sum=True, use_dynamic_scale=True, use_norm_as_mask=False,
                            diff_avg_lerp_rate=0.01, lerp_lamb=0., lerp_norm=False, neg_lamb=1., pos_lamb=1., neg_on_self=False, use_catdiff=False,
                            n_samples_per=7, sensor_type='alex', save_size=128, trav_walk_scale=0.2, recursive_walk=True, show_normD=True, per_w_dir=False,
                            use_pca_scale=False, use_pca_sign=False, mask_after_square=False, union_spatial=False, use_uniform=False,
-                           recog_lamb=0., vs_lamb=0.25)
+                           recog_lamb=0., vs_lamb=0.25, R_ch_in=6, R_net_name='resnet18', R_pretrained=False)
         # 'stylegan2': dict(ref_gpus=8,  kimg=25000,  mb=32, mbstd=4,  fmaps=1,   lrate=0.002),
     }
 
@@ -204,6 +204,11 @@ def setup_training_loop_kwargs(
         args.M_kwargs.att_kwargs = dnnlib.EasyDict(middle_feat=spec.att_middle_feat, att_fc_layers=spec.att_fc_layers,
                                                    att_layers=spec.att_layers, filter_size=spec.att_gaussian_size, filter_std=spec.att_gaussian_std)
         args.M_kwargs.nav_kwargs = dnnlib.EasyDict(middle_feat=spec.nav_middle_feat, nav_fc_layers=spec.nav_fc_layers)
+
+    if spec.recog_lamb > 0:
+        args.R_kwargs = dnnlib.EasyDict(class_name='training.networks_recog_resnet.RecogResNet', nv_dim=spec.nv_dim, ch_in=spec.R_ch_in,
+                                        net_name=spec.R_net_name, pretrained=spec.R_pretrained)
+
     args.M_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', lr=spec.lrate, betas=[0, 0.99], eps=1e-8)
 
     args.loss_kwargs = dnnlib.EasyDict(class_name='training.loss_discover.DiscoverLoss',

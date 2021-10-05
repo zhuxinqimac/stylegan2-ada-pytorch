@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 04 Oct 2021 22:38:38 AEDT
+# --- Last Modified: Tue 05 Oct 2021 18:17:28 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -45,6 +45,7 @@ def training_loop(
     run_dir                 = '.',      # Output directory.
     data_loader_kwargs      = {},       # Options for torch.utils.data.DataLoader.
     M_kwargs                = {},       # Options for navigator network.
+    R_kwargs                = {},       # Options for recognizer network.
     M_opt_kwargs            = {},       # Options for navigator optimizer.
     loss_kwargs             = {},       # Options for loss function.
     metrics                 = [],       # Metrics to evaluate during training.
@@ -85,6 +86,7 @@ def training_loop(
     # Load Generator networks.
     if rank == 0:
         print('Loading G networks...')
+    S = None
     with dnnlib.util.open_url(gan_network_pkl) as f:
         network_dict = legacy.load_network_pkl(f)
         G = network_dict['G_ema'].requires_grad_(False).to(device) # subclass of torch.nn.Module
@@ -136,7 +138,8 @@ def training_loop(
         img = misc.print_module_summary(G, [z, c])
         w = torch.empty([batch_gpu, M.num_ws, M.w_dim], device=device)
         misc.print_module_summary(M, [w])
-        misc.print_module_summary(S, [img, c] if sensor_type == 'discrim' else [img])
+        if S is not None:
+            misc.print_module_summary(S, [img, c] if sensor_type == 'discrim' else [img])
         if R is not None:
             misc.print_module_summary(R, [torch.cat([img, img], dim=1)])
 
@@ -153,7 +156,7 @@ def training_loop(
             else:
                 module.requires_grad_(False)
                 module = module.to(device)
-        if name is not None:
+        if (name is not None) and (module is not None):
             ddp_modules[name] = module
 
     # Setup training phases.
