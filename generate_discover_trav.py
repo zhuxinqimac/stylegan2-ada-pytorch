@@ -1,0 +1,93 @@
+#!/usr/bin/python
+#-*- coding: utf-8 -*-
+
+# >.>.>.>.>.>.>.>.>.>.>.>.>.>.>.>.
+# Licensed under the Apache License, Version 2.0 (the "License")
+# You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+
+# --- File Name: generate_trav.py
+# --- Creation Date: 23-08-2021
+# --- Last Modified: Thu 07 Oct 2021 18:23:02 AEDT
+# --- Author: Xinqi Zhu
+# .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
+"""Generate traversals using pretrained network pickle."""
+
+import os
+import re
+from typing import List, Optional
+
+import click
+import dnnlib
+import numpy as np
+import PIL.Image
+import torch
+import pickle
+from training.training_loop_group import get_traversal
+from training.training_loop import save_image_grid
+from training.w_walk_utils import get_w_walk
+from generate import num_range
+
+import legacy
+
+#----------------------------------------------------------------------------
+
+@click.command()
+@click.pass_context
+@click.option('--generator_pkl', help='Generator pickle filename', required=True)
+@click.option('--navigator_pkl', help='Navigator pickle filename', required=True)
+@click.option('--seeds', type=num_range, help='List of random seeds')
+@click.option('--outdir', help='Where to save the output images', type=str, required=True, metavar='DIR')
+@click.option('--n_samples_per', type=int, help='Number of samples in a traversal row')
+@click.option('--batch_gpu', type=int, help='Batch size per GPU')
+@click.option('--trav_walk_scale', type=float, help='Walking scale for latent traversal')
+@click.option('--use_pca_scale', type=bool, help='If using pca scale in walking')
+@click.option('--tiny_step', type=float, help='The tiny step in w_walk')
+def generate_travs(
+    ctx: click.Context,
+    generator_pkl: str,
+    navigator_pkl: str,
+    seeds: Optional[List[int]],
+    outdir: str,
+    n_samples_per: int,
+    batch_gpu: int,
+    trav_walk_scale: float,
+    use_pca_scale: bool,
+    tiny_step: float,
+):
+    print('Loading networks from "%s"...' % generator_pkl)
+    print('use_pca_scale:', use_pca_scale)
+    print('type(use_pca_scale):', type(use_pca_scale))
+    device = torch.device('cuda')
+    with dnnlib.util.open_url(generator_pkl) as f:
+        G = legacy.load_network_pkl(f)['G_ema'].requires_grad_(False).to(device) # type: ignore
+
+    with open(navigator_pkl, 'rb') as f:
+        resume_data = pickle.load(f)
+        M = resume_data['M'].requires_grad_(False).to(device)
+
+    if tiny_step == 0:
+        tiny_step = None
+
+    os.makedirs(outdir, exist_ok=True)
+
+    # Generate images.
+    for semi_inverse in [False]:
+        for idx, seed in enumerate(seeds):
+            print('Generating images %d/%d ...' % (idx + 1, len(seeds)))
+            grid_size = (n_samples_per, M.nv_dim)
+            rand_state = np.random.RandomState(seed)
+            z_origin = torch.from_numpy(rand_state.randn(1, G.z_dim)).to(device)
+            c_origin = torch.from_numpy(rand_state.randn(1, G.c_dim)).to(device)
+            w_origin = G.mapping(z_origin, c_origin, truncation_psi=0.5) # (1, num_ws, w_dim)
+            w_walk = get_w_walk(w_origin, M, n_samples_per, trav_walk_scale, tiny_step=tiny_step, use_pca_scale=use_pca_scale, semi_inverse=semi_inverse).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
+            images = torch.cat([G.synthesis(w, noise_mode='const').to('cpu') for w in w_walk]) # (gh * gw, c, h, w)
+            save_image_grid(images, os.path.join(outdir, f'seed{seed:04d}_sinv{semi_inverse}.png'), drange=[-1,1], grid_size=grid_size)
+
+
+#----------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    generate_travs() # pylint: disable=no-value-for-parameter
+
+#----------------------------------------------------------------------------

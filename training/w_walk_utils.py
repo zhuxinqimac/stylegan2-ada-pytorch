@@ -8,7 +8,7 @@
 
 # --- File Name: w_walk_utils.py
 # --- Creation Date: 03-09-2021
-# --- Last Modified: Mon 04 Oct 2021 16:34:20 AEDT
+# --- Last Modified: Thu 07 Oct 2021 18:12:20 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -25,7 +25,23 @@ import torch
 import torch.nn.functional as F
 from dnnlib.util import make_cache_dir_path
 
-def get_w_walk(w_origin, M, n_samples_per, step_size, recursive_walk=True):
+def get_dir_scale(delta, use_pca_scale=False, s_values_normed=None, v_mat=None, semi_inverse=False):
+    # delta: [b, num_ws, w_dim]
+    if use_pca_scale:
+        print('using pca_scale')
+        s_values_x2 = s_values_normed * 2 # Based on range [-2, 2]
+        dir_in_pca = torch.matmul(delta.mean(1), v_mat) # [b, q]
+        dir_in_pca_norm = F.normalize(dir_in_pca, dim=1) # [b, q]
+        coef_t = 1. / (dir_in_pca_norm.square() / s_values_x2[np.newaxis, ...].square()).sum(1, keepdim=True).sqrt() # [b, 1], 1/(x^2/a^2 + y^2/b^2, ...).sqrt()
+        dir_len_semi = torch.linalg.norm(dir_in_pca_norm * coef_t, dim=-1) # [b]
+        print('dir_len_semi:', dir_len_semi)
+        print('1/dir_len_semi:', 1./dir_len_semi)
+        if semi_inverse:
+            return 1./dir_len_semi
+        return dir_len_semi
+    return torch.ones(delta.shape[0]).to(delta.device)
+
+def get_w_walk(w_origin, M, n_samples_per, step_size, recursive_walk=True, tiny_step=None, use_pca_scale=False, semi_inverse=False):
     '''
     w_origin: (1, num_ws, w_dim)
     return (gh * gw, num_ws, w_dim), gh, gw = M.nv_dim, n_samples_per
@@ -39,17 +55,43 @@ def get_w_walk(w_origin, M, n_samples_per, step_size, recursive_walk=True):
     steps.append(step[:, np.newaxis, ...])
     if not recursive_walk:
         dirs = M(step) # [n_lat, n_lat, num_ws, w_dim]
-    for _ in range(1, n_samples_per // 2):
-        if recursive_walk:
-            dirs = M(step) # [n_lat, n_lat, num_ws, w_dim]
-        step = step - step_size * dirs[range(n_lat), range(n_lat)] # [n_lat, num_ws, w_dim]
+    for _ in range(n_samples_per // 2):
+        if tiny_step is not None:
+            for _ in range(int(step_size / tiny_step)):
+                if recursive_walk:
+                    dirs = M(step) # [n_lat, n_lat, num_ws, w_dim]
+                delta = dirs[range(n_lat), range(n_lat)]
+                step_scale = get_dir_scale(delta, use_pca_scale=use_pca_scale,
+                                           s_values_normed=M.s_values, v_mat=M.v_mat, semi_inverse=semi_inverse).view(n_lat, 1, 1)
+                step = step - tiny_step * step_scale * delta # [n_lat, num_ws, w_dim]
+        else:
+            if recursive_walk:
+                dirs = M(step) # [n_lat, n_lat, num_ws, w_dim]
+            delta = dirs[range(n_lat), range(n_lat)]
+            step_scale = get_dir_scale(delta, use_pca_scale=use_pca_scale,
+                                       s_values_normed=M.s_values, v_mat=M.v_mat, semi_inverse=semi_inverse).view(n_lat, 1, 1)
+            step = step - step_size * step_scale * delta # [n_lat, num_ws, w_dim]
         steps = [step[:, np.newaxis, ...]] + steps
 
     step = w_origin.clone()
-    for _ in range(n_samples_per - n_samples_per // 2):
-        if recursive_walk:
-            dirs = M(step) # [n_lat, n_lat, num_ws, w_dim]
-        step = step + step_size * dirs[range(n_lat), range(n_lat)] # [n_lat, num_ws, w_dim]
+    for _ in range(n_samples_per - 1 - n_samples_per // 2):
+        if tiny_step is not None:
+            for _ in range(int(step_size / tiny_step)):
+                if recursive_walk:
+                    dirs = M(step) # [n_lat, n_lat, num_ws, w_dim]
+                # step = step + tiny_step * dirs[range(n_lat), range(n_lat)] # [n_lat, num_ws, w_dim]
+                delta = dirs[range(n_lat), range(n_lat)]
+                step_scale = get_dir_scale(delta, use_pca_scale=use_pca_scale,
+                                           s_values_normed=M.s_values, v_mat=M.v_mat, semi_inverse=semi_inverse).view(n_lat, 1, 1)
+                step = step + tiny_step * step_scale * delta # [n_lat, num_ws, w_dim]
+        else:
+            if recursive_walk:
+                dirs = M(step) # [n_lat, n_lat, num_ws, w_dim]
+            # step = step + step_size * dirs[range(n_lat), range(n_lat)] # [n_lat, num_ws, w_dim]
+            delta = dirs[range(n_lat), range(n_lat)]
+            step_scale = get_dir_scale(delta, use_pca_scale=use_pca_scale,
+                                       s_values_normed=M.s_values, v_mat=M.v_mat, semi_inverse=semi_inverse).view(n_lat, 1, 1)
+            step = step + step_size * step_scale * delta # [n_lat, num_ws, w_dim]
         steps = steps + [step[:, np.newaxis, ...]]
     steps = torch.cat(steps, dim=1) # [n_lat, n_samples_per, num_ws, w_dim]
     return steps.view(n_lat * n_samples_per, num_ws, w_dim)
