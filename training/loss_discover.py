@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 06 Oct 2021 00:47:12 AEDT
+# --- Last Modified: Fri 08 Oct 2021 01:00:33 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -149,10 +149,17 @@ class DiscoverLoss(Loss):
             self.S_L = int(np.log2(img.shape[-2])) - 2
             self.use_discrim_as_S = True
         else:
-            self.S_L = 7 if sensor_type == 'squeeze' else 5
+            # self.S_L = 7 if sensor_type == 'squeeze' else 5
+            if (sensor_type == 'alex') or (sensor_type.startswith('resnet')) or (sensor_type == 'inception3'):
+                self.S_L = 5
+            elif sensor_type in ['B16', 'B32', 'L32', 'B16imagenet1k', 'B32imagenet1k', 'L16imagenet1k', 'L32imagenet1k']:
+                self.S_L = 1
+            else:
+                raise ValueError('Unsupported sensor type:', sensor_type)
             self.use_discrim_as_S = False
         print('loss S_L:', self.S_L)
-        assert self.sensor_used_layers <= self.S_L
+        if self.sensor_used_layers > self.S_L:
+            self.sensor_used_layers = self.S_L
 
         self.diff_avg_lerp_rate = diff_avg_lerp_rate
         self.lerp_lamb = lerp_lamb

@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Thu 07 Oct 2021 19:13:43 AEDT
+# --- Last Modified: Fri 08 Oct 2021 00:07:58 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -35,6 +35,7 @@ from torch_utils.ops import grid_sample_gradfix
 from training.training_loop import setup_snapshot_image_grid, save_image_grid
 from training.training_loop_uneven import get_traversal
 from training.w_walk_utils import get_w_walk, get_w_walk_SVD_step, get_w_walk_SVD_step_per_w, add_outline, get_SVD
+from training.networks_features import feat_net
 
 import legacy
 from metrics import metric_main
@@ -46,6 +47,7 @@ def training_loop(
     data_loader_kwargs      = {},       # Options for torch.utils.data.DataLoader.
     M_kwargs                = {},       # Options for navigator network.
     R_kwargs                = {},       # Options for recognizer network.
+    S_kwargs                = {},       # Options for sensor network.
     M_opt_kwargs            = {},       # Options for navigator optimizer.
     loss_kwargs             = {},       # Options for loss function.
     metrics                 = [],       # Metrics to evaluate during training.
@@ -106,7 +108,8 @@ def training_loop(
         if rank == 0:
             print('Loading S networks...')
         print('pnet_rand:', pnet_rand)
-        S_raw = lpips.LPIPS(net=sensor_type, lpips=False, pnet_rand=pnet_rand).net
+        # S_raw = lpips.LPIPS(net=sensor_type, lpips=False, pnet_rand=pnet_rand).net
+        S_raw = feat_net(name=sensor_type, pretrained=not pnet_rand, **S_kwargs)
         S = S_raw.requires_grad_(False).to(device) # subclass of torch.nn.Module
 
     # Construct Navigator networks.
