@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 05 Oct 2021 18:17:28 AEDT
+# --- Last Modified: Thu 07 Oct 2021 19:08:50 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -65,6 +65,7 @@ def training_loop(
     progress_fn             = None,     # Callback function for updating training progress. Called for all ranks.
     n_samples_per           = 10,       # The number of steps in traversals.
     sensor_type             = 'alex',   # The sensor network type.
+    pnet_rand               = False,    # In LPIPS, if using random backbone net.
     gan_network_pkl         = None,     # The Generator network pkl.
     save_size               = 128,      # Image size to save per image in traversal.
     trav_walk_scale         = 0.01,     # Traversal walking scale.
@@ -104,7 +105,7 @@ def training_loop(
     if (loss_kwargs.contrast_lamb != 0 or loss_kwargs.compose_lamb != 0 or loss_kwargs.significance_lamb != 0) and (sensor_type != 'discrim'):
         if rank == 0:
             print('Loading S networks...')
-        S_raw = lpips.LPIPS(net=sensor_type, lpips=False).net
+        S_raw = lpips.LPIPS(net=sensor_type, lpips=False, pnet_rand=pnet_rand).net
         S = S_raw.requires_grad_(False).to(device) # subclass of torch.nn.Module
 
     # Construct Navigator networks.

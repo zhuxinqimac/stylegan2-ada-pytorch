@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 05 Oct 2021 18:02:39 AEDT
+# --- Last Modified: Thu 07 Oct 2021 19:10:59 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -43,7 +43,8 @@ KEY_BRIEF_NAMES = {'z': 'nv_dim', 'at': 'att_type', 'nt': 'nav_type', 'amf': 'at
                    'vars': 'var_sample_scale', 'varm': 'var_sample_mean', 'sensl': 'sensor_used_layers', 'nomask': 'use_norm_mask',
                    'divmsum': 'divide_mask_sum', 'dys': 'use_dynamic_scale', 'norasm': 'use_norm_as_mask', 'lr': 'lrate',
                    'lerprt': 'diff_avg_lerp_rate', 'lerp': 'lerp_lamb', 'lerpnm': 'lerp_norm', 'neg': 'neg_lamb', 'pos': 'pos_lamb',
-                   'nself': 'neg_on_self', 'catd': 'use_catdiff', 'nper': 'n_samples_per', 'sensor': 'sensor_type', 'ssize': 'save_size',
+                   'nself': 'neg_on_self', 'catd': 'use_catdiff', 'nper': 'n_samples_per',
+                   'sensor': 'sensor_type', 'prand': 'pnet_rand', 'ssize': 'save_size',
                    'wals': 'trav_walk_scale', 'recw': 'recursive_walk', 'shownm': 'show_normD', 'perw': 'per_w_dir',
                    'pcas': 'use_pca_scale', 'pcan': 'use_pca_sign',
                    'mafsq': 'mask_after_square', 'usp': 'union_spatial', 'uni': 'use_uniform',
@@ -56,7 +57,8 @@ KEY_DTYPES = {'nv_dim': int, 'att_type': str, 'nav_type': str, 'att_middle_feat'
               'var_sample_scale': float, 'var_sample_mean': float, 'sensor_used_layers': int, 'use_norm_mask': bool_own,
               'divide_mask_sum': bool_own, 'use_dynamic_scale': bool_own, 'use_norm_as_mask': bool_own, 'lrate': float,
               'diff_avg_lerp_rate': float, 'lerp_lamb': float, 'lerp_norm': bool_own, 'neg_lamb': float, 'pos_lamb': float,
-              'neg_on_self': bool_own, 'use_catdiff': bool_own, 'n_samples_per': int, 'sensor_type': str, 'save_size': int,
+              'neg_on_self': bool_own, 'use_catdiff': bool_own, 'n_samples_per': int,
+              'sensor_type': str, 'pnet_rand': bool, 'save_size': int,
               'trav_walk_scale': float, 'recursive_walk': bool_own, 'show_normD': bool_own, 'per_w_dir': bool_own,
               'use_pca_scale': bool_own, 'use_pca_sign': bool_own,
               'mask_after_square': bool_own, 'union_spatial': bool_own, 'use_uniform': bool_own,
@@ -175,7 +177,8 @@ def setup_training_loop_kwargs(
                            loss_n_colors=5, div_lamb=0, norm_lamb=0, var_sample_scale=1, var_sample_mean=0.,
                            sensor_used_layers=5, use_norm_mask=True, divide_mask_sum=True, use_dynamic_scale=True, use_norm_as_mask=False,
                            diff_avg_lerp_rate=0.01, lerp_lamb=0., lerp_norm=False, neg_lamb=1., pos_lamb=1., neg_on_self=False, use_catdiff=False,
-                           n_samples_per=7, sensor_type='alex', save_size=128, trav_walk_scale=0.2, recursive_walk=True, show_normD=True, per_w_dir=False,
+                           n_samples_per=7, sensor_type='alex', pnet_rand=False,
+                           save_size=128, trav_walk_scale=0.2, recursive_walk=True, show_normD=True, per_w_dir=False,
                            use_pca_scale=False, use_pca_sign=False, mask_after_square=False, union_spatial=False, use_uniform=False,
                            recog_lamb=0., vs_lamb=0.25, R_ch_in=6, R_net_name='resnet18', R_pretrained=False)
         # 'stylegan2': dict(ref_gpus=8,  kimg=25000,  mb=32, mbstd=4,  fmaps=1,   lrate=0.002),
@@ -229,6 +232,7 @@ def setup_training_loop_kwargs(
 
     args.n_samples_per = spec.n_samples_per
     args.sensor_type = spec.sensor_type
+    args.pnet_rand = spec.pnet_rand
     args.save_size = spec.save_size
     args.trav_walk_scale = spec.trav_walk_scale
     args.recursive_walk = spec.recursive_walk
