@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Thu 07 Oct 2021 19:10:59 AEDT
+# --- Last Modified: Thu 07 Oct 2021 19:13:27 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -58,7 +58,7 @@ KEY_DTYPES = {'nv_dim': int, 'att_type': str, 'nav_type': str, 'att_middle_feat'
               'divide_mask_sum': bool_own, 'use_dynamic_scale': bool_own, 'use_norm_as_mask': bool_own, 'lrate': float,
               'diff_avg_lerp_rate': float, 'lerp_lamb': float, 'lerp_norm': bool_own, 'neg_lamb': float, 'pos_lamb': float,
               'neg_on_self': bool_own, 'use_catdiff': bool_own, 'n_samples_per': int,
-              'sensor_type': str, 'pnet_rand': bool, 'save_size': int,
+              'sensor_type': str, 'pnet_rand': bool_own, 'save_size': int,
               'trav_walk_scale': float, 'recursive_walk': bool_own, 'show_normD': bool_own, 'per_w_dir': bool_own,
               'use_pca_scale': bool_own, 'use_pca_sign': bool_own,
               'mask_after_square': bool_own, 'union_spatial': bool_own, 'use_uniform': bool_own,

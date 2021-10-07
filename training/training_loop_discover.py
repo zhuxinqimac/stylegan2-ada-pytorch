@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Thu 07 Oct 2021 19:08:50 AEDT
+# --- Last Modified: Thu 07 Oct 2021 19:13:43 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -105,6 +105,7 @@ def training_loop(
     if (loss_kwargs.contrast_lamb != 0 or loss_kwargs.compose_lamb != 0 or loss_kwargs.significance_lamb != 0) and (sensor_type != 'discrim'):
         if rank == 0:
             print('Loading S networks...')
+        print('pnet_rand:', pnet_rand)
         S_raw = lpips.LPIPS(net=sensor_type, lpips=False, pnet_rand=pnet_rand).net
         S = S_raw.requires_grad_(False).to(device) # subclass of torch.nn.Module
 
