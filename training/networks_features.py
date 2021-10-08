@@ -8,7 +8,7 @@
 
 # --- File Name: networks_features.py
 # --- Creation Date: 07-10-2021
-# --- Last Modified: Fri 08 Oct 2021 16:19:15 AEDT
+# --- Last Modified: Fri 08 Oct 2021 17:53:54 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -105,7 +105,7 @@ class Inception3Feat(torch.nn.Module):
                 param.requires_grad = False
 
     def forward(self, x):
-        if x.shape[-1] != 128:
+        if x.shape[-1] < 128:
             x = self.trans(x)
         # N x 3 x 299 x 299
         x = self.incept.Conv2d_1a_3x3(x)
