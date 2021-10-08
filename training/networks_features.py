@@ -8,7 +8,7 @@
 
 # --- File Name: networks_features.py
 # --- Creation Date: 07-10-2021
-# --- Last Modified: Fri 08 Oct 2021 01:32:57 AEDT
+# --- Last Modified: Fri 08 Oct 2021 16:19:15 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -99,11 +99,14 @@ class Inception3Feat(torch.nn.Module):
     def __init__(self, requires_grad=False, pretrained=True, **kwargs):
         super().__init__()
         self.incept = models.inception_v3(pretrained=pretrained)
+        self.trans = transforms.Compose([transforms.Resize(128)])
         if not requires_grad:
             for param in self.parameters():
                 param.requires_grad = False
 
     def forward(self, x):
+        if x.shape[-1] != 128:
+            x = self.trans(x)
         # N x 3 x 299 x 299
         x = self.incept.Conv2d_1a_3x3(x)
         # N x 32 x 149 x 149
