@@ -8,7 +8,7 @@
 
 # --- File Name: generate_trav.py
 # --- Creation Date: 23-08-2021
-# --- Last Modified: Mon 11 Oct 2021 01:30:36 AEDT
+# --- Last Modified: Mon 11 Oct 2021 01:04:18 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Generate traversals using pretrained network pickle."""
@@ -101,6 +101,8 @@ def factorize_weight(generator):
 @click.option('--use_pca_scale', type=bool, help='If using pca scale in walking')
 @click.option('--tiny_step', type=float, help='The tiny step in w_walk')
 @click.option('--save_gifs_per_attr', type=bool, help='If saving gifs for each attribute')
+@click.option('--use_sefa', type=bool, help='If using sefa model')
+@click.option('--sefa_nv_dim', type=int, help='Number of directions in sefa')
 def generate_travs(
     ctx: click.Context,
     generator_pkl: str,
@@ -113,6 +115,8 @@ def generate_travs(
     use_pca_scale: bool,
     tiny_step: float,
     save_gifs_per_attr: bool,
+    use_sefa: bool,
+    sefa_nv_dim: int,
 ):
     print('Loading networks from "%s"...' % generator_pkl)
     print('use_pca_scale:', use_pca_scale)
@@ -134,9 +138,10 @@ def generate_travs(
     with dnnlib.util.open_url(generator_pkl) as f:
         G = legacy.load_network_pkl(f)['G_ema'].requires_grad_(False).to(device) # type: ignore
 
-    with open(navigator_pkl, 'rb') as f:
-        resume_data = pickle.load(f)
-        M = resume_data['M'].requires_grad_(False).to(device)
+    if not use_sefa:
+        with open(navigator_pkl, 'rb') as f:
+            resume_data = pickle.load(f)
+            M = resume_data['M'].requires_grad_(False).to(device)
 
     if tiny_step == 0:
         tiny_step = None
@@ -147,14 +152,32 @@ def generate_travs(
     for semi_inverse in [False]:
         for idx, seed in enumerate(seeds):
             print('Generating images %d/%d ...' % (idx + 1, len(seeds)))
-            grid_size = (n_samples_per, M.nv_dim)
+            grid_size = (n_samples_per, M.nv_dim if not use_sefa else sefa_nv_dim)
             rand_state = np.random.RandomState(seed)
             z_origin = torch.from_numpy(rand_state.randn(1, G.z_dim)).to(device)
             c_origin = torch.from_numpy(rand_state.randn(1, G.c_dim)).to(device)
             w_origin = G.mapping(z_origin, c_origin, truncation_psi=0.5) # (1, num_ws, w_dim)
 
-            w_walk = get_w_walk(w_origin, M, n_samples_per, trav_walk_scale,
-                                tiny_step=tiny_step, use_pca_scale=use_pca_scale, semi_inverse=semi_inverse).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
+            if use_sefa:
+                distances = torch.linspace(-1, 1, n_samples_per, device=device)
+                _, boundaries, values = factorize_weight(G)
+                print('boundaries.shape:', boundaries.shape)
+                print('values.shape:', values.shape)
+                boundaries = torch.tensor(boundaries, device=device)
+                w_walk = []
+                for sem_id in range(sefa_nv_dim):
+                    boundary = boundaries[sem_id:sem_id + 1]
+                    each_sem = []
+                    for col_id, d in enumerate(distances, start=1):
+                        temp_code = w_origin.clone()
+                        temp_code += boundary * d * trav_walk_scale
+                        each_sem.append(temp_code[:, np.newaxis, ...])
+                    each_sem_cat = torch.cat(each_sem, dim=1) # [1, n_samples_per, num_ws, w_dim]
+                    w_walk.append(each_sem_cat)
+                w_walk = torch.cat(w_walk, dim=0) # [nv_dim, n_samples_per, num_ws, w_dim]
+            else:
+                w_walk = get_w_walk(w_origin, M, n_samples_per, trav_walk_scale,
+                                    tiny_step=tiny_step, use_pca_scale=use_pca_scale, semi_inverse=semi_inverse).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
             images = torch.cat([G.synthesis(w, noise_mode='const').to('cpu') for w in w_walk]) # (gh * gw, c, h, w)
             if not save_gifs_per_attr:
                 save_image_grid(images, os.path.join(outdir, f'seed{seed:04d}_sinv{semi_inverse}.png'), drange=[-1,1], grid_size=grid_size)
@@ -162,7 +185,7 @@ def generate_travs(
                 cur_dir = os.path.join(outdir, f'seed{seed:04d}_sinv{semi_inverse}')
                 os.makedirs(cur_dir, exist_ok=True)
                 _, c, h, w = images.shape
-                images = images.view(M.nv_dim, n_samples_per, c, h, w)
+                images = images.view(M.nv_dim if not use_sefa else sefa_nv_dim, n_samples_per, c, h, w)
                 for sem_i, img_row in enumerate(images):
                     # img_row: [n_samples_per, c, h, w]
                     imgs_to_save = [to_img(img, drange=[-1, 1]) for img in img_row] # ls of Image

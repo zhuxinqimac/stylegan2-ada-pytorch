@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sun 10 Oct 2021 02:51:22 AEDT
+# --- Last Modified: Mon 11 Oct 2021 01:33:28 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -55,14 +55,14 @@ class NoneAttentioner(torch.nn.Module):
         self.w_dim = w_dim
         self.att_layers = num_ws if att_layers=='all' else att_layers
         assert self.att_layers <= num_ws
-        # self.att_logits = nn.Parameter(torch.ones([]), requires_grad=True)
+        self.att_logits = nn.Parameter(torch.ones([]), requires_grad=True)
 
     def forward(self, ws_in):
         # ws_in: [b, num_ws, w_dim]
         # return: [b, nv_dim, num_ws]
-        # fake_scaler = self.att_logits / self.att_logits
-        # ws_atts = fake_scaler * torch.ones([ws_in.shape[0], self.nv_dim, self.att_layers], dtype=ws_in.dtype).to(ws_in.device) / self.att_layers
-        ws_atts = torch.ones([ws_in.shape[0], self.nv_dim, self.att_layers], dtype=ws_in.dtype).to(ws_in.device) / self.att_layers
+        fake_scaler = self.att_logits / self.att_logits
+        ws_atts = fake_scaler * torch.ones([ws_in.shape[0], self.nv_dim, self.att_layers], dtype=ws_in.dtype).to(ws_in.device) / self.att_layers
+        # ws_atts = torch.ones([ws_in.shape[0], self.nv_dim, self.att_layers], dtype=ws_in.dtype).to(ws_in.device) / self.att_layers
         ws_atts = torch.cat([ws_atts, torch.zeros([ws_in.shape[0], self.nv_dim,
                                                    self.num_ws - self.att_layers], dtype=ws_in.dtype).to(ws_in.device)], dim=-1) # [1, nv_dim, num_ws]
         return ws_atts
@@ -119,6 +119,7 @@ class Ada1wAttentioner(NoneAttentioner):
             self.filter_size = filter_size
             self.filter_std = filter_std
             self.filter = GaussianSmoothing(nv_dim, filter_size, filter_std, dim=1)
+        del self.att_logits
 
     def forward(self, ws_in):
         # ws_in: [b, num_ws, w_dim]
@@ -156,6 +157,7 @@ class AdaALLwAttentioner(NoneAttentioner):
             self.filter_size = filter_size
             self.filter_std = filter_std
             self.filter = GaussianSmoothing(nv_dim, filter_size, filter_std, dim=1)
+        del self.att_logits
 
     def forward(self, ws_in):
         # ws_in: [b, num_ws, w_dim]
@@ -272,7 +274,7 @@ class PCANavigatorNet(NoneNavigatorNet):
         **kwargs,
     ):
         '''
-        Depending on all ws.
+        PCA directions from Ganspace.
         '''
         super().__init__(nv_dim, num_ws, w_dim)
         self.w_avg = w_avg
@@ -285,6 +287,32 @@ class PCANavigatorNet(NoneNavigatorNet):
         # return: [b, nv_dim, w_dim]
         b = ws_in.shape[0]
         w_dirs = self.v_mat[:, :self.nv_dim].transpose(1, 0) # [nv_dim, w_dim]
+        return w_dirs.view(1, self.nv_dim, self.w_dim).repeat(b, 1, 1).to(ws_in.device)
+
+@persistence.persistent_class
+class SefaNavigatorNet(NoneNavigatorNet):
+    def __init__(self,
+        nv_dim,                     # Navigator latent dim.
+        num_ws,                     # Number of intermediate latents for synthesis net input.
+        w_dim,                      # Intermediate latent (W) dimensionality.
+        sefa_v,                     # Sefa eigen vectors [n_eigens, w_dim].
+        sefa_s,                     # Sefa eigen values [n_eigens].
+        **kwargs,
+    ):
+        '''
+        Sefa model.
+        '''
+        super().__init__(nv_dim, num_ws, w_dim)
+        print('using sefa navigator')
+        self.sefa_v = sefa_v
+        self.sefa_s = sefa_s
+        assert self.nv_dim <= self.sefa_v.shape[0]
+
+    def forward(self, ws_in):
+        # ws_in: [b, num_ws, w_dim]
+        # return: [b, nv_dim, w_dim]
+        b = ws_in.shape[0]
+        w_dirs = self.sefa_v[:self.nv_dim, ...] # [nv_dim, w_dim]
         return w_dirs.view(1, self.nv_dim, self.w_dim).repeat(b, 1, 1).to(ws_in.device)
 
 #----------------------------------------------------------------------------
@@ -338,6 +366,8 @@ class Navigator(torch.nn.Module):
             self.nav_net = AdaALLwNavigatorNet(self.nv_dim, self.num_ws, self.w_dim, **nav_kwargs)
         elif self.nav_type == 'pca': # Using pca nv_dim-largest basis as directions.
             self.nav_net = PCANavigatorNet(self.nv_dim, self.num_ws, self.w_dim, **nav_kwargs)
+        elif self.nav_type == 'sefa': # Using sefa nv_dim-largest basis as directions.
+            self.nav_net = SefaNavigatorNet(self.nv_dim, self.num_ws, self.w_dim, **nav_kwargs)
         else:
             raise ValueError('Unknown nav_type:', self.nav_type)
 

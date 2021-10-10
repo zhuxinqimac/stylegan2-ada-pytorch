@@ -8,7 +8,7 @@
 
 # --- File Name: w_walk_utils.py
 # --- Creation Date: 03-09-2021
-# --- Last Modified: Thu 07 Oct 2021 18:12:20 AEDT
+# --- Last Modified: Mon 11 Oct 2021 00:57:13 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -254,6 +254,63 @@ def get_SVD(G, url, device, rank, n_samples=1000000, batch=256, cache=True, cach
         os.replace(temp_file, cache_file) # atomic
 
     return w_avg.to(device), s_values.to(device), v_mat.to(device), s_values_normed.to(device)
+
+def get_sefa(G, url, device, rank, cache=True, cache_dir=None):
+    # Lookup from cache.
+    if cache_dir is None:
+        cache_dir = make_cache_dir_path('sefa_save')
+
+    url_md5 = hashlib.md5(url.encode("utf-8")).hexdigest()
+    if cache:
+        cache_files = glob.glob(os.path.join(cache_dir, url_md5 + "_*"))
+        if len(cache_files) == 1:
+            filename = cache_files[0]
+            print('Loading sefa pkl...')
+            with open(filename, 'rb') as f:
+                data = pickle.load(f)
+            return data['eigen_v'].to(device), data['eigen_s'].to(device)
+
+    # Get layers. Here we use all layers of ws.
+    layers = list(range(G.num_ws))
+
+    weights = []
+    w_idx = 0
+    for res in G.synthesis.block_resolutions:
+        block = getattr(G.synthesis, f'b{res}')
+        if res == 4:
+            weight = block.conv1.affine.weight.T
+            if w_idx in layers:
+                weights.append(weight.cpu().detach().numpy())
+            w_idx += 1
+        else:
+            for i in range(block.num_conv):
+                conv = getattr(block, f'conv{i}')
+                weight = conv.affine.weight.T
+                if w_idx in layers:
+                    weights.append(weight.cpu().detach().numpy())
+                w_idx += 1
+    if w_idx in layers:
+        # Last torgb layer
+        weight = block.torgb.affine.weight.T
+        weights.append(weight.cpu().detach().numpy())
+
+    weight = np.concatenate(weights, axis=1).astype(np.float32)
+    weight = weight / np.linalg.norm(weight, axis=0, keepdims=True)
+    eigen_values, eigen_vectors = np.linalg.eig(weight.dot(weight.T))
+
+    # Save to cache.
+    if cache and rank == 0:
+        tail_name = "w_sefa.pkl"
+        cache_file = os.path.join(cache_dir, url_md5 + "_" + tail_name)
+        temp_file = os.path.join(cache_dir, "tmp_" + uuid.uuid4().hex + "_" + url_md5 + "_" + tail_name)
+        os.makedirs(cache_dir, exist_ok=True)
+        save_data = {'eigen_v': torch.tensor(eigen_vectors.T), 'eigen_s': torch.tensor(eigen_values)}
+        print('Saving sefa pkl...')
+        with open(temp_file, 'wb') as f:
+            pickle.dump(save_data, f)
+        os.replace(temp_file, cache_file) # atomic
+
+    return torch.tensor(eigen_vectors.T, device=device), torch.tensor(eigen_values, device=device)
 
 def get_w_walk_VAE(w_origin, V, n_samples_per, trav_walk_scale=1., bound=4.):
     # w_walk = get_w_walk_VAE(w_origin, V, n_samples_per).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)

@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 08 Oct 2021 21:42:11 AEDT
+# --- Last Modified: Mon 11 Oct 2021 00:58:05 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -34,7 +34,8 @@ from torch_utils.ops import conv2d_gradfix
 from torch_utils.ops import grid_sample_gradfix
 from training.training_loop import setup_snapshot_image_grid, save_image_grid
 from training.training_loop_uneven import get_traversal
-from training.w_walk_utils import get_w_walk, get_w_walk_SVD_step, get_w_walk_SVD_step_per_w, add_outline, get_SVD
+from training.w_walk_utils import get_w_walk, get_w_walk_SVD_step, get_w_walk_SVD_step_per_w, add_outline
+from training.w_walk_utils import get_SVD, get_sefa
 from training.networks_features import feat_net
 
 import legacy
@@ -99,9 +100,12 @@ def training_loop(
             S = network_dict['D'].requires_grad_(False).to(device) # subclass of torch.nn.Module
 
     w_avg, s_values, v_mat, s_values_normed = get_SVD(G, gan_network_pkl, device, rank)
+    sefa_v, sefa_s = get_sefa(G, gan_network_pkl, device, rank)
     M_kwargs.nav_kwargs.s_values = s_values_normed
     M_kwargs.nav_kwargs.v_mat = v_mat
     M_kwargs.nav_kwargs.w_avg = w_avg
+    M_kwargs.nav_kwargs.sefa_v = sefa_v
+    M_kwargs.nav_kwargs.sefa_s = sefa_s
 
     # Load Sensor networks.
     if (loss_kwargs.contrast_lamb != 0 or loss_kwargs.compose_lamb != 0 or loss_kwargs.significance_lamb != 0) and (sensor_type != 'discrim'):
