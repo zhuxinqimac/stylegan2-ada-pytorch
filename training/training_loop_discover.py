@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 08 Oct 2021 00:07:58 AEDT
+# --- Last Modified: Fri 08 Oct 2021 21:42:11 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -144,6 +144,8 @@ def training_loop(
         w = torch.empty([batch_gpu, M.num_ws, M.w_dim], device=device)
         misc.print_module_summary(M, [w])
         if S is not None:
+            if img.shape[1] == 1:
+                img = img.repeat(1, 3, 1, 1)
             misc.print_module_summary(S, [img, c] if sensor_type == 'discrim' else [img])
         if R is not None:
             misc.print_module_summary(R, [torch.cat([img, img], dim=1)])

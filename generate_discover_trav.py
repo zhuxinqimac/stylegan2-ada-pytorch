@@ -8,7 +8,7 @@
 
 # --- File Name: generate_trav.py
 # --- Creation Date: 23-08-2021
-# --- Last Modified: Thu 07 Oct 2021 18:23:02 AEDT
+# --- Last Modified: Sun 10 Oct 2021 15:42:31 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Generate traversals using pretrained network pickle."""
@@ -31,6 +31,24 @@ from generate import num_range
 import legacy
 
 #----------------------------------------------------------------------------
+def to_img(img, drange):
+    '''
+    Convert an image of torch in drange to PIL Image.
+    '''
+    lo, hi = drange
+    img = np.asarray(img, dtype=np.float32)
+    img = (img - lo) * (255 / (hi - lo))
+    img = np.rint(img).clip(0, 255).astype(np.uint8)
+    img = np.transpose(img, [1, 2, 0]) # [h, w, c]
+
+    if img.shape[-1] == 1:
+        new_img = PIL.Image.fromarray(img[:, :, 0], 'L')
+    else:
+        new_img = PIL.Image.fromarray(img, 'RGB')
+    return new_img
+
+
+#----------------------------------------------------------------------------
 
 @click.command()
 @click.pass_context
@@ -43,6 +61,7 @@ import legacy
 @click.option('--trav_walk_scale', type=float, help='Walking scale for latent traversal')
 @click.option('--use_pca_scale', type=bool, help='If using pca scale in walking')
 @click.option('--tiny_step', type=float, help='The tiny step in w_walk')
+@click.option('--save_gifs_per_attr', type=bool, help='If saving gifs for each attribute')
 def generate_travs(
     ctx: click.Context,
     generator_pkl: str,
@@ -54,10 +73,24 @@ def generate_travs(
     trav_walk_scale: float,
     use_pca_scale: bool,
     tiny_step: float,
+    save_gifs_per_attr: bool,
 ):
     print('Loading networks from "%s"...' % generator_pkl)
     print('use_pca_scale:', use_pca_scale)
     print('type(use_pca_scale):', type(use_pca_scale))
+
+    resume_specs = {
+        'ffhq256':     'https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/transfer-learning-source-nets/ffhq-res256-mirror-paper256-noaug.pkl',
+        'ffhq512':     'https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/transfer-learning-source-nets/ffhq-res512-mirror-stylegan2-noaug.pkl',
+        'ffhq1024':    'https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/transfer-learning-source-nets/ffhq-res1024-mirror-stylegan2-noaug.pkl',
+        'celebahq256': 'https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/transfer-learning-source-nets/celebahq-res256-mirror-paper256-kimg100000-ada-target0.5.pkl',
+        'lsundog256':  'https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/transfer-learning-source-nets/lsundog-res256-paper256-kimg100000-noaug.pkl',
+    }
+
+    assert generator_pkl is not None
+    if generator_pkl in resume_specs:
+        generator_pkl = resume_specs[generator_pkl] # predefined url
+
     device = torch.device('cuda')
     with dnnlib.util.open_url(generator_pkl) as f:
         G = legacy.load_network_pkl(f)['G_ema'].requires_grad_(False).to(device) # type: ignore
@@ -82,7 +115,18 @@ def generate_travs(
             w_origin = G.mapping(z_origin, c_origin, truncation_psi=0.5) # (1, num_ws, w_dim)
             w_walk = get_w_walk(w_origin, M, n_samples_per, trav_walk_scale, tiny_step=tiny_step, use_pca_scale=use_pca_scale, semi_inverse=semi_inverse).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
             images = torch.cat([G.synthesis(w, noise_mode='const').to('cpu') for w in w_walk]) # (gh * gw, c, h, w)
-            save_image_grid(images, os.path.join(outdir, f'seed{seed:04d}_sinv{semi_inverse}.png'), drange=[-1,1], grid_size=grid_size)
+            if not save_gifs_per_attr:
+                save_image_grid(images, os.path.join(outdir, f'seed{seed:04d}_sinv{semi_inverse}.png'), drange=[-1,1], grid_size=grid_size)
+            else:
+                cur_dir = os.path.join(outdir, f'seed{seed:04d}_sinv{semi_inverse}')
+                os.makedirs(cur_dir, exist_ok=True)
+                _, c, h, w = images.shape
+                images = images.view(M.nv_dim, n_samples_per, c, h, w)
+                for sem_i, img_row in enumerate(images):
+                    # img_row: [n_samples_per, c, h, w]
+                    imgs_to_save = [to_img(img, drange=[-1, 1]) for img in img_row] # ls of Image
+                    imgs_to_save[0].save(os.path.join(cur_dir, f'sem_{sem_i:04d}.gif'), format='GIF',
+                                         append_images=imgs_to_save[1:] + imgs_to_save[::-1], save_all=True, optimize=False, duration=100, loop=0)
 
 
 #----------------------------------------------------------------------------

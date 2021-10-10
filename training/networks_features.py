@@ -8,7 +8,7 @@
 
 # --- File Name: networks_features.py
 # --- Creation Date: 07-10-2021
-# --- Last Modified: Fri 08 Oct 2021 17:53:54 AEDT
+# --- Last Modified: Fri 08 Oct 2021 18:45:30 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -205,6 +205,7 @@ class ViTFeat(torch.nn.Module):
 
 def feat_net(name='alex', pretrained=True, **kwargs):
     print('using feat_net')
+    print('pretrained=', pretrained)
     if name == 'alex':
         net = AlexNetFeat(pretrained=pretrained, **kwargs)
     elif name.startswith('resnet'):
