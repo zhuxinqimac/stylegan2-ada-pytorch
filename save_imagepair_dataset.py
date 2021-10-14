@@ -8,7 +8,7 @@
 
 # --- File Name: save_imagepair_dataset.py
 # --- Creation Date: 22-05-2021
-# --- Last Modified: Tue 25 May 2021 19:12:16 AEST
+# --- Last Modified: Thu 14 Oct 2021 16:00:56 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -45,6 +45,7 @@ def img_to_255(images):
 @click.option('--outdir', help='Where to save the output dataset', required=True, metavar='DIR')
 @click.option('--outfile', help='Out file name', required=True, metavar='DIR')
 @click.option('--use_dynamic_scale', help='If use dynamic scale', default=False, type=bool)
+@click.option('--use_uniform', help='If use uniform distribution', default=False, type=bool)
 @click.option('--edit_scale', help='The scale to edit', default=0.1, type=float)
 @click.option('--n_samples', help='The number of image pairs', default=240000, type=int)
 @click.option('--batch_size', help='The batch size when generating', default=100, type=int)
@@ -56,6 +57,7 @@ def run_create_dataset(
     outfile: str,
     seed: int,
     use_dynamic_scale: bool,
+    use_uniform: bool,
     edit_scale: float,
     n_samples: int,
     batch_size: int,
@@ -88,19 +90,23 @@ def run_create_dataset(
         g_z = torch.randn([batch_size, G.z_dim], device=device)
         g_c = torch.randn([batch_size, G.c_dim], device=device)
         with torch.no_grad():
-            g_w = G.mapping(g_z, g_c)[:, 0] # (b, w_dim)
+            g_w = G.mapping(g_z, g_c) # (b, num_ws, w_dim)
             out_M = M(g_w)
 
         if use_dynamic_scale:
-            scale = torch.randn(batch_size, device=device).view(batch_size, 1, 1) * edit_scale
+            if use_uniform:
+                scale = ((torch.rand(batch_size, device=device) - 0.5) * 2).view(batch_size, 1, 1, 1) * edit_scale
+            else:
+                scale = torch.randn(batch_size, device=device).view(batch_size, 1, 1, 1) * edit_scale
         else:
             scale = edit_scale
 
-        delta_all = out_M[:, :, :M.w_dim] * scale # (b, M.z_dim, w_dim)
-        var_idx = torch.randint(0, M.z_dim, (batch_size,), device=device) # (b)
-        delta = torch.gather(delta_all, 1, var_idx.view(batch_size, 1, 1).repeat(1, 1, M.w_dim)).squeeze() # (b, w_dim)
-        w = (g_w + delta).unsqueeze(1).repeat(1, M.num_ws, 1) # (b, num_ws, w_dim)
-        g_w = g_w.unsqueeze(1).repeat(1, M.num_ws, 1)
+        delta_all = out_M[:, :, :M.w_dim] * scale # (b, M.nv_dim, num_ws, w_dim)
+        var_idx = torch.randint(0, M.nv_dim, (batch_size,), device=device) # (b)
+        delta = torch.gather(delta_all, 1, var_idx.view(batch_size, 1, 1, 1).repeat(1, 1, M.num_ws, M.w_dim))[:, 0] # (b, num_ws, w_dim)
+        # w = (g_w + delta).unsqueeze(1).repeat(1, M.num_ws, 1) # (b, num_ws, w_dim)
+        # g_w = g_w.unsqueeze(1).repeat(1, M.num_ws, 1)
+        w = g_w + delta
         with torch.no_grad():
             images_orig = G.synthesis(g_w, noise_mode='const') # (b, c, h, w)
             images_edit = G.synthesis(w, noise_mode='const') # (b, c, h, w)
@@ -120,7 +126,7 @@ def run_create_dataset(
     dset1 = f1.create_dataset('images_orig', orig_np.shape, data=orig_np)
     dset2 = f1.create_dataset('images_edit', edit_np.shape, data=edit_np)
     dset3 = f1.create_dataset('labels_np', labels_np.shape, data=labels_np)
-    dset3.attrs['z_dim'] = M.z_dim
+    dset3.attrs['z_dim'] = M.nv_dim
     f1.close()
 
     for i in range(n_saved_samples):
