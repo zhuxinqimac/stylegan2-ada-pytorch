@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sun 17 Oct 2021 02:29:08 AEDT
+# --- Last Modified: Sun 17 Oct 2021 03:12:53 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -158,7 +158,6 @@ class DiscoverLoss(Loss):
             else:
                 raise ValueError('Unsupported sensor type:', sensor_type)
             self.use_discrim_as_S = False
-        print('loss S_L:', self.S_L)
         if self.sensor_used_layers > self.S_L:
             self.sensor_used_layers = self.S_L
 
@@ -199,7 +198,6 @@ class DiscoverLoss(Loss):
 
     def gensyn_forward(self, ws, **block_kwargs):
         block_ws = []
-        print('using gensyn')
         with torch.autograd.profiler.record_function('split_ws'):
             misc.assert_shape(ws, [None, self.G_synthesis.num_ws, self.G_synthesis.w_dim])
             ws = ws.to(torch.float32)
@@ -447,7 +445,8 @@ class DiscoverLoss(Loss):
             loss = 0
         else:
             diff_q_ls, diff_pos_ls, diff_neg_ls = [], [], []
-        for kk in range(max(0, self.S_L - self.sensor_used_layers), self.S_L):
+        # for kk in range(max(0, self.S_L - self.sensor_used_layers), self.S_L):
+        for kk in range(len(outs)):
             if not self.norm_on_depth:
                 diff_q, diff_pos, diff_neg = self.extract_diff_L(outs[kk])
                 loss_kk = self.extract_loss_L(diff_q, diff_pos, diff_neg, kk, pos_neg_idx)
@@ -472,17 +471,21 @@ class DiscoverLoss(Loss):
     def extract_catdiff_loss(self, outs, pos_neg_idx):
         diff_q_ls, diff_pos_ls, diff_neg_ls = [], [], []
         # res = [F.interpolate(diffs[kk], size=(16, 16)) for kk in range(self.L)]
-        for kk in range(max(0, self.S_L - self.sensor_used_layers), self.S_L):
+        # for kk in range(max(0, self.S_L - self.sensor_used_layers), self.S_L):
+        for kk in range(len(outs)):
             diff_q_kk, diff_pos_kk, diff_neg_kk = self.extract_diff_L(outs[kk])
             diff_q_ls.append(diff_q_kk)
             diff_pos_ls.append(diff_pos_kk)
             diff_neg_ls.append(diff_neg_kk)
         res_q = [F.interpolate(diff_q_ls[kk], size=(32, 32), mode='bilinear', align_corners=False) \
-                 for kk in range(max(0, self.S_L - self.sensor_used_layers), self.S_L)]
+                 # for kk in range(max(0, self.S_L - self.sensor_used_layers), self.S_L)]
+                 for kk in range(len(diff_q_ls))]
         res_pos = [F.interpolate(diff_pos_ls[kk], size=(32, 32), mode='bilinear', align_corners=False) \
-                   for kk in range(max(0, self.S_L - self.sensor_used_layers), self.S_L)]
+                   # for kk in range(max(0, self.S_L - self.sensor_used_layers), self.S_L)]
+                   for kk in range(len(diff_pos_ls))]
         res_neg = [F.interpolate(diff_neg_ls[kk], size=(32, 32), mode='bilinear', align_corners=False) \
-                   for kk in range(max(0, self.S_L - self.sensor_used_layers), self.S_L)]
+                   # for kk in range(max(0, self.S_L - self.sensor_used_layers), self.S_L)]
+                   for kk in range(len(diff_neg_ls))]
         res_q = torch.cat(res_q, dim=1) # (b//2, c_sum, h, w)
         res_pos = torch.cat(res_pos, dim=1)
         res_neg = torch.cat(res_neg, dim=1)
@@ -681,7 +684,7 @@ class DiscoverLoss(Loss):
             with torch.autograd.profiler.record_function('Mcontrast_var_features'):
                 outs_all = []
                 if 'g' in self.var_feat_type:
-                    outs_all += [gen_feats_all]
+                    outs_all += gen_feats_all
                 if 's' in self.var_feat_type:
                     outs_all += self.run_S(imgs_all)
                 if 'i' in self.var_feat_type:
