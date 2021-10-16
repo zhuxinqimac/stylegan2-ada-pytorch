@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 11 Oct 2021 00:58:05 AEDT
+# --- Last Modified: Sun 17 Oct 2021 02:35:25 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -94,7 +94,7 @@ def training_loop(
     with dnnlib.util.open_url(gan_network_pkl) as f:
         network_dict = legacy.load_network_pkl(f)
         G = network_dict['G_ema'].requires_grad_(False).to(device) # subclass of torch.nn.Module
-        if sensor_type == 'discrim':
+        if (sensor_type == 'discrim') and ('s' in loss_kwargs.var_feat_type):
             if rank == 0:
                 print('Loading S (discrim) networks...')
             S = network_dict['D'].requires_grad_(False).to(device) # subclass of torch.nn.Module
@@ -108,7 +108,7 @@ def training_loop(
     M_kwargs.nav_kwargs.sefa_s = sefa_s
 
     # Load Sensor networks.
-    if (loss_kwargs.contrast_lamb != 0 or loss_kwargs.compose_lamb != 0 or loss_kwargs.significance_lamb != 0) and (sensor_type != 'discrim'):
+    if ('s' in loss_kwargs.var_feat_type) and (loss_kwargs.contrast_lamb != 0 or loss_kwargs.compose_lamb != 0 or loss_kwargs.significance_lamb != 0) and (sensor_type != 'discrim'):
         if rank == 0:
             print('Loading S networks...')
         print('pnet_rand:', pnet_rand)

@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 08 Oct 2021 01:00:33 AEDT
+# --- Last Modified: Sun 17 Oct 2021 02:29:08 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -80,7 +80,7 @@ class DiscoverLoss(Loss):
                  Sim_pkl=None, Comp_pkl=None, Sim_lambda=0., Comp_lambda=0.,
                  s_values_normed=None, v_mat=None, w_avg=None, per_w_dir=False, sensor_type='alex',
                  use_pca_scale=False, use_pca_sign=False, use_uniform=False,
-                 mask_after_square=False, union_spatial=False, recog_lamb=0., vs_lamb=0.25):
+                 mask_after_square=False, union_spatial=False, recog_lamb=0., vs_lamb=0.25, var_feat_type='s'):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -100,6 +100,7 @@ class DiscoverLoss(Loss):
         self.union_spatial = union_spatial
         self.use_uniform = use_uniform
         self.R = R
+        self.var_feat_type = var_feat_type
 
         self.Sim = None
         self.Comp = None
@@ -181,12 +182,41 @@ class DiscoverLoss(Loss):
         ws = torch.cat(ws, dim=0)
         return ws
 
-    def run_G_synthesis(self, all_ws):
+    def run_G_synthesis(self, all_ws, return_feats=False):
         # ws: (b, num_ws, w_dim)
         # with misc.ddp_sync(self.G_synthesis, sync):
-        imgs = [self.G_synthesis(ws) for ws in all_ws.split(self.batch_gpu)] # (b, c, h, w)
-        imgs = torch.cat(imgs, dim=0)
-        return imgs
+        if not return_feats:
+            imgs = [self.G_synthesis(ws) for ws in all_ws.split(self.batch_gpu)] # (b, c, h, w)
+            imgs = torch.cat(imgs, dim=0)
+            return imgs
+        for i, ws in enumerate(all_ws.split(self.batch_gpu)):
+            feats_tmp_ls = self.gensyn_forward(ws)
+            if i == 0:
+                feats_ls = feats_tmp_ls
+            else:
+                feats_ls = [torch.cat([feats, feats_tmp_ls[j]]) for j, feats in enumerate(feats_ls)]
+        return feats_ls[:-1], feats_ls[-1] # images returned separately
+
+    def gensyn_forward(self, ws, **block_kwargs):
+        block_ws = []
+        print('using gensyn')
+        with torch.autograd.profiler.record_function('split_ws'):
+            misc.assert_shape(ws, [None, self.G_synthesis.num_ws, self.G_synthesis.w_dim])
+            ws = ws.to(torch.float32)
+            w_idx = 0
+            for res in self.G_synthesis.block_resolutions:
+                block = getattr(self.G_synthesis, f'b{res}')
+                block_ws.append(ws.narrow(1, w_idx, block.num_conv + block.num_torgb))
+                w_idx += block.num_conv
+
+        feats_ls = []
+        x = img = None
+        for res, cur_ws in zip(self.G_synthesis.block_resolutions, block_ws):
+            block = getattr(self.G_synthesis, f'b{res}')
+            x, img = block(x, img, cur_ws, **block_kwargs)
+            feats_ls.append(x)
+        feats_ls.append(img)
+        return feats_ls
 
     def run_M(self, all_ws, sync):
         with misc.ddp_sync(self.M, sync):
@@ -646,11 +676,19 @@ class DiscoverLoss(Loss):
             with torch.autograd.profiler.record_function('Mcontrast_generate_imgs'):
                 # Generate images.
                 ws_all = torch.cat([ws_orig, ws_q, ws_pos, ws_neg], dim=0) # (2.5 * b, num_ws, w_dim)
-                imgs_all = self.run_G_synthesis(ws_all)
+                gen_feats_all, imgs_all = self.run_G_synthesis(ws_all, return_feats=True)
+
+            with torch.autograd.profiler.record_function('Mcontrast_var_features'):
+                outs_all = []
+                if 'g' in self.var_feat_type:
+                    outs_all += [gen_feats_all]
+                if 's' in self.var_feat_type:
+                    outs_all += self.run_S(imgs_all)
+                if 'i' in self.var_feat_type:
+                    outs_all += [imgs_all]
 
             with torch.autograd.profiler.record_function('Mcontrast_loss'):
                 # Contrast loss
-                outs_all = self.run_S(imgs_all)
                 if self.use_catdiff:
                     loss_contrast = self.extract_catdiff_loss(outs_all, pos_neg_idx)
                 else:

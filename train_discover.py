@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 08 Oct 2021 00:26:03 AEDT
+# --- Last Modified: Sun 17 Oct 2021 02:40:18 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -33,7 +33,8 @@ class UserError(Exception):
 
 #----------------------------------------------------------------------------
 def bool_own(v):
-    return v.lower() == 'true'
+    v_lower = v.lower()
+    return (v_lower == 'true') or (v_lower == 't') or (v_lower == '1')
 
 KEY_BRIEF_NAMES = {'z': 'nv_dim', 'at': 'att_type', 'nt': 'nav_type', 'amf': 'att_middle_feat', 'nmf': 'nav_middle_feat',
                    'afc': 'att_fc_layers', 'nfc': 'nav_fc_layers', 'atl': 'att_layers',
@@ -49,7 +50,7 @@ KEY_BRIEF_NAMES = {'z': 'nv_dim', 'at': 'att_type', 'nt': 'nav_type', 'amf': 'at
                    'pcas': 'use_pca_scale', 'pcan': 'use_pca_sign',
                    'mafsq': 'mask_after_square', 'usp': 'union_spatial', 'uni': 'use_uniform',
                    'recg': 'recog_lamb', 'vs': 'vs_lamb', 'Rch': 'R_ch_in', 'Rna': 'R_net_name', 'Rpre': 'R_pretrained',
-                   'vmul': 'vit_return_multi_layer'}
+                   'vmul': 'vit_return_multi_layer', 'vart': 'var_feat_type'}
 KEY_DTYPES = {'nv_dim': int, 'att_type': str, 'nav_type': str, 'att_middle_feat': int, 'nav_middle_feat': int,
               'att_fc_layers': int, 'nav_fc_layers': int, 'att_layers': int,
               'att_gaussian_size': int, 'att_gaussian_std': float, 'norm_on_depth': bool_own,
@@ -64,7 +65,7 @@ KEY_DTYPES = {'nv_dim': int, 'att_type': str, 'nav_type': str, 'att_middle_feat'
               'use_pca_scale': bool_own, 'use_pca_sign': bool_own,
               'mask_after_square': bool_own, 'union_spatial': bool_own, 'use_uniform': bool_own,
               'recog_lamb': float, 'vs_lamb': float, 'R_ch_in': int, 'R_net_name': str, 'R_pretrained': bool_own,
-              'vit_return_multi_layer': bool_own}
+              'vit_return_multi_layer': bool_own, 'var_feat_type': str}
 
 def parse_cfg(cfg):
     '''
@@ -183,7 +184,7 @@ def setup_training_loop_kwargs(
                            save_size=128, trav_walk_scale=0.2, recursive_walk=True, show_normD=True, per_w_dir=False,
                            use_pca_scale=False, use_pca_sign=False, mask_after_square=False, union_spatial=False, use_uniform=False,
                            recog_lamb=0., vs_lamb=0.25, R_ch_in=6, R_net_name='resnet18', R_pretrained=False,
-                           vit_return_multi_layer=False)
+                           vit_return_multi_layer=False, var_feat_type='s')
         # 'stylegan2': dict(ref_gpus=8,  kimg=25000,  mb=32, mbstd=4,  fmaps=1,   lrate=0.002),
     }
 
@@ -229,7 +230,7 @@ def setup_training_loop_kwargs(
                                        neg_lamb=spec.neg_lamb, pos_lamb=spec.pos_lamb, neg_on_self=spec.neg_on_self, use_catdiff=spec.use_catdiff,
                                        per_w_dir=spec.per_w_dir, sensor_type=spec.sensor_type, use_pca_scale=spec.use_pca_scale, use_pca_sign=spec.use_pca_sign,
                                        mask_after_square=spec.mask_after_square, union_spatial=spec.union_spatial, use_uniform=spec.use_uniform,
-                                       recog_lamb=spec.recog_lamb, vs_lamb=spec.vs_lamb)
+                                       recog_lamb=spec.recog_lamb, vs_lamb=spec.vs_lamb, var_feat_type=spec.var_feat_type)
     args.total_kimg = spec.kimg
     args.batch_size = spec.mb
     args.batch_gpu = spec.mb // spec.ref_gpus

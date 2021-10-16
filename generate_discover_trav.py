@@ -8,7 +8,7 @@
 
 # --- File Name: generate_trav.py
 # --- Creation Date: 23-08-2021
-# --- Last Modified: Mon 11 Oct 2021 01:30:36 AEDT
+# --- Last Modified: Fri 15 Oct 2021 01:56:34 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Generate traversals using pretrained network pickle."""
@@ -165,9 +165,14 @@ def generate_travs(
                 images = images.view(M.nv_dim, n_samples_per, c, h, w)
                 for sem_i, img_row in enumerate(images):
                     # img_row: [n_samples_per, c, h, w]
+                    # GIF
                     imgs_to_save = [to_img(img, drange=[-1, 1]) for img in img_row] # ls of Image
                     imgs_to_save[0].save(os.path.join(cur_dir, f'sem_{sem_i:04d}.gif'), format='GIF',
                                          append_images=imgs_to_save[1:] + imgs_to_save[::-1], save_all=True, optimize=False, duration=100, loop=0)
+                    # Image sequence
+                    img_seq = img_row.permute(1, 2, 0, 3).reshape(c, h, n_samples_per * w)
+                    img_seq = to_img(img_seq, drange=[-1, 1])
+                    img_seq.save(os.path.join(cur_dir, f'sem_{sem_i:04d}.png'))
 
 
 #----------------------------------------------------------------------------
