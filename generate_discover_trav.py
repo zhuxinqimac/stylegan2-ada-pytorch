@@ -8,7 +8,7 @@
 
 # --- File Name: generate_trav.py
 # --- Creation Date: 23-08-2021
-# --- Last Modified: Fri 15 Oct 2021 01:56:34 AEDT
+# --- Last Modified: Thu 21 Oct 2021 17:47:16 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Generate traversals using pretrained network pickle."""
@@ -22,6 +22,7 @@ import dnnlib
 import numpy as np
 import PIL.Image
 import torch
+import lpips
 import pickle
 from training.training_loop_group import get_traversal
 from training.training_loop import save_image_grid
@@ -86,6 +87,17 @@ def factorize_weight(generator):
 
     return layers, eigen_vectors.T, eigen_values
 
+def percept_sort(imgs):
+    '''
+    imgs: [nv_dim, n_samples_per, c, h, w]
+    '''
+    pnet = lpips.LPIPS(net='alex', lpips=False)
+    for i in range(imgs.shape[1] - 1):
+        d_i = pnet(imgs[:, i], imgs[:, i+1]).squeeze() # [nv_dim]
+        d_sum = d_i if i == 0 else d_sum + d_i # [nv_dim]
+    _, idx_sort = torch.sort(d_sum, descending=True)
+    imgs = imgs[idx_sort]
+    return imgs
 
 #----------------------------------------------------------------------------
 
@@ -156,12 +168,13 @@ def generate_travs(
             w_walk = get_w_walk(w_origin, M, n_samples_per, trav_walk_scale,
                                 tiny_step=tiny_step, use_pca_scale=use_pca_scale, semi_inverse=semi_inverse).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
             images = torch.cat([G.synthesis(w, noise_mode='const').to('cpu') for w in w_walk]) # (gh * gw, c, h, w)
+            _, c, h, w = images.shape
+            images = percept_sort(images.view(M.nv_dim, n_samples_per, c, h, w)).reshape(M.nv_dim * n_samples_per, c, h, w)
             if not save_gifs_per_attr:
                 save_image_grid(images, os.path.join(outdir, f'seed{seed:04d}_sinv{semi_inverse}.png'), drange=[-1,1], grid_size=grid_size)
             else:
                 cur_dir = os.path.join(outdir, f'seed{seed:04d}_sinv{semi_inverse}')
                 os.makedirs(cur_dir, exist_ok=True)
-                _, c, h, w = images.shape
                 images = images.view(M.nv_dim, n_samples_per, c, h, w)
                 for sem_i, img_row in enumerate(images):
                     # img_row: [n_samples_per, c, h, w]

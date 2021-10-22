@@ -8,7 +8,7 @@
 
 # --- File Name: networks_features.py
 # --- Creation Date: 07-10-2021
-# --- Last Modified: Fri 08 Oct 2021 18:45:30 AEDT
+# --- Last Modified: Fri 22 Oct 2021 21:02:56 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -23,7 +23,8 @@ from torchvision import transforms
 from torch_utils import misc
 
 class AlexNetFeat(torch.nn.Module):
-    def __init__(self, requires_grad=False, pretrained=True, **kwargs):
+    def __init__(self, requires_grad=False, pretrained=True,
+                 no_relu=False, no_spatial=False, **kwargs):
         super().__init__()
         alexnet_pretrained_features = models.alexnet(pretrained=pretrained).features
         self.slice1 = torch.nn.Sequential()
@@ -33,37 +34,52 @@ class AlexNetFeat(torch.nn.Module):
         self.slice5 = torch.nn.Sequential()
         self.N_slices = 5
         for x in range(2):
+            if isinstance(alexnet_pretrained_features[x], nn.ReLU) and no_relu:
+                continue
             self.slice1.add_module(str(x), alexnet_pretrained_features[x])
         for x in range(2, 5):
+            if isinstance(alexnet_pretrained_features[x], nn.ReLU) and no_relu:
+                continue
             self.slice2.add_module(str(x), alexnet_pretrained_features[x])
         for x in range(5, 8):
+            if isinstance(alexnet_pretrained_features[x], nn.ReLU) and no_relu:
+                continue
             self.slice3.add_module(str(x), alexnet_pretrained_features[x])
         for x in range(8, 10):
+            if isinstance(alexnet_pretrained_features[x], nn.ReLU) and no_relu:
+                continue
             self.slice4.add_module(str(x), alexnet_pretrained_features[x])
         for x in range(10, 12):
+            if isinstance(alexnet_pretrained_features[x], nn.ReLU) and no_relu:
+                continue
             self.slice5.add_module(str(x), alexnet_pretrained_features[x])
         if not requires_grad:
             for param in self.parameters():
                 param.requires_grad = False
+        self.no_relu, self.no_spatial = no_relu, no_spatial
+        print('slice1:', self.slice1)
+        print('slice3:', self.slice3)
 
     def forward(self, x):
         x = self.slice1(x)
-        x_1 = x
+        x_1 = x.mean(dim=[2, 3], keepdim=True) if self.no_spatial else x
         x = self.slice2(x)
-        x_2 = x
+        x_2 = x.mean(dim=[2, 3], keepdim=True) if self.no_spatial else x
         x = self.slice3(x)
-        x_3 = x
+        x_3 = x.mean(dim=[2, 3], keepdim=True) if self.no_spatial else x
         x = self.slice4(x)
-        x_4 = x
+        x_4 = x.mean(dim=[2, 3], keepdim=True) if self.no_spatial else x
         x = self.slice5(x)
-        x_5 = x
+        x_5 = x.mean(dim=[2, 3], keepdim=True) if self.no_spatial else x
 
         out = [x_1, x_2, x_3, x_4, x_5]
         return out
 
 class ResNetFeat(torch.nn.Module):
-    def __init__(self, requires_grad=False, pretrained=True, res_type='resnet18', **kwargs):
+    def __init__(self, requires_grad=False, pretrained=True, res_type='resnet18',
+                 no_spatial=False, no_bn=False, no_relu=False, no_skip=False, **kwargs):
         super().__init__()
+        self.res_type = res_type
         if res_type == 'resnet18':
             self.resnet = models.resnet18(pretrained=pretrained)
         elif res_type == 'resnet34':
@@ -75,87 +91,59 @@ class ResNetFeat(torch.nn.Module):
         if not requires_grad:
             for param in self.parameters():
                 param.requires_grad = False
+        self.layers = [self.resnet.layer1, self.resnet.layer2, self.resnet.layer3, self.resnet.layer4]
+        self.no_spatial, self.no_bn, self.no_relu, self.no_skip = no_spatial, no_bn, no_relu, no_skip
+        print('no_spatial:', self.no_spatial)
+        print('no_bn:', self.no_bn)
+        print('no_relu:', self.no_relu)
+        print('no_skip:', self.no_skip)
+
+    def block_forward(self, block, x, bottleneck=False):
+        identity = x
+
+        out = block.conv1(x)
+        out = out if self.no_bn else block.bn1(out)
+        out = out if self.no_relu else block.relu(out)
+
+        out = block.conv2(out)
+        out = out if self.no_bn else block.bn2(out)
+        if bottleneck:
+            out = out if self.no_relu else block.relu(out)
+
+            out = block.conv3(out)
+            out = out if self.no_bn else block.bn3(out)
+
+        if (block.downsample is not None) and (not self.no_skip):
+            identity = block.downsample(x)
+
+        if not self.no_skip:
+            out += identity
+        out = out if self.no_relu else block.relu(out)
+
+        return out
+
+    def layer_forward(self, layer, x):
+        for block in layer:
+            x = self.block_forward(block, x, bottleneck=self.res_type not in ['resnet18', 'resnet34'])
+        return x
 
     def forward(self, x):
+        out = []
         x = self.resnet.conv1(x)
-        x = self.resnet.bn1(x)
-        x = self.resnet.relu(x)
-        x_1 = x
+        x = x if self.no_bn else self.resnet.bn1(x)
+        x = x if self.no_relu else self.resnet.relu(x)
+        out.append(x)
         x = self.resnet.maxpool(x)
 
-        x = self.resnet.layer1(x)
-        x_2 = x
-        x = self.resnet.layer2(x)
-        x_3 = x
-        x = self.resnet.layer3(x)
-        x_4 = x
-        x = self.resnet.layer4(x)
-        x_5 = x
+        for i in range(4):
+            x = self.layer_forward(self.layers[i], x)
+            if self.no_spatial:
+                x = x.mean(dim=[2, 3], keepdim=True)
+            out.append(x)
 
-        out = [x_1, x_2, x_3, x_4, x_5]
+        # out = [x_1, x_2, x_3, x_4, x_5]
         return out
 
-class Inception3Feat(torch.nn.Module):
-    def __init__(self, requires_grad=False, pretrained=True, **kwargs):
-        super().__init__()
-        self.incept = models.inception_v3(pretrained=pretrained)
-        self.trans = transforms.Compose([transforms.Resize(128)])
-        if not requires_grad:
-            for param in self.parameters():
-                param.requires_grad = False
-
-    def forward(self, x):
-        if x.shape[-1] < 128:
-            x = self.trans(x)
-        # N x 3 x 299 x 299
-        x = self.incept.Conv2d_1a_3x3(x)
-        # N x 32 x 149 x 149
-        x = self.incept.Conv2d_2a_3x3(x)
-        # N x 32 x 147 x 147
-        x = self.incept.Conv2d_2b_3x3(x)
-        x_1 = x
-        # N x 64 x 147 x 147
-        x = self.incept.maxpool1(x)
-
-        # N x 64 x 73 x 73
-        x = self.incept.Conv2d_3b_1x1(x)
-        # N x 80 x 73 x 73
-        x = self.incept.Conv2d_4a_3x3(x)
-        # N x 192 x 71 x 71
-        x_2 = x
-        x = self.incept.maxpool2(x)
-
-        # N x 192 x 35 x 35
-        x = self.incept.Mixed_5b(x)
-        # N x 256 x 35 x 35
-        x = self.incept.Mixed_5c(x)
-        # N x 288 x 35 x 35
-        x = self.incept.Mixed_5d(x)
-        # N x 288 x 35 x 35
-        x = self.incept.Mixed_6a(x)
-        x_3 = x
-
-        # N x 768 x 17 x 17
-        x = self.incept.Mixed_6b(x)
-        # N x 768 x 17 x 17
-        x = self.incept.Mixed_6c(x)
-        # N x 768 x 17 x 17
-        x = self.incept.Mixed_6d(x)
-        # N x 768 x 17 x 17
-        x = self.incept.Mixed_6e(x)
-        # N x 768 x 17 x 17
-        x = self.incept.Mixed_7a(x)
-        x_4 = x
-
-        # N x 1280 x 8 x 8
-        x = self.incept.Mixed_7b(x)
-        # N x 2048 x 8 x 8
-        x = self.incept.Mixed_7c(x)
-        # N x 2048 x 8 x 8
-        x_5 = x
-
-        out = [x_1, x_2, x_3, x_4, x_5]
-        return out
 
 class ViTFeat(torch.nn.Module):
     def __init__(self, requires_grad=False, pretrained=True, model_name='B_16', return_multi_layer=False, **kwargs):
@@ -210,8 +198,8 @@ def feat_net(name='alex', pretrained=True, **kwargs):
         net = AlexNetFeat(pretrained=pretrained, **kwargs)
     elif name.startswith('resnet'):
         net = ResNetFeat(pretrained=pretrained, res_type=name, **kwargs)
-    elif name == 'inception3':
-        net = Inception3Feat(pretrained=pretrained, **kwargs)
+    # elif name == 'inception3':
+        # net = Inception3Feat(pretrained=pretrained, **kwargs)
     elif name in ['B16', 'B32', 'L32', 'B16imagenet1k', 'B32imagenet1k', 'L16imagenet1k', 'L32imagenet1k']:
         vit_name_dict = {'B16': 'B_16', 'B32': 'B_32', 'L32': 'L_32', 'B16imagenet1k': 'B_16_imagenet1k',
                          'B32imagenet1k': 'B_32_imagenet1k', 'L16imagenet1k': 'L_16_imagenet1k',
