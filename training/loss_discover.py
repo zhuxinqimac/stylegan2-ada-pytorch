@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sun 17 Oct 2021 03:12:53 AEDT
+# --- Last Modified: Sat 23 Oct 2021 18:47:04 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -80,7 +80,8 @@ class DiscoverLoss(Loss):
                  Sim_pkl=None, Comp_pkl=None, Sim_lambda=0., Comp_lambda=0.,
                  s_values_normed=None, v_mat=None, w_avg=None, per_w_dir=False, sensor_type='alex',
                  use_pca_scale=False, use_pca_sign=False, use_uniform=False,
-                 mask_after_square=False, union_spatial=False, recog_lamb=0., vs_lamb=0.25, var_feat_type='s'):
+                 mask_after_square=False, union_spatial=False, recog_lamb=0., vs_lamb=0.25, var_feat_type='s',
+                 xent_lamb=0., xent_temp=0.5, use_flat_diff=False):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -101,6 +102,9 @@ class DiscoverLoss(Loss):
         self.use_uniform = use_uniform
         self.R = R
         self.var_feat_type = var_feat_type
+        self.xent_lamb = xent_lamb
+        self.xent_temp = xent_temp
+        self.use_flat_diff = use_flat_diff
 
         self.Sim = None
         self.Comp = None
@@ -571,6 +575,111 @@ class DiscoverLoss(Loss):
         training_stats.report('Loss/recog/loss_vs', loss_vs)
         return loss_vd + self.vs_lamb * loss_vs
 
+    def var_all_nv(self, ws_orig, delta):
+        '''
+        ws_orig: [b, num_ws, w_dim]
+        delta: [b, nv_dim, num_ws, w_dim]
+        return: [nv_dim * b, num_ws, w_dim]
+        '''
+        b = ws_orig.shape[0]
+        ws_out = []
+        for i in range(delta.shape[1]):
+            if self.use_uniform:
+                scale_var = ((torch.rand(b, device=delta.device) - 0.5) * 2. * self.var_sample_scale + self.var_sample_mean).view(b, 1, 1)
+            else:
+                scale_var = (torch.randn(b, device=delta.device) * self.var_sample_scale + self.var_sample_mean).view(b, 1, 1)
+            ws_out.append(ws_orig + delta[:, i] * scale_var) # list of [b, num_ws, w_dim]
+        ws_out = torch.cat(ws_out, dim=0)
+        return ws_out
+
+    def extract_flatdiff_loss_pn(self, outs_all):
+        '''
+        outs_all: list of features; each feature is of [2.5*b, ...] shape (orig(1), q(0.5), pos(0.5), neg(0.5))
+        '''
+        b_half = outs_all.shape[0] // 5
+        feats_flat_all = []
+        for feat in outs_all:
+            # feat: [2.5*b, ...]
+            feats_flat_all.append(feat.flatten(1))
+        feats_flat = torch.cat(feats_flat_all, dim=1) # [2.5*b, n_feat]
+        feats_diff_q = feats_flat[2*b_half:3*b_half, ...] - feats_flat[:b_half, ...]
+        feats_diff_pos = feats_flat[3*b_half:4*b_half, ...] - feats_flat[b_half:2*b_half, ...]
+        feats_diff_neg = feats_flat[4*b_half:, ...] - feats_flat[b_half:2*b_half, ...]
+        feats_diff_q = feats_diff_q / feats_diff_q.norm(dim=1).reshape(b_half, 1)
+        feats_diff_pos = feats_diff_pos / feats_diff_pos.norm(dim=1).reshape(b_half, 1)
+        feats_diff_neg = feats_diff_neg / feats_diff_neg.norm(dim=1).reshape(b_half, 1)
+
+        # similarity matrix
+        # sim_qpos = torch.mm(feats_diff_q, feats_diff_pos.t()) # [0.5b, 0.5b]
+        # sim_qneg = torch.mm(feats_diff_q, feats_diff_neg.t()) # [0.5b, 0.5b]
+        sim_qpos = -(feats_diff_q * feats_diff_pos).sum(1)**2
+        sim_qneg = (feats_diff_q * feats_diff_neg).sum(1)**2
+        loss = self.pos_lamb * sim_qpos.mean() + self.neg_lamb * sim_qneg
+        return loss
+
+    def extract_flatdiff_loss(self, outs_all):
+        '''
+        outs_all: list of features; each feature is of [2*b, ...] shape (orig(1), q(0.5), pos(0.5))
+        '''
+        b_half = outs_all[0].shape[0] // 4
+        feats_flat_all = []
+        for feat in outs_all:
+            # feat: [2*b, ...]
+            feats_flat_all.append(feat.flatten(1))
+        feats_flat = torch.cat(feats_flat_all, dim=1) # [2*b, n_feat]
+        feats_diff_q = feats_flat[2*b_half:3*b_half, ...] - feats_flat[:b_half, ...]
+        feats_diff_pos = feats_flat[3*b_half:4*b_half, ...] - feats_flat[b_half:2*b_half, ...]
+        feats_diff_q = feats_diff_q / feats_diff_q.norm(dim=1).reshape(b_half, 1)
+        feats_diff_pos = feats_diff_pos / feats_diff_pos.norm(dim=1).reshape(b_half, 1)
+
+        # similarity matrix
+        sim = torch.mm(feats_diff_q, feats_diff_pos.t()) # [0.5b, 0.5b]
+        diag_mask = torch.eye(b_half, device=sim.device).bool()
+        pos = sim.masked_select(diag_mask).view(b_half, -1)
+        neg = sim.masked_select(~diag_mask).view(b_half, -1)
+        pos = pos.mean(dim=-1)
+        neg = neg.mean(dim=-1)
+
+        loss = -torch.log(pos / neg).mean()
+        return loss
+
+    def compute_xent_loss(self, outs_all, nv_dim, b):
+        '''
+        outs_all: list of features; each feature is of [(1+nv_dim)*b, ...] shape
+        '''
+        feats_flat_all = []
+        for feat in outs_all:
+            # feat: [(1+nv_dim)*b, ...]
+            feats_flat_all.append(feat.flatten(1))
+        feats_flat = torch.cat(feats_flat_all, dim=1) # [(1+nv_dim)*b, n_feat]
+        feats_diff = feats_flat[b:, ...] - feats_flat[:b, ...].repeat(nv_dim, 1) # [nv_dim * b, n_feat]
+        feats_diff = feats_diff / feats_diff.norm(dim=1).reshape(nv_dim * b, 1)
+        assert feats_diff.shape[0] % nv_dim == 0, 'Batch size not divisible by nv_dim!'
+
+        # similarity matrix
+        sim = torch.mm(feats_diff, feats_diff.t()) # [nv_dim*b, nv_dim*b]
+        sim = torch.exp(sim * self.xent_temp)
+
+        n_samples = feats_diff.shape[0]
+        # mask for pairs
+        mask = torch.zeros((n_samples, n_samples), device=sim.device).bool()
+        for i in range(nv_dim):
+            start, end = i * (n_samples // nv_dim), (i + 1) * (n_samples // nv_dim)
+            mask[start:end, start:end] = 1
+
+        diag_mask = ~(torch.eye(n_samples, device=sim.device).bool())
+
+        # pos and neg similarity and remove self similarity for pos
+        pos = sim.masked_select(mask * diag_mask).view(n_samples, -1)
+        neg = sim.masked_select(~mask).view(n_samples, -1)
+        pos = pos.mean(dim=-1)
+        neg = neg.mean(dim=-1)
+
+        # acc = (pos > neg).float().mean()
+        loss = -torch.log(pos / neg).mean()
+
+        return loss
+
     def accumulate_gradients(self, phase, sync, gain):
         assert phase in ['Mall', 'Mcompose', 'Mdiverse', 'Mcontrast']
         do_Mcompose = (phase in ['Mall', 'Mcompose']) and (self.compose_lamb != 0)
@@ -580,6 +689,7 @@ class DiscoverLoss(Loss):
         do_Mrecog = (phase in ['Mall', 'Mrecog']) and (self.recog_lamb != 0) and (self.R is not None)
         do_Msim = (phase in ['Mall', 'Msim']) and (self.Sim_lambda != 0) and (self.Sim is not None)
         do_Mcomp = (phase in ['Mall', 'Mcomp']) and (self.Comp_lambda != 0) and (self.Comp is not None)
+        do_Mxent = (phase in ['Mall', 'Mxent']) and (self.xent_lamb != 0)
 
         with torch.autograd.profiler.record_function('M_run'):
             ws_orig = self.get_multicolor_ws(self.n_colors) # [b(_gpu), num_ws, w_dim]
@@ -692,11 +802,40 @@ class DiscoverLoss(Loss):
 
             with torch.autograd.profiler.record_function('Mcontrast_loss'):
                 # Contrast loss
-                if self.use_catdiff:
+                if self.use_flat_diff:
+                    # loss_contrast = self.extract_flatdiff_loss_pn(outs_all)
+                    loss_contrast = self.extract_flatdiff_loss([out[:2*b, ...] for out in outs_all]) # ignore neg
+                elif self.use_catdiff:
                     loss_contrast = self.extract_catdiff_loss(outs_all, pos_neg_idx)
                 else:
                     loss_contrast = self.extract_diff_loss(outs_all, pos_neg_idx)
             loss_all += self.contrast_lamb * loss_contrast.mean()
+
+        if do_Mxent:
+            with torch.autograd.profiler.record_function('Mxent_var_all_nv'):
+                ws_var = self.var_all_nv(ws_orig, delta) # [nv_dim * b, num_ws, w_dim]
+
+            with torch.autograd.profiler.record_function('Mxent_generate_imgs'):
+                # Generate images.
+                ws_all = torch.cat([ws_orig, ws_var], dim=0) # [(1+nv_dim) * b, num_ws, w_dim]
+                # gen_feats_all, imgs_all = self.run_G_synthesis(ws_all, return_feats=True)
+                imgs_all = self.run_G_synthesis(ws_all)
+
+            with torch.autograd.profiler.record_function('Mxent_var_features'):
+                outs_all = []
+                # if 'g' in self.var_feat_type:
+                    # outs_all += gen_feats_all
+                if 's' in self.var_feat_type:
+                    outs_all += self.run_S(imgs_all)
+                if 'i' in self.var_feat_type:
+                    outs_all += [imgs_all]
+                # Test using last feat only.
+                outs_all = outs_all[-1:]
+
+            with torch.autograd.profiler.record_function('Mxent_loss'):
+                # Xentropy loss
+                loss_xent = self.compute_xent_loss(outs_all, self.nv_dim, b)
+            loss_all += self.xent_lamb * loss_xent.mean()
 
         if do_Mrecog:
             # print('Using recognize loss...')

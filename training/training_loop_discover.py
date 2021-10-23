@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sun 17 Oct 2021 02:35:25 AEDT
+# --- Last Modified: Sat 23 Oct 2021 02:22:47 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -108,7 +108,7 @@ def training_loop(
     M_kwargs.nav_kwargs.sefa_s = sefa_s
 
     # Load Sensor networks.
-    if ('s' in loss_kwargs.var_feat_type) and (loss_kwargs.contrast_lamb != 0 or loss_kwargs.compose_lamb != 0 or loss_kwargs.significance_lamb != 0) and (sensor_type != 'discrim'):
+    if ('s' in loss_kwargs.var_feat_type) and (loss_kwargs.contrast_lamb != 0 or loss_kwargs.compose_lamb != 0 or loss_kwargs.significance_lamb != 0 or loss_kwargs.xent_lamb != 0) and (sensor_type != 'discrim'):
         if rank == 0:
             print('Loading S networks...')
         print('pnet_rand:', pnet_rand)
