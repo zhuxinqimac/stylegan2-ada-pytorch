@@ -8,7 +8,7 @@
 
 # --- File Name: networks_features.py
 # --- Creation Date: 07-10-2021
-# --- Last Modified: Fri 22 Oct 2021 21:02:56 AEDT
+# --- Last Modified: Sun 24 Oct 2021 17:40:06 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -181,15 +181,16 @@ class ViTFeat(torch.nn.Module):
             for block in self.vit.transformer.blocks:
                 x = block(x, None) # [b, gh*gw+1, d]
                 x_ls.append(x)
-            x = torch.cat(x_ls, dim=-1) # [b, gh*gw+1, d*n_block]
+            # x = torch.cat(x_ls, dim=-1) # [b, gh*gw+1, d*n_block]
         else:
             x = self.vit.transformer(x)  # [b,gh*gw+1,d]
+            x_ls = [x]
         if hasattr(self.vit, 'class_token'):
-            out = x[:, 1:].transpose(1, 2) # [b, d, gh*gw]
+            out = [x[:, 1:].transpose(1, 2).view(b, -1, gh, gw) for x in x_ls] # ls of [b, d, gh*gw]
         else:
-            out = x.transpose(1, 2) # [b, d, gh*gw]
-        out = out.view(b, -1, gh, gw)
-        return [out]
+            out = [x.transpose(1, 2).view(b, -1, gh, gw) for x in x_ls] # ls of [b, d, gh*gw]
+        # out = out.view(b, -1, gh, gw)
+        return out
 
 def feat_net(name='alex', pretrained=True, **kwargs):
     print('using feat_net')
