@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 11 Oct 2021 01:33:28 AEDT
+# --- Last Modified: Mon 25 Oct 2021 01:32:36 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -153,9 +153,9 @@ class AdaALLwAttentioner(NoneAttentioner):
         # self.net = nn.Sequential(FullyConnectedLayer(num_ws * w_dim, middle_feat, activation='relu'),
                                  # FullyConnectedLayer(middle_feat, nv_dim * self.att_layers, activation='linear'))
         self.net = construct_fc_layers(num_ws * w_dim, att_fc_layers, middle_feat, nv_dim * self.att_layers)
-        if filter_size > 0:
-            self.filter_size = filter_size
-            self.filter_std = filter_std
+        self.filter_size = filter_size
+        self.filter_std = filter_std
+        if self.filter_size > 0:
             self.filter = GaussianSmoothing(nv_dim, filter_size, filter_std, dim=1)
         del self.att_logits
 
