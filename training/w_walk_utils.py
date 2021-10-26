@@ -8,7 +8,7 @@
 
 # --- File Name: w_walk_utils.py
 # --- Creation Date: 03-09-2021
-# --- Last Modified: Mon 11 Oct 2021 00:57:13 AEDT
+# --- Last Modified: Tue 26 Oct 2021 01:53:53 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -28,14 +28,14 @@ from dnnlib.util import make_cache_dir_path
 def get_dir_scale(delta, use_pca_scale=False, s_values_normed=None, v_mat=None, semi_inverse=False):
     # delta: [b, num_ws, w_dim]
     if use_pca_scale:
-        print('using pca_scale')
+        # print('using pca_scale')
         s_values_x2 = s_values_normed * 2 # Based on range [-2, 2]
         dir_in_pca = torch.matmul(delta.mean(1), v_mat) # [b, q]
         dir_in_pca_norm = F.normalize(dir_in_pca, dim=1) # [b, q]
         coef_t = 1. / (dir_in_pca_norm.square() / s_values_x2[np.newaxis, ...].square()).sum(1, keepdim=True).sqrt() # [b, 1], 1/(x^2/a^2 + y^2/b^2, ...).sqrt()
         dir_len_semi = torch.linalg.norm(dir_in_pca_norm * coef_t, dim=-1) # [b]
-        print('dir_len_semi:', dir_len_semi)
-        print('1/dir_len_semi:', 1./dir_len_semi)
+        # print('dir_len_semi:', dir_len_semi)
+        # print('1/dir_len_semi:', 1./dir_len_semi)
         if semi_inverse:
             return 1./dir_len_semi
         return dir_len_semi

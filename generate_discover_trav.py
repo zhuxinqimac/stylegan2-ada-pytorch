@@ -8,7 +8,7 @@
 
 # --- File Name: generate_trav.py
 # --- Creation Date: 23-08-2021
-# --- Last Modified: Thu 21 Oct 2021 17:47:16 AEDT
+# --- Last Modified: Tue 26 Oct 2021 03:27:34 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Generate traversals using pretrained network pickle."""
@@ -22,6 +22,7 @@ import dnnlib
 import numpy as np
 import PIL.Image
 import torch
+import torch.nn.functional as F
 import lpips
 import pickle
 from training.training_loop_group import get_traversal
@@ -99,6 +100,66 @@ def percept_sort(imgs):
     imgs = imgs[idx_sort]
     return imgs
 
+def get_norm_mask(diff):
+    norm = torch.norm(diff, dim=0) # (h, w)
+
+    h, w = norm.size()
+    norm_viewed = norm.view(h * w)
+    numerator = norm_viewed - norm_viewed.min(dim=0, keepdim=True)[0]
+    denominator = norm_viewed.max(dim=0, keepdim=True)[0] - norm_viewed.min(dim=0, keepdim=True)[0] + 1e-6
+    mask = (numerator / denominator).view(h, w)
+    return norm, mask
+
+def get_masked_sim(diff_1, diff_2, mask_1, mask_2):
+    mask_comb = mask_1 * mask_2
+    cos_sim_grid = F.cosine_similarity(diff_1, diff_2, dim=0).abs() * mask_comb
+    cos_sim = cos_sim_grid.sum() / (mask_comb.sum() + 1e-6) # scalar
+    return cos_sim
+
+def get_sim(diff_1, diff_2):
+    '''
+    diff_1 and diff_2: [c, h, w]
+    '''
+    norm_1, mask_1 = get_norm_mask(diff_1)
+    norm_2, mask_2 = get_norm_mask(diff_2)
+    sim = get_masked_sim(diff_1, diff_2, mask_1, mask_2)
+    return sim
+
+def get_duplicated_dirs(imgs, thresh=0.5, start_from_last=True):
+    '''
+    imgs: [nv_dim, n_samples_per, c, h, w]
+    '''
+    fnet = lpips.LPIPS(net='alex', lpips=False).net
+    nv_dim, n_samples_per, c, h, w = imgs.shape
+    feats_orig = list(fnet(imgs[:, 0])) # ls of [nv_dim, fc, fh, fw]
+    feats_end = list(fnet(imgs[:, -1])) # ls of [nv_dim, fc, fh, fw]
+    feats_diff = [feats_end[l] - feat_orig for l, feat_orig in enumerate(feats_orig)] # ls of [nv_dim, fc, fh, fw]
+    sim_grid_sum = torch.zeros(nv_dim, nv_dim)
+    for l, feat_diff in enumerate(feats_diff):
+        sim_grid = torch.empty(nv_dim, nv_dim)
+        for i in range(nv_dim):
+            for j in range(nv_dim):
+                sim_grid[i, j] = get_sim(feat_diff[i], feat_diff[j])
+        sim_grid_sum += sim_grid
+    print('sim_grid_sum:', sim_grid_sum)
+    dir_ls = []
+    if start_from_last:
+        for i in reversed(range(nv_dim)):
+            print('sim_grid_sum[i, i+1:]:', sim_grid_sum[i, i+1:])
+            dup = (sim_grid_sum[i, i+1:] > thresh)
+            print('dup:', dup)
+            dup = dup.any()
+            if dup:
+                dir_ls.append(i)
+    else:
+        for i in range(nv_dim):
+            print('sim_grid_sum[i, :i]:', sim_grid_sum[i, :i])
+            dup = (sim_grid_sum[i, :i] > thresh).any()
+            if dup:
+                dir_ls.append(i)
+    print('dir_ls:', dir_ls)
+    return dir_ls
+
 #----------------------------------------------------------------------------
 
 @click.command()
@@ -112,6 +173,7 @@ def percept_sort(imgs):
 @click.option('--trav_walk_scale', type=float, help='Walking scale for latent traversal')
 @click.option('--use_pca_scale', type=bool, help='If using pca scale in walking')
 @click.option('--tiny_step', type=float, help='The tiny step in w_walk')
+@click.option('--thresh', type=float, help='The threshold in deduplication')
 @click.option('--save_gifs_per_attr', type=bool, help='If saving gifs for each attribute')
 def generate_travs(
     ctx: click.Context,
@@ -124,6 +186,7 @@ def generate_travs(
     trav_walk_scale: float,
     use_pca_scale: bool,
     tiny_step: float,
+    thresh: float,
     save_gifs_per_attr: bool,
 ):
     print('Loading networks from "%s"...' % generator_pkl)
@@ -154,6 +217,7 @@ def generate_travs(
         tiny_step = None
 
     os.makedirs(outdir, exist_ok=True)
+    print(seeds)
 
     # Generate images.
     for semi_inverse in [False]:
@@ -167,11 +231,17 @@ def generate_travs(
 
             w_walk = get_w_walk(w_origin, M, n_samples_per, trav_walk_scale,
                                 tiny_step=tiny_step, use_pca_scale=use_pca_scale, semi_inverse=semi_inverse).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
-            images = torch.cat([G.synthesis(w, noise_mode='const').to('cpu') for w in w_walk]) # (gh * gw, c, h, w)
+            images = torch.cat([G.synthesis(w, noise_mode='const').to('cpu') for w in w_walk]) # (gh (nv_dim) * gw (n_samples_per), c, h, w)
             _, c, h, w = images.shape
-            images = percept_sort(images.view(M.nv_dim, n_samples_per, c, h, w)).reshape(M.nv_dim * n_samples_per, c, h, w)
+            images = images.view(M.nv_dim, n_samples_per, c, h, w)
+
+            images = percept_sort(images)
+            remove_dirs = get_duplicated_dirs(images, thresh=thresh) # Remove duplicated directions.
+            images[remove_dirs] = images[0, n_samples_per // 2].clone().unsqueeze(0)
+            images = percept_sort(images).reshape(M.nv_dim * n_samples_per, c, h, w)
+
             if not save_gifs_per_attr:
-                save_image_grid(images, os.path.join(outdir, f'seed{seed:04d}_sinv{semi_inverse}.png'), drange=[-1,1], grid_size=grid_size)
+                save_image_grid(images, os.path.join(outdir, f'seed{seed:04d}_sinv{semi_inverse}_scale{trav_walk_scale}.png'), drange=[-1,1], grid_size=grid_size)
             else:
                 cur_dir = os.path.join(outdir, f'seed{seed:04d}_sinv{semi_inverse}')
                 os.makedirs(cur_dir, exist_ok=True)
