@@ -8,7 +8,7 @@
 
 # --- File Name: save_imagepair_dataset.py
 # --- Creation Date: 22-05-2021
-# --- Last Modified: Tue 26 Oct 2021 18:42:15 AEDT
+# --- Last Modified: Fri 29 Oct 2021 01:24:45 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -52,10 +52,14 @@ def get_duplicated_dirs_batch(M, G, device, b=512, var_scale=1., thresh=0.5):
             g_w = G.mapping(g_z, g_c) # (mini_b, num_ws, w_dim)
             out_M = M(g_w) # [mini_b, nv_dim, num_ws, w_dim]
         img_orig = G.synthesis(g_w) # [mini_b, c, h, w]
+        if img_orig.shape[1] == 1:
+            img_orig = img_orig.repeat(1, 3, 1, 1)
         feat_orig = list(fnet(img_orig)) # ls of [mini_b, fc, fh, fw]
         for nv in range(M.nv_dim):
             g_w_var = g_w + var_scale * out_M[:, nv]
             img_var = G.synthesis(g_w_var) # [mini_b, c, h, w]
+            if img_var.shape[1] == 1:
+                img_var = img_var.repeat(1, 3, 1, 1)
             feat_var = list(fnet(img_var)) # ls of [mini_b, fc, fh, fw]
             diff = [f_var - feat_orig[l] for l, f_var in enumerate(feat_var)] # ls of [mini_b, fc, fh, fw]
             if i == 0:
@@ -73,7 +77,7 @@ def get_duplicated_dirs_batch(M, G, device, b=512, var_scale=1., thresh=0.5):
         for j in range(len(diff_all)):
             for l in range(len(diff_all[i])):
                 sim_grid_sum[i, j] += get_sim(diff_all[i][l], diff_all[j][l])
-    # print('sim_grid_sum:', sim_grid_sum)
+    print('sim_grid_sum:', sim_grid_sum)
 
     dir_ls = []
     for i in range(M.nv_dim):
