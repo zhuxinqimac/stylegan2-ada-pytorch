@@ -8,7 +8,7 @@
 
 # --- File Name: generate_trav.py
 # --- Creation Date: 23-08-2021
-# --- Last Modified: Tue 26 Oct 2021 03:27:34 AEDT
+# --- Last Modified: Sat 30 Oct 2021 18:20:46 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Generate traversals using pretrained network pickle."""
@@ -232,6 +232,11 @@ def generate_travs(
             w_walk = get_w_walk(w_origin, M, n_samples_per, trav_walk_scale,
                                 tiny_step=tiny_step, use_pca_scale=use_pca_scale, semi_inverse=semi_inverse).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
             images = torch.cat([G.synthesis(w, noise_mode='const').to('cpu') for w in w_walk]) # (gh (nv_dim) * gw (n_samples_per), c, h, w)
+
+            print('images.shape:', images.shape)
+            if images.shape[2] > 256:
+                images = F.interpolate(images, size=(256, 256), mode='area')
+
             _, c, h, w = images.shape
             images = images.view(M.nv_dim, n_samples_per, c, h, w)
 
