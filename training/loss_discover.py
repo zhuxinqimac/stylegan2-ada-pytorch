@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 23 Oct 2021 18:47:04 AEDT
+# --- Last Modified: Sat 30 Oct 2021 15:41:08 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -230,6 +230,8 @@ class DiscoverLoss(Loss):
         # with misc.ddp_sync(self.S, sync):
         if all_imgs.size(1) == 1:
             all_imgs = all_imgs.repeat(1, 3, 1, 1)
+        if all_imgs.shape[2] > 256:
+            all_imgs = F.interpolate(all_imgs, size=(256, 256), mode='area')
         for i, imgs in enumerate(all_imgs.split(self.batch_gpu)):
             if self.use_discrim_as_S:
                 feats_tmp_ls = self.discrim_forward(imgs, None)

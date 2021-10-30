@@ -6,9 +6,9 @@
 # You may obtain a copy of the License at
 # http://www.apache.org/licenses/LICENSE-2.0
 
-# --- File Name: edit_image.py
-# --- Creation Date: 16-05-2021
-# --- Last Modified: Sat 30 Oct 2021 16:31:16 AEDT
+# --- File Name: edit_image_old.py
+# --- Creation Date: 30-10-2021
+# --- Last Modified: Sat 30 Oct 2021 00:59:05 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -27,11 +27,6 @@ import numpy as np
 import PIL.Image
 import torch
 import torch.nn.functional as F
-from training.training_loop_group import get_traversal
-from training.training_loop import save_image_grid
-from training.w_walk_utils import get_w_walk
-from generate import num_range
-from generate_discover_trav import percept_sort, get_duplicated_dirs, to_img
 
 import dnnlib
 import legacy
@@ -128,8 +123,8 @@ def project(
         # Synth images from opt_w.
         w_noise = torch.randn_like(w_opt) * w_noise_scale
         # ws = (w_opt + w_noise).repeat([1, G.mapping.num_ws, 1])
-        # ws = w_opt
-        ws = w_opt + w_noise
+        ws = w_opt
+        # ws = w_opt + w_noise
         synth_images = G.synthesis(ws, noise_mode='const')
 
         # Downsample image to 256x256 if it's larger than that. VGG was built for 224x224 images.
@@ -210,43 +205,37 @@ def num_range(s: str) -> List[int]:
 #----------------------------------------------------------------------------
 
 @click.command()
-@click.option('--generator_pkl', help='Network pickle filename', required=True)
-@click.option('--navigator_pkl', help='M Network pickle filename', required=True)
+@click.option('--gan_network', help='Network pickle filename', required=True)
+@click.option('--m_network', help='M Network pickle filename', required=True)
 @click.option('--target', help='Target image file to project to', required=True, metavar='FILE')
 @click.option('--num-steps', help='Number of optimization steps', type=int, default=1000, show_default=True)
 @click.option('--seed', help='Random seed', type=int, default=303, show_default=True)
 @click.option('--save-video', help='Save an mp4 video of optimization progress', type=bool, default=True, show_default=True)
 @click.option('--outdir', help='Where to save the output images', required=True, metavar='DIR')
+@click.option('--edit_dims', help='The latent dim to edit', required=True, type=num_range)
+@click.option('--edit_scale', help='The scale to edit', required=True, type=CommaSeparatedFloatList())
+@click.option('--impact_w_layers', help='Optionally limit the impact on certain W space', default=None, type=CommaSeparatedIntList())
 @click.option('--train_project', help='If training projection', type=bool, default=False, show_default=True)
 @click.option('--gen_rand_image', help='If generate rand images', type=bool, default=False, show_default=True)
 @click.option('--truncation_psi', help='Truncation psi in mapping net', default=0.7, type=float, show_default=True)
-@click.option('--rand_n_samples', help='Samples to show', default=5, type=int, show_default=True)
-@click.option('--n_samples_per', type=int, help='Number of samples in a traversal row')
-@click.option('--batch_gpu', type=int, help='Batch size per GPU')
-@click.option('--trav_walk_scale', type=float, help='Walking scale for latent traversal')
-@click.option('--use_pca_scale', type=bool, help='If using pca scale in walking')
-@click.option('--tiny_step', type=float, help='The tiny step in w_walk')
-@click.option('--thresh', type=float, help='The threshold in deduplication')
-@click.option('--save_gifs_per_attr', type=bool, help='If saving gifs for each attribute')
+@click.option('--n_samples', help='Samples to show', default=5, type=int, show_default=True)
+@click.option('--use_heat_max', help='If use max of heat', type=bool, default=False, show_default=True)
 def run_edit(
-    generator_pkl: str,
-    navigator_pkl: str,
+    gan_network: str,
+    m_network: str,
     target: str,
     outdir: str,
     save_video: bool,
     seed: int,
     num_steps: int,
+    edit_dims: int,
+    edit_scale: list,
+    impact_w_layers: list,
     train_project: bool,
     gen_rand_image: bool,
     truncation_psi: float,
-    rand_n_samples: int,
-    n_samples_per: int,
-    batch_gpu: int,
-    trav_walk_scale: float,
-    use_pca_scale: bool,
-    tiny_step: float,
-    thresh: float,
-    save_gifs_per_attr: bool,
+    n_samples: int,
+    use_heat_max: bool,
 ):
     """ Edit an existing image by first projecting it into latent space W and then modify it
     by M network with specified dimension.
@@ -254,27 +243,19 @@ def run_edit(
     np.random.seed(seed)
     torch.manual_seed(seed)
 
-    resume_specs = {
-        'ffhq256':     'https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/transfer-learning-source-nets/ffhq-res256-mirror-paper256-noaug.pkl',
-        'ffhq512':     'https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/transfer-learning-source-nets/ffhq-res512-mirror-stylegan2-noaug.pkl',
-        'ffhq1024':    'https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/transfer-learning-source-nets/ffhq-res1024-mirror-stylegan2-noaug.pkl',
-        'celebahq256': 'https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/transfer-learning-source-nets/celebahq-res256-mirror-paper256-kimg100000-ada-target0.5.pkl',
-        'lsundog256':  'https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/transfer-learning-source-nets/lsundog-res256-paper256-kimg100000-noaug.pkl',
-    }
-
-    assert generator_pkl is not None
-    if generator_pkl in resume_specs:
-        generator_pkl = resume_specs[generator_pkl] # predefined url
-
     # Load networks.
-    print('Loading networks from "%s"...' % generator_pkl)
+    print('Loading networks from "%s"...' % gan_network)
     device = torch.device('cuda')
-    with dnnlib.util.open_url(generator_pkl) as f:
-        G = legacy.load_network_pkl(f)['G_ema'].requires_grad_(False).to(device) # type: ignore
+    with dnnlib.util.open_url(gan_network) as fp:
+        # G = legacy.load_network_pkl(fp)['G_ema'].requires_grad_(False).to(device) # type: ignore
+        network_dict = legacy.load_network_pkl(fp)
+        G = network_dict['G_ema'].requires_grad_(False).to(device) # subclass of torch.nn.Module
+        D = network_dict['D'].requires_grad_(False).to(device)
 
     # Load M network.
-    with open(navigator_pkl, 'rb') as f:
+    with open(m_network, 'rb') as f:
         M = pickle.load(f)['M'].requires_grad_(False).to(device)
+
 
     os.makedirs(outdir, exist_ok=True)
     if train_project:
@@ -310,58 +291,77 @@ def run_edit(
 
         # Save final projected frame and W vector.
         target_pil.save(f'{outdir}/target.png')
-        projected_w = projected_w_steps[-1].unsqueeze(0) # (num_ws, w_dim)
-        synth_image = G.synthesis(projected_w, noise_mode='const')
+        projected_w = projected_w_steps[-1] # (num_ws, w_dim)
+        synth_image = G.synthesis(projected_w.unsqueeze(0), noise_mode='const')
         synth_image = (synth_image + 1) * (255/2)
         synth_image = synth_image.permute(0, 2, 3, 1).clamp(0, 255).to(torch.uint8)[0].cpu().numpy()
         PIL.Image.fromarray(synth_image, 'RGB').save(f'{outdir}/proj.png')
-        np.savez(f'{outdir}/projected_w.npz', w=projected_w.cpu().numpy())
+        np.savez(f'{outdir}/projected_w.npz', w=projected_w.unsqueeze(0).cpu().numpy())
     elif gen_rand_image:
-        z_samples = torch.randn(rand_n_samples, G.z_dim, device=device)
+        z_samples = torch.randn(n_samples, G.z_dim, device=device)
         projected_w = G.mapping(z_samples, None, truncation_psi=truncation_psi)  # [b, num_ws, w_dim]
     else:
         projected_w = np.load(f'{outdir}/projected_w.npz')['w']
-        projected_w = torch.tensor(projected_w).to(device) # [1, num_ws, w_dim]
+        projected_w = torch.tensor(projected_w[0]).to(device)
 
     print('projected_w.shape:', projected_w.shape)
+    if not gen_rand_image:
+        # Edit single image.
+        out_M = M(projected_w.mean(0).unsqueeze(0)) # (1, M.z_dim, w_dim+(num_ws))
+    else:
+        out_M = M(projected_w.mean(1)) # (b, M.z_dim, w_dim+(num_ws))
+    print('out_M.shape:', out_M.shape)
 
-    # Generate images.
-    for semi_inverse in [False]:
-        for idx in range(projected_w.shape[0]):
-            print('Generating images %d/%d ...' % (idx + 1, projected_w.shape[0]))
-            grid_size = (n_samples_per, M.nv_dim)
-            w_origin = projected_w[idx].unsqueeze(0) # (1, num_ws, w_dim)
+    for edit_dim in tqdm(edit_dims):
+        delta = out_M[:, :, :M.w_dim] # (1/b, M.z_dim, w_dim)
+        b = out_M.size(0)
+        if M.use_local_layer_heat:
+            layer_heat = M.heat_fn(out_M[:, edit_dim, M.w_dim:]).unsqueeze(2) # (1/b, num_ws, 1)
+            # layer_heat = softmax_last_dim_fn(out_M[:, edit_dim, M.w_dim:]).unsqueeze(2) # (1/b, num_ws, 1)
+            if use_heat_max:
+                max_idx = torch.argmax(layer_heat[:,:,0], dim=1)
+                layer_heat = F.one_hot(max_idx, layer_heat.size(1)).float().to(layer_heat.device).unsqueeze(2)
+                print('layer_heat.shape:', layer_heat.shape)
+        elif M.use_global_layer_heat:
+            layer_heat = M.heat_fn(M.heat_logits[:, edit_dim]).unsqueeze(2) # (1/b, num_ws, 1)
+            # layer_heat = softmax_last_dim_fn(M.heat_logits[:, edit_dim]).unsqueeze(2) # (1/b, num_ws, 1)
+            if use_heat_max:
+                max_idx = torch.argmax(layer_heat[:,:,0], dim=1)
+                layer_heat = F.one_hot(max_idx, layer_heat.size(1)).float().to(layer_heat.device).unsqueeze(2)
+                print('layer_heat.shape:', layer_heat.shape)
+        else:
+            layer_heat = torch.ones(b, M.num_ws, 1).to(projected_w.device)
 
-            w_walk = get_w_walk(w_origin, M, n_samples_per, trav_walk_scale,
-                                tiny_step=tiny_step, use_pca_scale=use_pca_scale, semi_inverse=semi_inverse).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
-            images = torch.cat([G.synthesis(w, noise_mode='const').to('cpu') for w in w_walk]) # (gh (nv_dim) * gw (n_samples_per), c, h, w)
-            _, c, h, w = images.shape
-            images = images.view(M.nv_dim, n_samples_per, c, h, w)
+        if impact_w_layers:
+            w_pass = torch.zeros(b, M.num_ws, 1, dtype=delta.dtype).to(delta.device)
+            for i in impact_w_layers:
+                w_pass[:,i] = 1.
+            impact_w_surfix = '-'.join([str(x) for x in impact_w_layers])
+        else:
+            w_pass = torch.ones(b, M.num_ws, 1, dtype=delta.dtype).to(delta.device)
+            impact_w_surfix = 'all'
 
-            if images.shape[2] > 128:
-                images = F.interpolate(images, size=(128, 128), mode='area')
-
-            images = percept_sort(images)
-            remove_dirs = get_duplicated_dirs(images, thresh=thresh) # Remove duplicated directions.
-            images[remove_dirs] = images[0, n_samples_per // 2].clone().unsqueeze(0)
-            images = percept_sort(images).reshape(M.nv_dim * n_samples_per, c, h, w)
-
-            if not save_gifs_per_attr:
-                save_image_grid(images, os.path.join(outdir, f'idx{idx:04d}_sinv{semi_inverse}_scale{trav_walk_scale}.png'), drange=[-1,1], grid_size=grid_size)
+        images_all = []
+        for scale_i in tqdm(edit_scale):
+            edit_w = w_pass * scale_i * delta[:, edit_dim:edit_dim+1] * layer_heat # (1/b, num_ws, w_dim)
+            w_edited = projected_w.unsqueeze(0) + edit_w if not gen_rand_image else projected_w + edit_w# (1/b, num_ws, w_dim)
+            # print('w_edited.shape:', w_edited.shape)
+            w_edited_split = w_edited.split(5)
+            image_edited_ls = [G.synthesis(w, noise_mode='const') for w in w_edited_split]
+            image_edited = torch.cat(image_edited_ls, dim=0)
+            image_edited = (image_edited + 1) * (255/2)
+            image_edited = image_edited.permute(0, 2, 3, 1).clamp(0, 255).to(torch.uint8).cpu().numpy() # (b, h, w, c)
+            if not gen_rand_image:
+                PIL.Image.fromarray(image_edited[0], 'RGB').save(f'{outdir}/proj_edited_d{edit_dim}_s{scale_i}.png')
             else:
-                cur_dir = os.path.join(outdir, f'idx{idx:04d}_sinv{semi_inverse}_scale{trav_walk_scale}')
-                os.makedirs(cur_dir, exist_ok=True)
-                images = images.view(M.nv_dim, n_samples_per, c, h, w)
-                for sem_i, img_row in enumerate(images):
-                    # img_row: [n_samples_per, c, h, w]
-                    # GIF
-                    imgs_to_save = [to_img(img, drange=[-1, 1]) for img in img_row] # ls of Image
-                    imgs_to_save[0].save(os.path.join(cur_dir, f'sem_{sem_i:04d}.gif'), format='GIF',
-                                         append_images=imgs_to_save[1:] + imgs_to_save[::-1], save_all=True, optimize=False, duration=100, loop=0)
-                    # Image sequence
-                    img_seq = img_row.permute(1, 2, 0, 3).reshape(c, h, n_samples_per * w)
-                    img_seq = to_img(img_seq, drange=[-1, 1])
-                    img_seq.save(os.path.join(cur_dir, f'sem_{sem_i:04d}.png'))
+                images_all.append(image_edited[:, :, np.newaxis, ...]) # list of (b, h, 1, w, c)
+        if gen_rand_image:
+            print('images_all[0].shape', images_all[0].shape)
+            images_all = np.concatenate(images_all, axis=2) # (b, h, n_trav, w, c)
+            _, h, n_trav, w, c = images_all.shape
+            images_all = images_all.reshape([b, h, n_trav * w, c]) # (b, h, n_trav*w, c)
+            for i, image_i in enumerate(images_all):
+                PIL.Image.fromarray(image_i, 'RGB').save(f'{outdir}/trav_d{edit_dim}_i{i}_w{impact_w_surfix}.png')
 
 #----------------------------------------------------------------------------
 
