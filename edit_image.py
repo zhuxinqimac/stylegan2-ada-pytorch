@@ -8,7 +8,7 @@
 
 # --- File Name: edit_image.py
 # --- Creation Date: 16-05-2021
-# --- Last Modified: Sat 30 Oct 2021 16:31:16 AEDT
+# --- Last Modified: Sat 30 Oct 2021 18:17:51 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -335,11 +335,13 @@ def run_edit(
             w_walk = get_w_walk(w_origin, M, n_samples_per, trav_walk_scale,
                                 tiny_step=tiny_step, use_pca_scale=use_pca_scale, semi_inverse=semi_inverse).split(batch_gpu) # (gh * gw, num_ws, w_dim).split(batch_gpu)
             images = torch.cat([G.synthesis(w, noise_mode='const').to('cpu') for w in w_walk]) # (gh (nv_dim) * gw (n_samples_per), c, h, w)
+
+            print('images.shape:', images.shape)
+            if images.shape[2] > 256:
+                images = F.interpolate(images, size=(256, 256), mode='area')
+
             _, c, h, w = images.shape
             images = images.view(M.nv_dim, n_samples_per, c, h, w)
-
-            if images.shape[2] > 128:
-                images = F.interpolate(images, size=(128, 128), mode='area')
 
             images = percept_sort(images)
             remove_dirs = get_duplicated_dirs(images, thresh=thresh) # Remove duplicated directions.
