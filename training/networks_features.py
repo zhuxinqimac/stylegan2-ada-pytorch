@@ -8,7 +8,7 @@
 
 # --- File Name: networks_features.py
 # --- Creation Date: 07-10-2021
-# --- Last Modified: Sun 24 Oct 2021 17:40:06 AEDT
+# --- Last Modified: Sun 31 Oct 2021 03:25:41 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -53,6 +53,59 @@ class AlexNetFeat(torch.nn.Module):
             if isinstance(alexnet_pretrained_features[x], nn.ReLU) and no_relu:
                 continue
             self.slice5.add_module(str(x), alexnet_pretrained_features[x])
+        if not requires_grad:
+            for param in self.parameters():
+                param.requires_grad = False
+        self.no_relu, self.no_spatial = no_relu, no_spatial
+        print('slice1:', self.slice1)
+        print('slice3:', self.slice3)
+
+    def forward(self, x):
+        x = self.slice1(x)
+        x_1 = x.mean(dim=[2, 3], keepdim=True) if self.no_spatial else x
+        x = self.slice2(x)
+        x_2 = x.mean(dim=[2, 3], keepdim=True) if self.no_spatial else x
+        x = self.slice3(x)
+        x_3 = x.mean(dim=[2, 3], keepdim=True) if self.no_spatial else x
+        x = self.slice4(x)
+        x_4 = x.mean(dim=[2, 3], keepdim=True) if self.no_spatial else x
+        x = self.slice5(x)
+        x_5 = x.mean(dim=[2, 3], keepdim=True) if self.no_spatial else x
+
+        out = [x_1, x_2, x_3, x_4, x_5]
+        return out
+
+class VGG16NetFeat(torch.nn.Module):
+    def __init__(self, requires_grad=False, pretrained=True,
+                 no_relu=False, no_spatial=False, **kwargs):
+        super().__init__()
+        vgg16_pretrained_features = models.vgg16(pretrained=pretrained).features
+        self.slice1 = torch.nn.Sequential()
+        self.slice2 = torch.nn.Sequential()
+        self.slice3 = torch.nn.Sequential()
+        self.slice4 = torch.nn.Sequential()
+        self.slice5 = torch.nn.Sequential()
+        self.N_slices = 5
+        for x in range(4):
+            if isinstance(vgg16_pretrained_features[x], nn.ReLU) and no_relu:
+                continue
+            self.slice1.add_module(str(x), vgg16_pretrained_features[x])
+        for x in range(4, 9):
+            if isinstance(vgg16_pretrained_features[x], nn.ReLU) and no_relu:
+                continue
+            self.slice2.add_module(str(x), vgg16_pretrained_features[x])
+        for x in range(9, 16):
+            if isinstance(vgg16_pretrained_features[x], nn.ReLU) and no_relu:
+                continue
+            self.slice3.add_module(str(x), vgg16_pretrained_features[x])
+        for x in range(16, 23):
+            if isinstance(vgg16_pretrained_features[x], nn.ReLU) and no_relu:
+                continue
+            self.slice4.add_module(str(x), vgg16_pretrained_features[x])
+        for x in range(23, 30):
+            if isinstance(vgg16_pretrained_features[x], nn.ReLU) and no_relu:
+                continue
+            self.slice5.add_module(str(x), vgg16_pretrained_features[x])
         if not requires_grad:
             for param in self.parameters():
                 param.requires_grad = False
@@ -197,6 +250,8 @@ def feat_net(name='alex', pretrained=True, **kwargs):
     print('pretrained=', pretrained)
     if name == 'alex':
         net = AlexNetFeat(pretrained=pretrained, **kwargs)
+    elif name == 'vgg16':
+        net = VGG16NetFeat(pretrained=pretrained, **kwargs)
     elif name.startswith('resnet'):
         net = ResNetFeat(pretrained=pretrained, res_type=name, **kwargs)
     # elif name == 'inception3':
