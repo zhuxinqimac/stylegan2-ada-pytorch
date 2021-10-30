@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sun 31 Oct 2021 02:22:07 AEDT
+# --- Last Modified: Sun 31 Oct 2021 03:43:01 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -155,7 +155,7 @@ class DiscoverLoss(Loss):
             self.use_discrim_as_S = True
         else:
             # self.S_L = 7 if sensor_type == 'squeeze' else 5
-            if (sensor_type == 'alex') or (sensor_type.startswith('resnet')) or (sensor_type == 'inception3'):
+            if (sensor_type == 'alex') or (sensor_type == 'vgg16') or (sensor_type.startswith('resnet')) or (sensor_type == 'inception3'):
                 self.S_L = 5
             elif sensor_type in ['B16', 'B32', 'L32', 'B16imagenet1k', 'B32imagenet1k', 'L16imagenet1k', 'L32imagenet1k']:
                 self.S_L = 1
