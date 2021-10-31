@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 23 Oct 2021 22:25:25 AEDT
+# --- Last Modified: Sun 31 Oct 2021 16:55:24 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -51,7 +51,8 @@ KEY_BRIEF_NAMES = {'z': 'nv_dim', 'at': 'att_type', 'nt': 'nav_type', 'amf': 'at
                    'mafsq': 'mask_after_square', 'usp': 'union_spatial', 'uni': 'use_uniform',
                    'recg': 'recog_lamb', 'vs': 'vs_lamb', 'Rch': 'R_ch_in', 'Rna': 'R_net_name', 'Rpre': 'R_pretrained',
                    'vmul': 'vit_return_multi_layer', 'vart': 'var_feat_type', 'nsp': 'no_spatial',
-                   'nbn': 'no_bn', 'nrl': 'no_relu', 'nsk': 'no_skip', 'xent': 'xent_lamb', 'xetp': 'xent_temp', 'fdf': 'use_flat_diff'}
+                   'nbn': 'no_bn', 'nrl': 'no_relu', 'nsk': 'no_skip', 'xent': 'xent_lamb', 'xetp': 'xent_temp', 'fdf': 'use_flat_diff',
+                   'ftop': 'use_feat_from_top'}
 KEY_DTYPES = {'nv_dim': int, 'att_type': str, 'nav_type': str, 'att_middle_feat': int, 'nav_middle_feat': int,
               'att_fc_layers': int, 'nav_fc_layers': int, 'att_layers': int,
               'att_gaussian_size': int, 'att_gaussian_std': float, 'norm_on_depth': bool_own,
@@ -67,7 +68,8 @@ KEY_DTYPES = {'nv_dim': int, 'att_type': str, 'nav_type': str, 'att_middle_feat'
               'mask_after_square': bool_own, 'union_spatial': bool_own, 'use_uniform': bool_own,
               'recog_lamb': float, 'vs_lamb': float, 'R_ch_in': int, 'R_net_name': str, 'R_pretrained': bool_own,
               'vit_return_multi_layer': bool_own, 'var_feat_type': str, 'no_spatial': bool_own,
-              'no_bn': bool_own, 'no_relu': bool_own, 'no_skip': bool_own, 'xent_lamb': float, 'xent_temp': float, 'use_flat_diff': bool_own}
+              'no_bn': bool_own, 'no_relu': bool_own, 'no_skip': bool_own, 'xent_lamb': float, 'xent_temp': float, 'use_flat_diff': bool_own,
+              'use_feat_from_top': bool_own}
 
 def parse_cfg(cfg):
     '''
@@ -182,14 +184,14 @@ def setup_training_loop_kwargs(
                            att_fc_layers=1, nav_fc_layers=1, att_layers=5, att_gaussian_size=0, att_gaussian_std=1, norm_on_depth=True,
                            compose_lamb=0, contrast_lamb=0, significance_lamb=0., Sim_lambda=0, Comp_lambda=0,
                            loss_n_colors=5, div_lamb=0, norm_lamb=0, var_sample_scale=1, var_sample_mean=0.,
-                           sensor_used_layers=5, use_norm_mask=True, divide_mask_sum=True, use_dynamic_scale=True, use_norm_as_mask=False,
+                           sensor_used_layers=10, use_norm_mask=True, divide_mask_sum=True, use_dynamic_scale=True, use_norm_as_mask=False,
                            diff_avg_lerp_rate=0.01, lerp_lamb=0., lerp_norm=False, neg_lamb=1., pos_lamb=1., neg_on_self=False, use_catdiff=False,
                            n_samples_per=7, sensor_type='alex', pnet_rand=False,
                            save_size=128, trav_walk_scale=0.2, recursive_walk=True, show_normD=True, per_w_dir=False,
                            use_pca_scale=False, use_pca_sign=False, mask_after_square=False, union_spatial=False, use_uniform=True,
                            recog_lamb=0., vs_lamb=0.25, R_ch_in=6, R_net_name='resnet18', R_pretrained=False,
                            vit_return_multi_layer=False, var_feat_type='s', no_spatial=False,
-                           no_bn=False, no_relu=False, no_skip=False, xent_lamb=0., xent_temp=0.5, use_flat_diff=False)
+                           no_bn=False, no_relu=False, no_skip=False, xent_lamb=0., xent_temp=0.5, use_flat_diff=False, use_feat_from_top=True)
         # 'stylegan2': dict(ref_gpus=8,  kimg=25000,  mb=32, mbstd=4,  fmaps=1,   lrate=0.002),
     }
 
@@ -237,7 +239,7 @@ def setup_training_loop_kwargs(
                                        per_w_dir=spec.per_w_dir, sensor_type=spec.sensor_type, use_pca_scale=spec.use_pca_scale, use_pca_sign=spec.use_pca_sign,
                                        mask_after_square=spec.mask_after_square, union_spatial=spec.union_spatial, use_uniform=spec.use_uniform,
                                        recog_lamb=spec.recog_lamb, vs_lamb=spec.vs_lamb, var_feat_type=spec.var_feat_type,
-                                       xent_lamb=spec.xent_lamb, xent_temp=spec.xent_temp, use_flat_diff=spec.use_flat_diff)
+                                       xent_lamb=spec.xent_lamb, xent_temp=spec.xent_temp, use_flat_diff=spec.use_flat_diff, use_feat_from_top=spec.use_feat_from_top)
     args.total_kimg = spec.kimg
     args.batch_size = spec.mb
     args.batch_gpu = spec.mb // spec.ref_gpus

@@ -8,7 +8,7 @@
 
 # --- File Name: edit_image.py
 # --- Creation Date: 16-05-2021
-# --- Last Modified: Sat 30 Oct 2021 18:17:51 AEDT
+# --- Last Modified: Sun 31 Oct 2021 04:13:36 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -349,7 +349,7 @@ def run_edit(
             images = percept_sort(images).reshape(M.nv_dim * n_samples_per, c, h, w)
 
             if not save_gifs_per_attr:
-                save_image_grid(images, os.path.join(outdir, f'idx{idx:04d}_sinv{semi_inverse}_scale{trav_walk_scale}.png'), drange=[-1,1], grid_size=grid_size)
+                save_image_grid(images, os.path.join(outdir, f'idx{idx:04d}_sinv{semi_inverse}_scale{trav_walk_scale}_pcas{use_pca_scale}.png'), drange=[-1,1], grid_size=grid_size)
             else:
                 cur_dir = os.path.join(outdir, f'idx{idx:04d}_sinv{semi_inverse}_scale{trav_walk_scale}')
                 os.makedirs(cur_dir, exist_ok=True)

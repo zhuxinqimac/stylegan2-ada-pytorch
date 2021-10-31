@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sun 31 Oct 2021 03:43:01 AEDT
+# --- Last Modified: Sun 31 Oct 2021 16:53:28 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -81,7 +81,7 @@ class DiscoverLoss(Loss):
                  s_values_normed=None, v_mat=None, w_avg=None, per_w_dir=False, sensor_type='alex',
                  use_pca_scale=False, use_pca_sign=False, use_uniform=False,
                  mask_after_square=False, union_spatial=False, recog_lamb=0., vs_lamb=0.25, var_feat_type='s',
-                 xent_lamb=0., xent_temp=0.5, use_flat_diff=False):
+                 xent_lamb=0., xent_temp=0.5, use_flat_diff=False, use_feat_from_top=True):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -148,6 +148,7 @@ class DiscoverLoss(Loss):
         self.use_catdiff = use_catdiff
         self.recog_lamb = recog_lamb
         self.vs_lamb = vs_lamb
+        self.use_feat_from_top = use_feat_from_top
 
         if sensor_type == 'discrim':
             img = self.run_G_synthesis(torch.randn(1, self.num_ws, self.w_dim).to(self.device)) # [1, c, h, w]
@@ -162,8 +163,8 @@ class DiscoverLoss(Loss):
             else:
                 raise ValueError('Unsupported sensor type:', sensor_type)
             self.use_discrim_as_S = False
-        if self.sensor_used_layers > self.S_L:
-            self.sensor_used_layers = self.S_L
+        # if self.sensor_used_layers > self.S_L:
+            # self.sensor_used_layers = self.S_L
 
         self.diff_avg_lerp_rate = diff_avg_lerp_rate
         self.lerp_lamb = lerp_lamb
@@ -452,7 +453,8 @@ class DiscoverLoss(Loss):
         else:
             diff_q_ls, diff_pos_ls, diff_neg_ls = [], [], []
         # for kk in range(max(0, self.S_L - self.sensor_used_layers), self.S_L):
-        for kk in range(len(outs)):
+        # for kk in range(len(outs)):
+        for kk in range(max(0, len(outs)-self.sensor_used_layers), len(outs)) if self.use_feat_from_top else range(0, min(len(outs), self.sensor_used_layers)):
             if not self.norm_on_depth:
                 diff_q, diff_pos, diff_neg = self.extract_diff_L(outs[kk])
                 loss_kk = self.extract_loss_L(diff_q, diff_pos, diff_neg, kk, pos_neg_idx)
@@ -478,20 +480,31 @@ class DiscoverLoss(Loss):
         diff_q_ls, diff_pos_ls, diff_neg_ls = [], [], []
         # res = [F.interpolate(diffs[kk], size=(16, 16)) for kk in range(self.L)]
         # for kk in range(max(0, self.S_L - self.sensor_used_layers), self.S_L):
-        for kk in range(len(outs)):
+        # for kk in range(len(outs)):
+        for kk in range(max(0, len(outs)-self.sensor_used_layers), len(outs)) if self.use_feat_from_top else range(0, min(len(outs), self.sensor_used_layers)):
             diff_q_kk, diff_pos_kk, diff_neg_kk = self.extract_diff_L(outs[kk])
             diff_q_ls.append(diff_q_kk)
             diff_pos_ls.append(diff_pos_kk)
             diff_neg_ls.append(diff_neg_kk)
-        res_q = [F.interpolate(diff_q_ls[kk], size=(32, 32), mode='bilinear', align_corners=False) \
+        # res_q = [F.interpolate(diff_q_ls[kk], size=(32, 32), mode='bilinear', align_corners=False) \
                  # for kk in range(max(0, self.S_L - self.sensor_used_layers), self.S_L)]
-                 for kk in range(len(diff_q_ls))]
-        res_pos = [F.interpolate(diff_pos_ls[kk], size=(32, 32), mode='bilinear', align_corners=False) \
+                 # for kk in range(len(diff_q_ls))]
+        res_q = []
+        for kk in range(max(0, len(diff_q_ls)-self.sensor_used_layers), len(diff_q_ls)) if self.use_feat_from_top else range(0, min(len(diff_q_ls), self.sensor_used_layers)):
+            res_q.append(F.interpolate(diff_q_ls[kk], size=(32, 32), mode='bilinear', align_corners=False))
+
+        # res_pos = [F.interpolate(diff_pos_ls[kk], size=(32, 32), mode='bilinear', align_corners=False) \
                    # for kk in range(max(0, self.S_L - self.sensor_used_layers), self.S_L)]
-                   for kk in range(len(diff_pos_ls))]
-        res_neg = [F.interpolate(diff_neg_ls[kk], size=(32, 32), mode='bilinear', align_corners=False) \
+                   # for kk in range(len(diff_pos_ls))]
+        res_pos = []
+        for kk in range(max(0, len(diff_pos_ls)-self.sensor_used_layers), len(diff_pos_ls)) if self.use_feat_from_top else range(0, min(len(diff_pos_ls), self.sensor_used_layers)):
+            res_pos.append(F.interpolate(diff_pos_ls[kk], size=(32, 32), mode='bilinear', align_corners=False))
+        # res_neg = [F.interpolate(diff_neg_ls[kk], size=(32, 32), mode='bilinear', align_corners=False) \
                    # for kk in range(max(0, self.S_L - self.sensor_used_layers), self.S_L)]
-                   for kk in range(len(diff_neg_ls))]
+                   # for kk in range(len(diff_neg_ls))]
+        res_neg = []
+        for kk in range(max(0, len(diff_neg_ls)-self.sensor_used_layers), len(diff_neg_ls)) if self.use_feat_from_top else range(0, min(len(diff_neg_ls), self.sensor_used_layers)):
+            res_neg.append(F.interpolate(diff_neg_ls[kk], size=(32, 32), mode='bilinear', align_corners=False))
         res_q = torch.cat(res_q, dim=1) # (b//2, c_sum, h, w)
         res_pos = torch.cat(res_pos, dim=1)
         res_neg = torch.cat(res_neg, dim=1)
