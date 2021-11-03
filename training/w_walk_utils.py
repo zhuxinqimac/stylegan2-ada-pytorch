@@ -8,7 +8,7 @@
 
 # --- File Name: w_walk_utils.py
 # --- Creation Date: 03-09-2021
-# --- Last Modified: Tue 26 Oct 2021 01:53:53 AEDT
+# --- Last Modified: Thu 04 Nov 2021 02:06:25 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -239,7 +239,7 @@ def get_SVD(G, url, device, rank, n_samples=1000000, batch=256, cache=True, cach
     w_avg = w_origin.mean(0)
     # torch.pca_lowrank(A, q=None, center=True, niter=2)
     _, s_values, v_mat = torch.pca_lowrank(w_origin, q=w_origin.size(1)) # [n_samples, w_dim], [w_dim], [w_dim, w_dim]
-    s_values_normed = s_values / np.sqrt(float(w_origin.size(0)))
+    s_values_normed = s_values / np.sqrt(float(w_origin.size(0)-1)) # Eigen values squared.
 
     # Save to cache.
     if cache and rank == 0:

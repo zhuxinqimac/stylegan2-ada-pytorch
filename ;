@@ -1,0 +1,84 @@
+## This model can only works for 1 gpu due to unconsistency.
+#sig=0
+#ncol=16
+#dys=T
+#cont=1
+#neg=1
+#wals=1
+#div=1
+#vars=0.5
+#lr=0.1
+#atg=7
+#agst=1
+#uni=T
+#sensor=alex
+#prand=F
+#vmul=T
+#vart=s
+#nsp=F
+#nbn=F
+#nrl=F
+#nsk=F
+#xent=0
+#fdf=F
+#for fdf in T
+#do
+    #for prand in F
+    #do
+        #for sensor in alex
+        #do
+            ##CUDA_VISIBLE_DEVICES=0 \
+                #python train_discover.py \
+                #--outdir=/mnt/hdd/repo_results/stylegan2-ada-pytorch/nav_cvpr22_pca_baseline_ffhq512 \
+                #--aug=noaug \
+                #--gan_network_pkl=ffhq512 \
+                #--cfg=ffhq512-z_64-lr_${lr}-wals_${wals}-prand_${prand}-vart_${vart}-sensor_${sensor}-nsp_${nsp}-nbn_${nbn}-nrl_${nrl}-nsk_${nsk}-fdf_${fdf}-vmul_${vmul}-uni_${uni}-at_none-nt_pca-afc_3-nfc_3-atl_16-atg_${atg}-agst_${agst}-sig_${sig}-xent_${xent}-cont_${cont}-neg_${neg}-div_${div}-ncol_${ncol}-dys_${dys}-vars_${vars} \
+                #--batch=4 \
+                #--kimg=200 \
+                #--gpus=2 \
+                #--snap=5
+        #done
+    #done
+#done
+
+# This model can only works for 1 gpu due to unconsistency.
+sig=0
+ncol=16
+dys=T
+cont=0
+neg=1
+wals=1
+div=1
+vars=0.5
+lr=0.1
+atg=3
+agst=1
+uni=T
+sensor=alex
+prand=F
+vmul=T
+vart=s
+nsp=F
+xent=0
+fdf=F
+recg=1
+Rpre=T
+for vars in 2
+do
+    for vs in 0.25 1
+    do
+        for div in 0 1
+        do
+            CUDA_VISIBLE_DEVICES=0 \
+                python train_discover.py \
+                --outdir=/mnt/hdd/repo_results/stylegan2-ada-pytorch/nav_cvpr22_recog_baseline_ffhq512 \
+                --aug=noaug \
+                --gan_network_pkl=ffhq512 \
+                --cfg=ffhq512-z_64-lr_${lr}-wals_${wals}-prand_${prand}-vart_${vart}-sensor_${sensor}-nsp_${nsp}-fdf_${fdf}-vmul_${vmul}-uni_${uni}-at_adaALLw-nt_adaALLw-afc_3-nfc_3-atl_16-atg_${atg}-agst_${agst}-sig_${sig}-xent_${xent}-recg_${recg}-vs_${vs}-cont_${cont}-neg_${neg}-div_${div}-ncol_${ncol}-dys_${dys}-vars_${vars} \
+                --batch=4 \
+                --kimg=200 \
+                --gpus=1 \
+                --snap=5
+        done
+    done
+done

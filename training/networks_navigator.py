@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 25 Oct 2021 01:32:36 AEDT
+# --- Last Modified: Thu 04 Nov 2021 02:51:16 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -315,6 +315,37 @@ class SefaNavigatorNet(NoneNavigatorNet):
         w_dirs = self.sefa_v[:self.nv_dim, ...] # [nv_dim, w_dim]
         return w_dirs.view(1, self.nv_dim, self.w_dim).repeat(b, 1, 1).to(ws_in.device)
 
+@persistence.persistent_class
+class AdaALLwEigenNavigatorNet(NoneNavigatorNet):
+    def __init__(self,
+        nv_dim,                     # Navigator latent dim.
+        num_ws,                     # Number of intermediate latents for synthesis net input.
+        w_dim,                      # Intermediate latent (W) dimensionality.
+        middle_feat=128,            # Intermediate feature dims in self.net.
+        nav_fc_layers=1,            # Number of FC layers.
+        v_mat=None,                 # The eigen vector matrix used to project.
+        n_eigen=100,                # The number of max_n subspace for eigen project.
+        **kwargs,
+    ):
+        '''
+        Depending on all ws.
+        '''
+        super().__init__(nv_dim, num_ws, w_dim)
+        # self.net = nn.Sequential(FullyConnectedLayer(num_ws * w_dim, middle_feat, activation='relu'),
+                                 # FullyConnectedLayer(middle_feat, nv_dim * w_dim, activation='linear'))
+        self.v_mat = v_mat
+        self.n_eigen = n_eigen
+        self.net = construct_fc_layers(num_ws * w_dim, nav_fc_layers, middle_feat, nv_dim * n_eigen)
+
+    def forward(self, ws_in):
+        # ws_in: [b, num_ws, w_dim]
+        # return: [b, nv_dim, w_dim]
+        b = ws_in.shape[0]
+        logits = self.net(ws_in.flatten(1))
+        ws_dirs_in_eigen = logits.view(b, self.nv_dim, self.n_eigen)
+        ws_dirs = torch.matmul(ws_dirs_in_eigen, self.v_mat[:, :self.n_eigen].T)
+        return ws_dirs
+
 #----------------------------------------------------------------------------
 # Main Navigator
 
@@ -364,6 +395,8 @@ class Navigator(torch.nn.Module):
             self.nav_net = Ada1wNavigatorNet(self.nv_dim, self.num_ws, self.w_dim, **nav_kwargs)
         elif self.nav_type == 'adaALLw': # Depending on all num_ws of ws.
             self.nav_net = AdaALLwNavigatorNet(self.nv_dim, self.num_ws, self.w_dim, **nav_kwargs)
+        elif self.nav_type == 'adaALLwE': # Depending on all num_ws of ws and use eigen project.
+            self.nav_net = AdaALLwEigenNavigatorNet(self.nv_dim, self.num_ws, self.w_dim, v_mat=self.v_mat, **nav_kwargs)
         elif self.nav_type == 'pca': # Using pca nv_dim-largest basis as directions.
             self.nav_net = PCANavigatorNet(self.nv_dim, self.num_ws, self.w_dim, **nav_kwargs)
         elif self.nav_type == 'sefa': # Using sefa nv_dim-largest basis as directions.

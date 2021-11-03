@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sun 31 Oct 2021 16:59:07 AEDT
+# --- Last Modified: Thu 04 Nov 2021 02:53:36 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -52,7 +52,7 @@ KEY_BRIEF_NAMES = {'z': 'nv_dim', 'at': 'att_type', 'nt': 'nav_type', 'amf': 'at
                    'recg': 'recog_lamb', 'vs': 'vs_lamb', 'Rch': 'R_ch_in', 'Rna': 'R_net_name', 'Rpre': 'R_pretrained',
                    'vmul': 'vit_return_multi_layer', 'vart': 'var_feat_type', 'nsp': 'no_spatial',
                    'nbn': 'no_bn', 'nrl': 'no_relu', 'nsk': 'no_skip', 'xent': 'xent_lamb', 'xetp': 'xent_temp', 'fdf': 'use_flat_diff',
-                   'ftop': 'use_feat_from_top'}
+                   'ftop': 'use_feat_from_top', 'neig': 'nav_n_eigen'}
 KEY_DTYPES = {'nv_dim': int, 'att_type': str, 'nav_type': str, 'att_middle_feat': int, 'nav_middle_feat': int,
               'att_fc_layers': int, 'nav_fc_layers': int, 'att_layers': int,
               'att_gaussian_size': int, 'att_gaussian_std': float, 'norm_on_depth': bool_own,
@@ -69,7 +69,7 @@ KEY_DTYPES = {'nv_dim': int, 'att_type': str, 'nav_type': str, 'att_middle_feat'
               'recog_lamb': float, 'vs_lamb': float, 'R_ch_in': int, 'R_net_name': str, 'R_pretrained': bool_own,
               'vit_return_multi_layer': bool_own, 'var_feat_type': str, 'no_spatial': bool_own,
               'no_bn': bool_own, 'no_relu': bool_own, 'no_skip': bool_own, 'xent_lamb': float, 'xent_temp': float, 'use_flat_diff': bool_own,
-              'use_feat_from_top': bool_own}
+              'use_feat_from_top': bool_own, 'nav_n_eigen': int}
 
 def parse_cfg(cfg):
     '''
@@ -191,7 +191,8 @@ def setup_training_loop_kwargs(
                            use_pca_scale=False, use_pca_sign=False, mask_after_square=False, union_spatial=False, use_uniform=True,
                            recog_lamb=0., vs_lamb=0.25, R_ch_in=6, R_net_name='resnet18', R_pretrained=False,
                            vit_return_multi_layer=True, var_feat_type='s', no_spatial=False,
-                           no_bn=False, no_relu=False, no_skip=False, xent_lamb=0., xent_temp=0.5, use_flat_diff=False, use_feat_from_top=True)
+                           no_bn=False, no_relu=False, no_skip=False, xent_lamb=0., xent_temp=0.5, use_flat_diff=False, use_feat_from_top=True,
+                           nav_n_eigen=100)
         # 'stylegan2': dict(ref_gpus=8,  kimg=25000,  mb=32, mbstd=4,  fmaps=1,   lrate=0.002),
     }
 
@@ -217,7 +218,7 @@ def setup_training_loop_kwargs(
         args.M_kwargs = dnnlib.EasyDict(class_name='training.networks_navigator.Navigator', nv_dim=spec.nv_dim, att_type=spec.att_type, nav_type=spec.nav_type)
         args.M_kwargs.att_kwargs = dnnlib.EasyDict(middle_feat=spec.att_middle_feat, att_fc_layers=spec.att_fc_layers,
                                                    att_layers=spec.att_layers, filter_size=spec.att_gaussian_size, filter_std=spec.att_gaussian_std)
-        args.M_kwargs.nav_kwargs = dnnlib.EasyDict(middle_feat=spec.nav_middle_feat, nav_fc_layers=spec.nav_fc_layers)
+        args.M_kwargs.nav_kwargs = dnnlib.EasyDict(middle_feat=spec.nav_middle_feat, nav_fc_layers=spec.nav_fc_layers, n_eigen=spec.nav_n_eigen)
 
     if spec.recog_lamb > 0:
         args.R_kwargs = dnnlib.EasyDict(class_name='training.networks_recog_resnet.RecogResNet', nv_dim=spec.nv_dim, ch_in=spec.R_ch_in,

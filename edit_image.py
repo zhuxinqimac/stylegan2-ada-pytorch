@@ -8,7 +8,7 @@
 
 # --- File Name: edit_image.py
 # --- Creation Date: 16-05-2021
-# --- Last Modified: Sun 31 Oct 2021 04:13:36 AEDT
+# --- Last Modified: Sun 31 Oct 2021 20:39:30 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -228,6 +228,7 @@ def num_range(s: str) -> List[int]:
 @click.option('--tiny_step', type=float, help='The tiny step in w_walk')
 @click.option('--thresh', type=float, help='The threshold in deduplication')
 @click.option('--save_gifs_per_attr', type=bool, help='If saving gifs for each attribute')
+@click.option('--save_horiz', type=bool, help='If saving images in horizontal shape')
 def run_edit(
     generator_pkl: str,
     navigator_pkl: str,
@@ -247,6 +248,7 @@ def run_edit(
     tiny_step: float,
     thresh: float,
     save_gifs_per_attr: bool,
+    save_horiz: bool,
 ):
     """ Edit an existing image by first projecting it into latent space W and then modify it
     by M network with specified dimension.
@@ -344,12 +346,15 @@ def run_edit(
             images = images.view(M.nv_dim, n_samples_per, c, h, w)
 
             images = percept_sort(images)
-            remove_dirs = get_duplicated_dirs(images, thresh=thresh) # Remove duplicated directions.
+            remove_dirs = get_duplicated_dirs(images, thresh=thresh, start_from_last=False) # Remove duplicated directions.
             images[remove_dirs] = images[0, n_samples_per // 2].clone().unsqueeze(0)
             images = percept_sort(images).reshape(M.nv_dim * n_samples_per, c, h, w)
 
             if not save_gifs_per_attr:
-                save_image_grid(images, os.path.join(outdir, f'idx{idx:04d}_sinv{semi_inverse}_scale{trav_walk_scale}_pcas{use_pca_scale}.png'), drange=[-1,1], grid_size=grid_size)
+                if save_horiz:
+                    grid_size = (M.nv_dim, n_samples_per)
+                    images = images.view(M.nv_dim, n_samples_per, c, h, w).transpose(0, 1).reshape(n_samples_per * M.nv_dim, c, h, w)
+                save_image_grid(images, os.path.join(outdir, f'idx{idx:04d}_sinv{semi_inverse}_scale{trav_walk_scale}_pcas{use_pca_scale}_horiz{save_horiz}.png'), drange=[-1,1], grid_size=grid_size)
             else:
                 cur_dir = os.path.join(outdir, f'idx{idx:04d}_sinv{semi_inverse}_scale{trav_walk_scale}')
                 os.makedirs(cur_dir, exist_ok=True)
