@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Thu 04 Nov 2021 02:51:16 AEDT
+# --- Last Modified: Thu 04 Nov 2021 03:05:24 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -396,7 +396,7 @@ class Navigator(torch.nn.Module):
         elif self.nav_type == 'adaALLw': # Depending on all num_ws of ws.
             self.nav_net = AdaALLwNavigatorNet(self.nv_dim, self.num_ws, self.w_dim, **nav_kwargs)
         elif self.nav_type == 'adaALLwE': # Depending on all num_ws of ws and use eigen project.
-            self.nav_net = AdaALLwEigenNavigatorNet(self.nv_dim, self.num_ws, self.w_dim, v_mat=self.v_mat, **nav_kwargs)
+            self.nav_net = AdaALLwEigenNavigatorNet(self.nv_dim, self.num_ws, self.w_dim, **nav_kwargs)
         elif self.nav_type == 'pca': # Using pca nv_dim-largest basis as directions.
             self.nav_net = PCANavigatorNet(self.nv_dim, self.num_ws, self.w_dim, **nav_kwargs)
         elif self.nav_type == 'sefa': # Using sefa nv_dim-largest basis as directions.
