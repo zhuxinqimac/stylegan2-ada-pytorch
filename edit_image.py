@@ -8,7 +8,7 @@
 
 # --- File Name: edit_image.py
 # --- Creation Date: 16-05-2021
-# --- Last Modified: Sun 31 Oct 2021 20:39:30 AEDT
+# --- Last Modified: Thu 04 Nov 2021 16:55:56 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -36,28 +36,6 @@ from generate_discover_trav import percept_sort, get_duplicated_dirs, to_img
 import dnnlib
 import legacy
 from typing import List, Optional
-
-# from projector import project
-
-def softmax_last_dim_fn(x):
-    return F.softmax(x, dim=-1)
-
-# def double_softmax_last_dim_fn(x):
-    # return F.softmax(F.softmax(x, dim=-1), dim=-1)
-
-# def sigmoid_fn(x):
-    # return torch.sigmoid(x) * 0.2 # rescale to balance with softmax
-
-# def get_heat_fn(self, heat_fn_name):
-    # if heat_fn_name == 'softmax':
-        # heat_fn = softmax_last_dim_fn
-    # elif heat_fn_name == 'sigmoid':
-        # heat_fn = sigmoid_fn
-    # elif heat_fn_name == 'double_softmax':
-        # heat_fn = double_softmax_last_dim_fn
-    # else:
-        # raise ValueError('Unknown M.heat_fn:', heat_fn_name)
-    # return heat_fn
 
 def project(
     G,

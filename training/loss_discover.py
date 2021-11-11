@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sun 31 Oct 2021 16:53:28 AEDT
+# --- Last Modified: Fri 12 Nov 2021 00:06:30 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -81,7 +81,7 @@ class DiscoverLoss(Loss):
                  s_values_normed=None, v_mat=None, w_avg=None, per_w_dir=False, sensor_type='alex',
                  use_pca_scale=False, use_pca_sign=False, use_uniform=False,
                  mask_after_square=False, union_spatial=False, recog_lamb=0., vs_lamb=0.25, var_feat_type='s',
-                 xent_lamb=0., xent_temp=0.5, use_flat_diff=False, use_feat_from_top=True):
+                 xent_lamb=0., xent_temp=0.5, use_flat_diff=False, use_feat_from_top=True, abs_diff=False):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -105,6 +105,7 @@ class DiscoverLoss(Loss):
         self.xent_lamb = xent_lamb
         self.xent_temp = xent_temp
         self.use_flat_diff = use_flat_diff
+        self.abs_diff = abs_diff
 
         self.Sim = None
         self.Comp = None
@@ -335,19 +336,35 @@ class DiscoverLoss(Loss):
                 cos_sim_neg = self.cos_fn(diff_q, diff_neg) * mask_neg_comb
             if self.divide_mask_sum:
                 if self.mask_after_square:
-                    loss_pos = (-cos_sim_pos**2 * mask_pos_comb).sum(dim=[1,2]) / (mask_pos_comb.sum(dim=[1,2]) + 1e-6) # (0.5batch)
-                    loss_neg = (cos_sim_neg**2 * mask_neg_comb).sum(dim=[1,2]) / (mask_neg_comb.sum(dim=[1,2]) + 1e-6)
+                    if self.abs_diff:
+                        loss_pos = (-cos_sim_pos.abs() * mask_pos_comb).sum(dim=[1,2]) / (mask_pos_comb.sum(dim=[1,2]) + 1e-6) # (0.5batch)
+                        loss_neg = (cos_sim_neg.abs() * mask_neg_comb).sum(dim=[1,2]) / (mask_neg_comb.sum(dim=[1,2]) + 1e-6)
+                    else:
+                        loss_pos = (-cos_sim_pos**2 * mask_pos_comb).sum(dim=[1,2]) / (mask_pos_comb.sum(dim=[1,2]) + 1e-6) # (0.5batch)
+                        loss_neg = (cos_sim_neg**2 * mask_neg_comb).sum(dim=[1,2]) / (mask_neg_comb.sum(dim=[1,2]) + 1e-6)
                 else:
-                    loss_pos = (-cos_sim_pos**2).sum(dim=[1,2]) / (mask_pos_comb.sum(dim=[1,2]) + 1e-6) # (0.5batch)
-                    loss_neg = (cos_sim_neg**2).sum(dim=[1,2]) / (mask_neg_comb.sum(dim=[1,2]) + 1e-6)
+                    if self.abs_diff:
+                        loss_pos = (-cos_sim_pos.abs()).sum(dim=[1,2]) / (mask_pos_comb.sum(dim=[1,2]) + 1e-6) # (0.5batch)
+                        loss_neg = (cos_sim_neg.abs()).sum(dim=[1,2]) / (mask_neg_comb.sum(dim=[1,2]) + 1e-6)
+                    else:
+                        loss_pos = (-cos_sim_pos**2).sum(dim=[1,2]) / (mask_pos_comb.sum(dim=[1,2]) + 1e-6) # (0.5batch)
+                        loss_neg = (cos_sim_neg**2).sum(dim=[1,2]) / (mask_neg_comb.sum(dim=[1,2]) + 1e-6)
             else:
-                loss_pos = (-cos_sim_pos**2).mean(dim=[1,2]) # (0.5batch)
-                loss_neg = (cos_sim_neg**2).mean(dim=[1,2])
+                if self.abs_diff:
+                    loss_pos = (-cos_sim_pos.abs()).mean(dim=[1,2]) # (0.5batch)
+                    loss_neg = (cos_sim_neg.abs()).mean(dim=[1,2])
+                else:
+                    loss_pos = (-cos_sim_pos**2).mean(dim=[1,2]) # (0.5batch)
+                    loss_neg = (cos_sim_neg**2).mean(dim=[1,2])
         else:
             cos_sim_pos = self.cos_fn(diff_q, diff_pos)
             cos_sim_neg = self.cos_fn(diff_q, diff_neg)
-            loss_pos = (-cos_sim_pos**2).mean(dim=[1,2]) # (0.5batch)
-            loss_neg = (cos_sim_neg**2).mean(dim=[1,2])
+            if self.abs_diff:
+                loss_pos = (-cos_sim_pos.abs()).mean(dim=[1,2]) # (0.5batch)
+                loss_neg = (cos_sim_neg.abs()).mean(dim=[1,2])
+            else:
+                loss_pos = (-cos_sim_pos**2).mean(dim=[1,2]) # (0.5batch)
+                loss_neg = (cos_sim_neg**2).mean(dim=[1,2])
         training_stats.report('Loss/M/loss_diff_pos_{}'.format(idx), loss_pos)
         training_stats.report('Loss/M/loss_diff_neg_{}'.format(idx), loss_neg)
         loss = self.pos_lamb * loss_pos + self.neg_lamb * loss_neg # (0.5batch)

@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Thu 04 Nov 2021 03:05:24 AEDT
+# --- Last Modified: Thu 04 Nov 2021 17:02:45 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -414,3 +414,14 @@ class Navigator(torch.nn.Module):
 
         dirs = ws_atts[:, :, :, np.newaxis] * per_w_dir[:, :, np.newaxis, ...] # [b, nv_dim, num_ws, w_dim]
         return dirs
+
+    def output_all(self, ws_in):
+        # ws_in: [b, num_ws, w_dim]
+        # To output delta per nv_dim in W space.
+        ws_atts = self.att_net(ws_in) # [b, nv_dim, num_ws]
+        per_w_dir = self.nav_net(ws_in) # [b, nv_dim, w_dim]
+        per_w_dir = normalize_2nd_moment(per_w_dir, dim=-1)
+        # per_w_dir = normalize_2nd_moment_to_one(per_w_dir, dim=-1)
+
+        dirs = ws_atts[:, :, :, np.newaxis] * per_w_dir[:, :, np.newaxis, ...] # [b, nv_dim, num_ws, w_dim]
+        return ws_atts, per_w_dir, dirs
