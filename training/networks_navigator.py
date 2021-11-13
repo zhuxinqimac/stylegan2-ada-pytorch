@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Thu 04 Nov 2021 17:02:45 AEDT
+# --- Last Modified: Sat 13 Nov 2021 15:36:50 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -316,6 +316,30 @@ class SefaNavigatorNet(NoneNavigatorNet):
         return w_dirs.view(1, self.nv_dim, self.w_dim).repeat(b, 1, 1).to(ws_in.device)
 
 @persistence.persistent_class
+class FixedEigenNavigatorNet(NoneNavigatorNet):
+    def __init__(self,
+        nv_dim,                     # Navigator latent dim.
+        num_ws,                     # Number of intermediate latents for synthesis net input.
+        w_dim,                      # Intermediate latent (W) dimensionality.
+        v_mat=None,                 # The eigen vector matrix used to project.
+        n_eigen=100,                # The number of max_n subspace for eigen project.
+        **kwargs,
+    ):
+        super().__init__(nv_dim, num_ws, w_dim)
+        self.v_mat = v_mat
+        self.n_eigen = n_eigen
+        self.nav_logits = nn.Parameter(torch.normal(mean=torch.zeros(nv_dim, n_eigen), std=1),
+                                       requires_grad=True)
+
+    def forward(self, ws_in):
+        # ws_in: [b, num_ws, w_dim]
+        # return: [b, nv_dim, w_dim]
+        ws_dirs_in_eigen = self.nav_logits.view(1, self.nv_dim, self.n_eigen)
+        ws_dirs = torch.matmul(ws_dirs_in_eigen, self.v_mat[:, :self.n_eigen].T)
+        ws_dirs = ws_dirs.repeat(ws_in.shape[0], 1, 1).to(ws_in.device)
+        return ws_dirs
+
+@persistence.persistent_class
 class AdaALLwEigenNavigatorNet(NoneNavigatorNet):
     def __init__(self,
         nv_dim,                     # Navigator latent dim.
@@ -391,6 +415,8 @@ class Navigator(torch.nn.Module):
         # Navigator net: map tensor w [b, num_ws, w_dim] --> nv_dims of change directions [b, nv_dim, w_dim]
         if self.nav_type == 'fixed': # Not depending on input w.
             self.nav_net = FixedNavigatorNet(self.nv_dim, self.num_ws, self.w_dim, **nav_kwargs)
+        elif self.nav_type == 'fixedE': # Not depending on input w.
+            self.nav_net = FixedEigenNavigatorNet(self.nv_dim, self.num_ws, self.w_dim, **nav_kwargs)
         elif self.nav_type == 'ada1w': # Depending only on a single w (or averaged w over num_ws).
             self.nav_net = Ada1wNavigatorNet(self.nv_dim, self.num_ws, self.w_dim, **nav_kwargs)
         elif self.nav_type == 'adaALLw': # Depending on all num_ws of ws.
