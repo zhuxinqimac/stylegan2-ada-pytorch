@@ -8,7 +8,7 @@
 
 # --- File Name: generate_trav.py
 # --- Creation Date: 23-08-2021
-# --- Last Modified: Sat 30 Oct 2021 18:20:46 AEDT
+# --- Last Modified: Mon 15 Nov 2021 22:33:15 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Generate traversals using pretrained network pickle."""
@@ -112,7 +112,8 @@ def get_norm_mask(diff):
 
 def get_masked_sim(diff_1, diff_2, mask_1, mask_2):
     mask_comb = mask_1 * mask_2
-    cos_sim_grid = F.cosine_similarity(diff_1, diff_2, dim=0).abs() * mask_comb
+    # cos_sim_grid = F.cosine_similarity(diff_1, diff_2, dim=0).abs() * mask_comb
+    cos_sim_grid = F.cosine_similarity(diff_1, diff_2, dim=0).square() * mask_comb
     cos_sim = cos_sim_grid.sum() / (mask_comb.sum() + 1e-6) # scalar
     return cos_sim
 
@@ -131,7 +132,7 @@ def get_duplicated_dirs(imgs, thresh=0.5, start_from_last=True):
     '''
     fnet = lpips.LPIPS(net='alex', lpips=False).net
     nv_dim, n_samples_per, c, h, w = imgs.shape
-    feats_orig = list(fnet(imgs[:, 0])) # ls of [nv_dim, fc, fh, fw]
+    feats_orig = list(fnet(imgs[:, imgs.shape[1]//2])) # ls of [nv_dim, fc, fh, fw]
     feats_end = list(fnet(imgs[:, -1])) # ls of [nv_dim, fc, fh, fw]
     feats_diff = [feats_end[l] - feat_orig for l, feat_orig in enumerate(feats_orig)] # ls of [nv_dim, fc, fh, fw]
     sim_grid_sum = torch.zeros(nv_dim, nv_dim)
