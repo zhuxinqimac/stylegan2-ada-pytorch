@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 16 Nov 2021 03:59:41 AEDT
+# --- Last Modified: Tue 16 Nov 2021 05:19:13 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -831,8 +831,8 @@ class DiscoverLoss(Loss):
                     outs_all += self.run_S(imgs_all)
                 if 'i' in self.var_feat_type:
                     outs_all += [imgs_all]
-            for j, out in enumerate(outs_all):
-                print(f'outs_{j}.shape:', out.shape)
+            # for j, out in enumerate(outs_all):
+                # print(f'outs_{j}.shape:', out.shape)
 
             with torch.autograd.profiler.record_function('Mcontrast_loss'):
                 # Contrast loss
