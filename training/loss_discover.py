@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 16 Nov 2021 05:19:13 AEDT
+# --- Last Modified: Wed 17 Nov 2021 03:00:28 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -853,12 +853,13 @@ class DiscoverLoss(Loss):
                 # Generate images.
                 ws_all = torch.cat([ws_orig, ws_var], dim=0) # [(1+nv_dim) * b, num_ws, w_dim]
                 # gen_feats_all, imgs_all = self.run_G_synthesis(ws_all, return_feats=True)
-                imgs_all = self.run_G_synthesis(ws_all)
+                # imgs_all = self.run_G_synthesis(ws_all)
+                gen_feats_all, imgs_all = self.run_G_synthesis(ws_all, return_feats=True)
 
             with torch.autograd.profiler.record_function('Mxent_var_features'):
                 outs_all = []
-                # if 'g' in self.var_feat_type:
-                    # outs_all += gen_feats_all
+                if 'g' in self.var_feat_type:
+                    outs_all += gen_feats_all[:3] # Can only handle early 3 layers.
                 if 's' in self.var_feat_type:
                     outs_all += self.run_S(imgs_all)
                 if 'i' in self.var_feat_type:
