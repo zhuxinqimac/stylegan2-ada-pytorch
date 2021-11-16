@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 17 Nov 2021 03:09:38 AEDT
+# --- Last Modified: Wed 17 Nov 2021 03:17:15 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -187,7 +187,7 @@ class DiscoverLoss(Loss):
         ws = torch.cat(ws, dim=0)
         return ws
 
-    def run_G_synthesis(self, all_ws, return_feats=False):
+    def run_G_synthesis(self, all_ws, return_feats=False, n_return=None):
         # ws: (b, num_ws, w_dim)
         # with misc.ddp_sync(self.G_synthesis, sync):
         if not return_feats:
@@ -195,14 +195,14 @@ class DiscoverLoss(Loss):
             imgs = torch.cat(imgs, dim=0)
             return imgs
         for i, ws in enumerate(all_ws.split(self.batch_gpu)):
-            feats_tmp_ls = self.gensyn_forward(ws)
+            feats_tmp_ls = self.gensyn_forward(ws, n_return=n_return)
             if i == 0:
                 feats_ls = feats_tmp_ls
             else:
                 feats_ls = [torch.cat([feats, feats_tmp_ls[j]]) for j, feats in enumerate(feats_ls)]
         return feats_ls[:-1], feats_ls[-1] # images returned separately
 
-    def gensyn_forward(self, ws, **block_kwargs):
+    def gensyn_forward(self, ws, n_return=None, **block_kwargs):
         block_ws = []
         with torch.autograd.profiler.record_function('split_ws'):
             misc.assert_shape(ws, [None, self.G_synthesis.num_ws, self.G_synthesis.w_dim])
@@ -215,10 +215,14 @@ class DiscoverLoss(Loss):
 
         feats_ls = []
         x = img = None
+        n_l = 0
         for res, cur_ws in zip(self.G_synthesis.block_resolutions, block_ws):
+            if (n_return is not None) and (n_l >= n_return):
+                break
             block = getattr(self.G_synthesis, f'b{res}')
             x, img = block(x, img, cur_ws, **block_kwargs)
             feats_ls.append(x)
+            n_l += 1
         feats_ls.append(img)
         return feats_ls
 
@@ -849,17 +853,18 @@ class DiscoverLoss(Loss):
             with torch.autograd.profiler.record_function('Mxent_var_all_nv'):
                 ws_var = self.var_all_nv(ws_orig, delta) # [nv_dim * b, num_ws, w_dim]
 
+            n_return=3 # Can only handle early 3 layers.
             with torch.autograd.profiler.record_function('Mxent_generate_imgs'):
                 # Generate images.
                 ws_all = torch.cat([ws_orig, ws_var], dim=0) # [(1+nv_dim) * b, num_ws, w_dim]
                 # gen_feats_all, imgs_all = self.run_G_synthesis(ws_all, return_feats=True)
                 # imgs_all = self.run_G_synthesis(ws_all)
-                gen_feats_all, imgs_all = self.run_G_synthesis(ws_all, return_feats=True)
+                gen_feats_all, imgs_all = self.run_G_synthesis(ws_all, return_feats=True, n_return=n_return)
 
             with torch.autograd.profiler.record_function('Mxent_var_features'):
                 outs_all = []
                 if 'g' in self.var_feat_type:
-                    outs_all += gen_feats_all[:2] # Can only handle early 3 layers.
+                    outs_all += gen_feats_all
                 if 's' in self.var_feat_type:
                     outs_all += self.run_S(imgs_all)
                 if 'i' in self.var_feat_type:
