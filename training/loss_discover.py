@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 17 Nov 2021 03:00:28 AEDT
+# --- Last Modified: Wed 17 Nov 2021 03:09:38 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -859,13 +859,15 @@ class DiscoverLoss(Loss):
             with torch.autograd.profiler.record_function('Mxent_var_features'):
                 outs_all = []
                 if 'g' in self.var_feat_type:
-                    outs_all += gen_feats_all[:3] # Can only handle early 3 layers.
+                    outs_all += gen_feats_all[:2] # Can only handle early 3 layers.
                 if 's' in self.var_feat_type:
                     outs_all += self.run_S(imgs_all)
                 if 'i' in self.var_feat_type:
                     outs_all += [imgs_all]
                 # Test using last feat only.
                 outs_all = outs_all[-1:]
+            for j, out in enumerate(outs_all):
+                print(f'out_{j}.shape:', out.shape)
 
             with torch.autograd.profiler.record_function('Mxent_loss'):
                 # Xentropy loss
