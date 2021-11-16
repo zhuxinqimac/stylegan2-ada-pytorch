@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 17 Nov 2021 03:29:26 AEDT
+# --- Last Modified: Wed 17 Nov 2021 03:33:03 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -860,7 +860,7 @@ class DiscoverLoss(Loss):
                 # gen_feats_all, imgs_all = self.run_G_synthesis(ws_all, return_feats=True)
                 # imgs_all = self.run_G_synthesis(ws_all)
                 gen_feats_all, imgs_all = self.run_G_synthesis(ws_all, return_feats=True, n_return=n_return)
-                print('len(gen_feats_all):', len(gen_feats_all))
+                # print('len(gen_feats_all):', len(gen_feats_all))
 
             with torch.autograd.profiler.record_function('Mxent_var_features'):
                 outs_all = []
@@ -870,8 +870,8 @@ class DiscoverLoss(Loss):
                     outs_all += self.run_S(imgs_all)
                 if 'i' in self.var_feat_type:
                     outs_all += [imgs_all]
-            for j, out in enumerate(outs_all):
-                print(f'out_{j}.shape:', out.shape)
+            # for j, out in enumerate(outs_all):
+                # print(f'out_{j}.shape:', out.shape)
 
             with torch.autograd.profiler.record_function('Mxent_loss'):
                 # Xentropy loss
