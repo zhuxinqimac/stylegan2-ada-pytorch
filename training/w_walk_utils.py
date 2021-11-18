@@ -8,7 +8,7 @@
 
 # --- File Name: w_walk_utils.py
 # --- Creation Date: 03-09-2021
-# --- Last Modified: Tue 16 Nov 2021 16:51:52 AEDT
+# --- Last Modified: Thu 18 Nov 2021 18:55:10 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -46,6 +46,8 @@ def get_w_walk(w_origin, M, n_samples_per, step_size, recursive_walk=True, tiny_
     w_origin: (1, num_ws, w_dim)
     return (gh * gw, num_ws, w_dim), gh, gw = M.nv_dim, n_samples_per
     '''
+    print('w_origin.device:', w_origin.device)
+    print('next(M.parameters()).devce:', next(M.parameters()).device)
     dirs_orig = M(w_origin) # [1, n_lat, num_ws, w_dim]
     _, n_lat, num_ws, w_dim = dirs_orig.shape
     w_origin = w_origin.repeat(n_lat, 1, 1)

@@ -8,7 +8,7 @@
 
 # --- File Name: generate_trav.py
 # --- Creation Date: 23-08-2021
-# --- Last Modified: Mon 15 Nov 2021 22:33:15 AEDT
+# --- Last Modified: Thu 18 Nov 2021 20:50:18 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Generate traversals using pretrained network pickle."""
@@ -207,6 +207,7 @@ def generate_travs(
         generator_pkl = resume_specs[generator_pkl] # predefined url
 
     device = torch.device('cuda')
+    # device = torch.device('cpu')
     with dnnlib.util.open_url(generator_pkl) as f:
         G = legacy.load_network_pkl(f)['G_ema'].requires_grad_(False).to(device) # type: ignore
 
