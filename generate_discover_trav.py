@@ -8,7 +8,7 @@
 
 # --- File Name: generate_trav.py
 # --- Creation Date: 23-08-2021
-# --- Last Modified: Thu 18 Nov 2021 20:50:18 AEDT
+# --- Last Modified: Wed 24 Nov 2021 18:22:11 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Generate traversals using pretrained network pickle."""
@@ -248,7 +248,7 @@ def generate_travs(
             images = percept_sort(images).reshape(M.nv_dim * n_samples_per, c, h, w)
 
             if not save_gifs_per_attr:
-                save_image_grid(images, os.path.join(outdir, f'seed{seed:04d}_sinv{semi_inverse}_scale{trav_walk_scale}.png'), drange=[-1,1], grid_size=grid_size)
+                save_image_grid(images, os.path.join(outdir, f'seed{seed:04d}_sinv{semi_inverse}_scale{trav_walk_scale}_thresh{thresh}.png'), drange=[-1,1], grid_size=grid_size)
             else:
                 cur_dir = os.path.join(outdir, f'seed{seed:04d}_sinv{semi_inverse}')
                 os.makedirs(cur_dir, exist_ok=True)

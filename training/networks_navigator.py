@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Thu 18 Nov 2021 19:00:35 AEDT
+# --- Last Modified: Tue 25 Jan 2022 20:28:43 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -94,6 +94,30 @@ class FixedAttentioner(NoneAttentioner):
                                                   dtype=ws_in.dtype).to(ws_in.device)], dim=-1) # [1, nv_dim, num_ws]
         if self.filter_size > 0:
             ws_atts = self.filter(F.pad(ws_atts, [(self.filter_size-1)//2, (self.filter_size-1)//2], 'reflect'))
+        ws_atts = ws_atts.repeat(ws_in.shape[0], 1, 1).to(ws_in.device)
+        return ws_atts
+
+@persistence.persistent_class
+class FixedTempAttentioner(NoneAttentioner):
+    def __init__(self,
+        nv_dim,                     # Navigator latent dim.
+        num_ws,                     # Number of intermediate latents for synthesis net input.
+        w_dim,                      # Intermediate latent (W) dimensionality.
+        att_layers,                 # Number of ws attention layers.
+        temp=1,                     # Temperature in softmax.
+        **kwargs,
+    ):
+        super().__init__(nv_dim, num_ws, w_dim, att_layers)
+        self.att_logits = nn.Parameter(torch.normal(mean=torch.zeros(nv_dim, self.att_layers), std=1),
+                                       requires_grad=True)
+        self.temp = temp
+
+    def forward(self, ws_in):
+        # ws_in: [b, num_ws, w_dim]
+        # return: [b, nv_dim, num_ws]
+        ws_atts = torch.softmax(self.att_logits / self.temp, dim=-1).view(1, self.nv_dim, self.att_layers)
+        ws_atts = torch.cat([ws_atts, torch.zeros([1, self.nv_dim, self.num_ws - self.att_layers],
+                                                  dtype=ws_in.dtype).to(ws_in.device)], dim=-1) # [1, nv_dim, num_ws]
         ws_atts = ws_atts.repeat(ws_in.shape[0], 1, 1).to(ws_in.device)
         return ws_atts
 
@@ -405,6 +429,8 @@ class Navigator(torch.nn.Module):
             self.att_net = NoneAttentioner(self.nv_dim, self.num_ws, self.w_dim, **att_kwargs)
         elif self.att_type == 'fixed':
             self.att_net = FixedAttentioner(self.nv_dim, self.num_ws, self.w_dim, **att_kwargs)
+        elif self.att_type == 'fixedT':
+            self.att_net = FixedTempAttentioner(self.nv_dim, self.num_ws, self.w_dim, **att_kwargs)
         elif self.att_type == 'ada1w':
             self.att_net = Ada1wAttentioner(self.nv_dim, self.num_ws, self.w_dim, **att_kwargs)
         elif self.att_type == 'adaALLw':
