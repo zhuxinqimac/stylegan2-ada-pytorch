@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 25 Jan 2022 20:34:32 AEDT
+# --- Last Modified: Fri 28 Jan 2022 18:35:50 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -40,7 +40,7 @@ KEY_BRIEF_NAMES = {'z': 'nv_dim', 'at': 'att_type', 'nt': 'nav_type', 'amf': 'at
                    'afc': 'att_fc_layers', 'nfc': 'nav_fc_layers', 'atl': 'att_layers',
                    'atg': 'att_gaussian_size', 'agst': 'att_gaussian_std', 'stmp': 'sm_temp', 'nod': 'norm_on_depth',
                    'comp': 'compose_lamb', 'cont': 'contrast_lamb', 'sig': 'significance_lamb', 'Sim': 'Sim_lambda', 'Comp': 'Comp_lambda',
-                   'ncol': 'loss_n_colors', 'div': 'div_lamb', 'norm': 'norm_lamb',
+                   'ncol': 'loss_n_colors', 'div': 'div_lamb', 'norm': 'norm_lamb', 'widenatt': 'widenatt_lamb',
                    'vars': 'var_sample_scale', 'varm': 'var_sample_mean', 'sensl': 'sensor_used_layers', 'nomask': 'use_norm_mask',
                    'divmsum': 'divide_mask_sum', 'dys': 'use_dynamic_scale', 'norasm': 'use_norm_as_mask', 'lr': 'lrate',
                    'lerprt': 'diff_avg_lerp_rate', 'lerp': 'lerp_lamb', 'lerpnm': 'lerp_norm', 'neg': 'neg_lamb', 'pos': 'pos_lamb',
@@ -57,7 +57,7 @@ KEY_DTYPES = {'nv_dim': int, 'att_type': str, 'nav_type': str, 'att_middle_feat'
               'att_fc_layers': int, 'nav_fc_layers': int, 'att_layers': int,
               'att_gaussian_size': int, 'att_gaussian_std': float, 'sm_temp': float, 'norm_on_depth': bool_own,
               'compose_lamb': float, 'contrast_lamb': float, 'significance_lamb': float, 'Sim_lambda': float, 'Comp_lambda': float,
-              'loss_n_colors': int, 'div_lamb': float, 'norm_lamb': float,
+              'loss_n_colors': int, 'div_lamb': float, 'norm_lamb': float, 'widenatt_lamb': float,
               'var_sample_scale': float, 'var_sample_mean': float, 'sensor_used_layers': int, 'use_norm_mask': bool_own,
               'divide_mask_sum': bool_own, 'use_dynamic_scale': bool_own, 'use_norm_as_mask': bool_own, 'lrate': float,
               'diff_avg_lerp_rate': float, 'lerp_lamb': float, 'lerp_norm': bool_own, 'neg_lamb': float, 'pos_lamb': float,
@@ -183,7 +183,7 @@ def setup_training_loop_kwargs(
                            nv_dim=20, att_type='fixed', nav_type='fixed', att_middle_feat=128, nav_middle_feat=128,
                            att_fc_layers=1, nav_fc_layers=1, att_layers=5, att_gaussian_size=0, att_gaussian_std=1, sm_temp=1., norm_on_depth=True,
                            compose_lamb=0, contrast_lamb=0, significance_lamb=0., Sim_lambda=0, Comp_lambda=0,
-                           loss_n_colors=5, div_lamb=0, norm_lamb=0, var_sample_scale=1, var_sample_mean=0.,
+                           loss_n_colors=5, div_lamb=0, norm_lamb=0, var_sample_scale=1, var_sample_mean=0., widenatt_lamb=0.,
                            sensor_used_layers=10, use_norm_mask=True, divide_mask_sum=True, use_dynamic_scale=True, use_norm_as_mask=False,
                            diff_avg_lerp_rate=0.01, lerp_lamb=0., lerp_norm=False, neg_lamb=1., pos_lamb=1., neg_on_self=False, use_catdiff=False,
                            n_samples_per=7, sensor_type='alex', pnet_rand=False,
@@ -234,6 +234,7 @@ def setup_training_loop_kwargs(
                                        significance_lamb=spec.significance_lamb, Sim_lambda=spec.Sim_lambda, Comp_lambda=spec.Comp_lambda,
                                        Sim_pkl=common_sense_net_sim_pkl, Comp_pkl=common_sense_net_comp_pkl,
                                        n_colors=spec.loss_n_colors, div_lamb=spec.div_lamb, norm_lamb=spec.norm_lamb, var_sample_scale=spec.var_sample_scale,
+                                       widenatt_lamb=spec.widenatt_lamb,
                                        var_sample_mean=spec.var_sample_mean, sensor_used_layers=spec.sensor_used_layers, use_norm_mask=spec.use_norm_mask,
                                        divide_mask_sum=spec.divide_mask_sum, use_dynamic_scale=spec.use_dynamic_scale, use_norm_as_mask=spec.use_norm_as_mask,
                                        diff_avg_lerp_rate=spec.diff_avg_lerp_rate, lerp_lamb=spec.lerp_lamb, lerp_norm=spec.lerp_norm,

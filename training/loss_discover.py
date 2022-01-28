@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 17 Nov 2021 03:33:03 AEDT
+# --- Last Modified: Fri 28 Jan 2022 18:32:07 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -77,7 +77,7 @@ class DiscoverLoss(Loss):
                  divide_mask_sum=True, use_dynamic_scale=True, use_norm_as_mask=False,
                  diff_avg_lerp_rate=0.01, lerp_lamb=0., lerp_norm=False,
                  neg_lamb=1., pos_lamb=1., neg_on_self=False, use_catdiff=False,
-                 Sim_pkl=None, Comp_pkl=None, Sim_lambda=0., Comp_lambda=0.,
+                 Sim_pkl=None, Comp_pkl=None, Sim_lambda=0., Comp_lambda=0., widenatt_lamb=0.,
                  s_values_normed=None, v_mat=None, w_avg=None, per_w_dir=False, sensor_type='alex',
                  use_pca_scale=False, use_pca_sign=False, use_uniform=False,
                  mask_after_square=False, union_spatial=False, recog_lamb=0., vs_lamb=0.25, var_feat_type='s',
@@ -125,6 +125,7 @@ class DiscoverLoss(Loss):
         self.w_avg = w_avg
         self.use_pca_scale = use_pca_scale
         self.use_pca_sign = use_pca_sign
+        self.widenatt_lamb = widenatt_lamb
 
         self.n_colors = n_colors
         self.batch_gpu = batch_gpu
@@ -231,6 +232,14 @@ class DiscoverLoss(Loss):
             delta = [self.M(ws) for ws in all_ws.split(self.batch_gpu)]
         delta = torch.cat(delta, dim=0)
         return delta
+
+    def run_M_outALL(self, all_ws, sync):
+        with misc.ddp_sync(self.M, sync):
+            outs = [self.M.output_all(ws) for ws in all_ws.split(self.batch_gpu)]
+        ws_atts, per_w_dir, delta = zip(*outs)
+        # ws_atts_ls, per_w_dir_ls, dirs_ls = zip(*out_ls)
+        ws_atts, per_w_dir, delta = torch.cat(ws_atts, dim=0), torch.cat(per_w_dir, dim=0), torch.cat(delta, dim=0)
+        return ws_atts, per_w_dir, delta
 
     def run_S(self, all_imgs):
         # with misc.ddp_sync(self.S, sync):
@@ -726,12 +735,16 @@ class DiscoverLoss(Loss):
         do_Msim = (phase in ['Mall', 'Msim']) and (self.Sim_lambda != 0) and (self.Sim is not None)
         do_Mcomp = (phase in ['Mall', 'Mcomp']) and (self.Comp_lambda != 0) and (self.Comp is not None)
         do_Mxent = (phase in ['Mall', 'Mxent']) and (self.xent_lamb != 0)
+        do_Mwidenatt = (phase in ['Mall', 'Mwidenatt']) and (self.widenatt_lamb != 0)
 
         with torch.autograd.profiler.record_function('M_run'):
             ws_orig = self.get_multicolor_ws(self.n_colors) # [b(_gpu), num_ws, w_dim]
 
             # Predict delta for every direction at every input point.
-            delta = self.run_M(ws_orig, sync) # [b, nv_dim, num_ws, w_dim] or [b, num_ws, nv_dim, w_dim] (per_w_dir)
+            if not do_Mwidenatt:
+                delta = self.run_M(ws_orig, sync) # [b, nv_dim, num_ws, w_dim] or [b, num_ws, nv_dim, w_dim] (per_w_dir)
+            else:
+                ws_atts, per_w_dir, delta = self.run_M_outALL(ws_orig, sync) # [b, nv_dim, num_ws, w_dim] or [b, num_ws, nv_dim, w_dim] (per_w_dir)
 
         b = self.batch_gpu
         loss_all = 0.
@@ -848,6 +861,13 @@ class DiscoverLoss(Loss):
                 else:
                     loss_contrast = self.extract_diff_loss(outs_all, pos_neg_idx)
             loss_all += self.contrast_lamb * loss_contrast.mean()
+
+        if do_Mwidenatt:
+            # ws_atts, per_w_dir, delta = self.run_M_outALL(ws_orig, sync) # [b, nv_dim, num_ws, w_dim] or [b, num_ws, nv_dim, w_dim] (per_w_dir)
+            # ws_atts # [b, nv_dim, num_ws]
+            with torch.autograd.profiler.record_function('Mwidenatt_sumatts'):
+                loss_atts_sum = ws_atts.sum(-1)
+            loss_all += self.widenatt_lamb * loss_atts_sum.mean()
 
         if do_Mxent:
             with torch.autograd.profiler.record_function('Mxent_var_all_nv'):
