@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 05 Feb 2022 05:51:48 AEDT
+# --- Last Modified: Sat 05 Feb 2022 06:10:50 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -243,7 +243,8 @@ class DiscoverLoss(Loss):
         ws_atts, per_w_dir, delta = zip(*outs)
         # ws_atts_ls, per_w_dir_ls, dirs_ls = zip(*out_ls)
         ws_atts, per_w_dir, delta = torch.cat(ws_atts, dim=0), torch.cat(per_w_dir, dim=0), torch.cat(delta, dim=0)
-        return ws_atts, per_w_dir, delta
+        loss_atts_sum = ws_atts.sum(-1).mean()
+        return loss_atts_sum, ws_atts, per_w_dir, delta
 
     def run_S(self, all_imgs):
         # with misc.ddp_sync(self.S, sync):
@@ -748,7 +749,7 @@ class DiscoverLoss(Loss):
             if not do_Mwidenatt:
                 delta = self.run_M(ws_orig, sync) # [b, nv_dim, num_ws, w_dim] or [b, num_ws, nv_dim, w_dim] (per_w_dir)
             else:
-                ws_atts, per_w_dir, delta = self.run_M_outALL(ws_orig, sync) # [b, nv_dim, num_ws, w_dim] or [b, num_ws, nv_dim, w_dim] (per_w_dir)
+                loss_atts_sum, ws_atts, per_w_dir, delta = self.run_M_outALL(ws_orig, sync) # [b, nv_dim, num_ws, w_dim] or [b, num_ws, nv_dim, w_dim] (per_w_dir)
 
         b = self.batch_gpu
         loss_all = 0.
@@ -869,9 +870,9 @@ class DiscoverLoss(Loss):
         if do_Mwidenatt:
             # ws_atts, per_w_dir, delta = self.run_M_outALL(ws_orig, sync) # [b, nv_dim, num_ws, w_dim] or [b, num_ws, nv_dim, w_dim] (per_w_dir)
             # ws_atts # [b, nv_dim, num_ws]
-            with torch.autograd.profiler.record_function('Mwidenatt_sumatts'):
-                loss_atts_sum = ws_atts.sum(-1)
-            loss_all += self.widenatt_lamb * loss_atts_sum.mean()
+            # with torch.autograd.profiler.record_function('Mwidenatt_sumatts'):
+                # loss_atts_sum = ws_atts.sum(-1).mean()
+            loss_all += self.widenatt_lamb * loss_atts_sum
 
         if do_Mxent:
             with torch.autograd.profiler.record_function('Mxent_var_all_nv'):
