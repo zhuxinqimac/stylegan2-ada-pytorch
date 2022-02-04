@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 28 Jan 2022 18:32:07 AEDT
+# --- Last Modified: Sat 05 Feb 2022 05:51:48 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -234,8 +234,12 @@ class DiscoverLoss(Loss):
         return delta
 
     def run_M_outALL(self, all_ws, sync):
+        if isinstance(self.M, torch.nn.parallel.DistributedDataParallel):
+            M = self.M.module
+        else:
+            M = self.M
         with misc.ddp_sync(self.M, sync):
-            outs = [self.M.output_all(ws) for ws in all_ws.split(self.batch_gpu)]
+            outs = [M.output_all(ws) for ws in all_ws.split(self.batch_gpu)]
         ws_atts, per_w_dir, delta = zip(*outs)
         # ws_atts_ls, per_w_dir_ls, dirs_ls = zip(*out_ls)
         ws_atts, per_w_dir, delta = torch.cat(ws_atts, dim=0), torch.cat(per_w_dir, dim=0), torch.cat(delta, dim=0)
