@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 05 Feb 2022 06:10:50 AEDT
+# --- Last Modified: Sat 05 Feb 2022 06:18:38 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -872,7 +872,8 @@ class DiscoverLoss(Loss):
             # ws_atts # [b, nv_dim, num_ws]
             # with torch.autograd.profiler.record_function('Mwidenatt_sumatts'):
                 # loss_atts_sum = ws_atts.sum(-1).mean()
-            loss_all += self.widenatt_lamb * loss_atts_sum
+            # loss_all += self.widenatt_lamb * loss_atts_sum
+            loss_all = loss_all
 
         if do_Mxent:
             with torch.autograd.profiler.record_function('Mxent_var_all_nv'):
