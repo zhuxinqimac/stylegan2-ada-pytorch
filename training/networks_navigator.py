@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 28 Jan 2022 18:02:05 AEDT
+# --- Last Modified: Sat 05 Feb 2022 05:45:44 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -131,7 +131,7 @@ class FixedCumaxAttentioner(NoneAttentioner):
         **kwargs,
     ):
         super().__init__(nv_dim, num_ws, w_dim, att_layers)
-        self.att_logits_1 = nn.Parameter(torch.normal(mean=torch.zeros(nv_dim, self.att_layers), std=1),
+        self.att_logits = nn.Parameter(torch.normal(mean=torch.zeros(nv_dim, self.att_layers), std=1),
                                          requires_grad=True)
         self.att_logits_2 = nn.Parameter(torch.normal(mean=torch.zeros(nv_dim, self.att_layers), std=1),
                                          requires_grad=True)
@@ -139,7 +139,7 @@ class FixedCumaxAttentioner(NoneAttentioner):
     def forward(self, ws_in):
         # ws_in: [b, num_ws, w_dim]
         # return: [b, nv_dim, num_ws]
-        ws_atts_1 = torch.softmax(self.att_logits_1, dim=-1).view(1, self.nv_dim, self.att_layers)
+        ws_atts_1 = torch.softmax(self.att_logits, dim=-1).view(1, self.nv_dim, self.att_layers)
         ws_atts_2 = torch.softmax(self.att_logits_2, dim=-1).view(1, self.nv_dim, self.att_layers)
         ws_atts = ws_atts_1.cumsum(-1) * (1 - ws_atts_2.cumsum(-1)) # [1, nv_dim, att_layers]
 
