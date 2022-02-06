@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 05 Feb 2022 06:23:13 AEDT
+# --- Last Modified: Mon 07 Feb 2022 07:10:18 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -753,6 +753,11 @@ class DiscoverLoss(Loss):
 
         b = self.batch_gpu
         loss_all = 0.
+
+        # Mmemcontrast: contrast sampled delta with a memory of (averaged) deltas.
+        # if do_Mmemcontrast:
+            # pass
+
         # Mcontrast: Maximize cos_sim between same-var pairs and minimize between orth-var pairs.
         if do_Mcontrast:
             # print('Using contrast loss...')
@@ -870,10 +875,10 @@ class DiscoverLoss(Loss):
         if do_Mwidenatt:
             # ws_atts, per_w_dir, delta = self.run_M_outALL(ws_orig, sync) # [b, nv_dim, num_ws, w_dim] or [b, num_ws, nv_dim, w_dim] (per_w_dir)
             # ws_atts # [b, nv_dim, num_ws]
-            # with torch.autograd.profiler.record_function('Mwidenatt_sumatts'):
-                # loss_atts_sum = ws_atts.sum(-1).mean()
-            # loss_all += self.widenatt_lamb * loss_atts_sum
-            loss_all = loss_all
+            with torch.autograd.profiler.record_function('Mwidenatt_sumatts'):
+                loss_atts_sum = ws_atts.sum(-1).mean()
+            loss_all += self.widenatt_lamb * loss_atts_sum
+            # loss_all = loss_all
 
         if do_Mxent:
             with torch.autograd.profiler.record_function('Mxent_var_all_nv'):
