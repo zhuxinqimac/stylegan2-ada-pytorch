@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 07 Feb 2022 07:10:18 AEDT
+# --- Last Modified: Tue 08 Feb 2022 01:26:10 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -71,7 +71,7 @@ def normalize_img(img, device):
 #----------------------------------------------------------------------------
 class DiscoverLoss(Loss):
     def __init__(self, device, G_mapping, G_synthesis, M, S=None, norm_on_depth=True, R=None,
-                 compose_lamb=0., contrast_lamb=1., significance_lamb=0., batch_gpu=4, n_colors=1,
+                 compose_lamb=0., contrast_lamb=1., memcontrast_lamb=0., significance_lamb=0., batch_gpu=4, n_colors=1,
                  div_lamb=0., norm_lamb=0., var_sample_scale=1.,
                  var_sample_mean=0., sensor_used_layers=5, use_norm_mask=True,
                  divide_mask_sum=True, use_dynamic_scale=True, use_norm_as_mask=False,
@@ -131,6 +131,7 @@ class DiscoverLoss(Loss):
         self.batch_gpu = batch_gpu
         self.compose_lamb = compose_lamb
         self.contrast_lamb = contrast_lamb
+        self.memcontrast_lamb = memcontrast_lamb
         self.significance_lamb = significance_lamb
         self.norm_on_depth = norm_on_depth
         self.use_norm_mask = use_norm_mask
@@ -732,6 +733,7 @@ class DiscoverLoss(Loss):
 
     def accumulate_gradients(self, phase, sync, gain):
         assert phase in ['Mall', 'Mcompose', 'Mdiverse', 'Mcontrast']
+        do_Mmemcontrast = (phase in ['Mall', 'Mmemcontrast']) and (self.memcontrast_lamb != 0)
         do_Mcompose = (phase in ['Mall', 'Mcompose']) and (self.compose_lamb != 0)
         do_Msignificance = (phase in ['Mall', 'Msignificance']) and (self.significance_lamb != 0)
         do_Mdiverse = (phase in ['Mall', 'Mdiverse']) and (self.div_lamb != 0)
@@ -755,8 +757,57 @@ class DiscoverLoss(Loss):
         loss_all = 0.
 
         # Mmemcontrast: contrast sampled delta with a memory of (averaged) deltas.
-        # if do_Mmemcontrast:
-            # pass
+        if do_Mmemcontrast:
+            with torch.autograd.profiler.record_function('Mmemcontrast_sample_q'):
+                # Sample directions for query.
+                pos_idx = torch.randint(self.nv_dim, size=[b])
+                delta_q = delta[torch.arange(b), pos_idx] # [b, num_ws, w_dim]
+                # step_scale_q = self.get_dir_scale(delta_q)
+                # step_sign_q = self.get_dir_sign(ws_orig, delta_q)
+
+                # Sample variation scales.
+                if self.use_dynamic_scale:
+                    if self.use_uniform:
+                        scale_q = ((torch.rand(b, device=delta.device) - 0.5) * 2. * self.var_sample_scale + self.var_sample_mean).view(b, 1, 1)
+                    else:
+                        scale_q = (torch.randn(b, device=delta.device) * self.var_sample_scale + self.var_sample_mean).view(b, 1, 1)
+                else:
+                    scale_q = (self.var_sample_scale).view(b, 1, 1)
+
+                # Apply variations to ws.
+                ws_q = ws_orig + (delta_q * scale_q) # (b, num_ws, w_dim)
+
+            with torch.autograd.profiler.record_function('Mmemcontrast_generate_imgs'):
+                # Generate images.
+                ws_all = torch.cat([ws_orig, ws_q], dim=0) # (2 * b, num_ws, w_dim)
+                gen_feats_all, imgs_all = self.run_G_synthesis(ws_all, return_feats=True)
+
+            with torch.autograd.profiler.record_function('Mmemcontrast_var_features'):
+                outs_all = []
+                mems_all = []
+                # if 'g' in self.var_feat_type:
+                    # outs_all += gen_feats_all
+                if 's' in self.var_feat_type:
+                    outs_all += self.run_S(imgs_all)
+                    if isinstance(self.M, torch.nn.parallel.DistributedDataParallel):
+                        mems_all += self.run_S(self.M.module.mem_dimgs)
+                if 'i' in self.var_feat_type:
+                    outs_all += [imgs_all]
+                    if isinstance(self.M, torch.nn.parallel.DistributedDataParallel):
+                        mems_all += [self.M.module.mem_dimgs]
+            # for j, out in enumerate(outs_all):
+                # print(f'outs_{j}.shape:', out.shape)
+
+            with torch.autograd.profiler.record_function('Mmemcontrast_loss'):
+                # Contrast loss
+                if self.use_flat_diff:
+                    # loss_contrast = self.extract_flatdiff_loss_pn(outs_all)
+                    loss_memcontrast = memcont_utils.extract_flatdiff_loss(outs_all, mems_all)
+                elif self.use_catdiff:
+                    loss_memcontrast = memcont_utils.extract_catdiff_loss(outs_all, mems_all)
+                else:
+                    loss_memcontrast = memcont_utils.extract_diff_loss(outs_all, mems_all)
+            loss_all += self.memcontrast_lamb * loss_memcontrast.mean()
 
         # Mcontrast: Maximize cos_sim between same-var pairs and minimize between orth-var pairs.
         if do_Mcontrast:
@@ -876,7 +927,7 @@ class DiscoverLoss(Loss):
             # ws_atts, per_w_dir, delta = self.run_M_outALL(ws_orig, sync) # [b, nv_dim, num_ws, w_dim] or [b, num_ws, nv_dim, w_dim] (per_w_dir)
             # ws_atts # [b, nv_dim, num_ws]
             with torch.autograd.profiler.record_function('Mwidenatt_sumatts'):
-                loss_atts_sum = ws_atts.sum(-1).mean()
+                loss_atts_sum = -ws_atts.sum(-1).mean()
             loss_all += self.widenatt_lamb * loss_atts_sum
             # loss_all = loss_all
 
