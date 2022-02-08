@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 09 Feb 2022 03:16:31 AEDT
+# --- Last Modified: Wed 09 Feb 2022 03:40:39 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -24,7 +24,7 @@ from torch_utils import training_stats
 from torch_utils import misc
 from torch_utils.ops import conv2d_gradfix
 from training.loss import Loss
-import memcont_utils
+import training.memcont_utils as memcont_utils
 
 def get_color_cuts(n_segs, len_v):
     '''

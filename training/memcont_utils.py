@@ -8,7 +8,7 @@
 
 # --- File Name: memcont_utils.py
 # --- Creation Date: 08-02-2022
-# --- Last Modified: Wed 09 Feb 2022 03:27:07 AEDT
+# --- Last Modified: Wed 09 Feb 2022 03:29:35 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -56,7 +56,7 @@ def extract_flatdiff_loss(outs_all, mems_all, q_idx):
     sim = torch.mm(qd_flat, mem_flat.t())**2 # [b, nv_dim]
     print('sim.shape:', sim.shape)
     # sim = F.cosine_similarity(qd_flat.view(b, 1, -1), mem_flat.view(1, nv_dim, -1), dim=2) # [b, nv_dim]
-    pos_mask = F.one_hot(q_idx, num_classes=nv_dim, device=sim.device).bool()
+    pos_mask = F.one_hot(q_idx, num_classes=nv_dim).bool().to(sim.device)
     print('pos_mask.shape:', pos_mask.shape)
     pos = sim.masked_select(pos_mask).view(b, -1)
     neg = sim.masked_select(~pos_mask).view(b, -1)
@@ -121,7 +121,7 @@ def extract_loss_L_by_maskdiff(diff_q, diff_mems, mask_q, mask_mems, idx, q_idx,
     else:
         cos_sim = (cos_sim_hw**2).mean(dim=[2,3])
 
-    pos_mask = F.one_hot(q_idx, num_classes=nv_dim, device=cos_sim.device).bool() # [b, nv_dim]
+    pos_mask = F.one_hot(q_idx, num_classes=nv_dim).bool().to(cos_sim.device) # [b, nv_dim]
     pos = cos_sim.masked_select(pos_mask).view(b, -1)
     neg = cos_sim.masked_select(~pos_mask).view(b, -1)
     loss_pos = pos.mean(dim=-1)
