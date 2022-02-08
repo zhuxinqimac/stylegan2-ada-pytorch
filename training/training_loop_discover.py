@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 23 Oct 2021 02:22:47 AEDT
+# --- Last Modified: Wed 09 Feb 2022 02:40:33 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -222,6 +222,20 @@ def training_loop(
             images = add_outline(images)
             save_image_grid(images, os.path.join(run_dir, f'trav_init_s{w_scale}.png'), drange=[-1,1], grid_size=walk_grid_size)
 
+        if M_kwargs.mem_kwargs.memcontrast_lamb > 0:
+            # M.mem_dimgs # [nv_dim, c, h, w]
+            dimgs_flat = M.mem_dimgs.view(M.nv_dim, -1)
+            dimgs_max, dimgs_min = dimgs_flat.max(-1)[0].view(M.nv_dim, 1, 1, 1), dimgs_flat.min(-1)[0].view(M.nv_dim, 1, 1, 1) # [nv_dim, 1, 1, 1]
+            mem_dimgs = (M.mem_dimgs + dimgs_min) / (dimgs_max - dimgs_min) # [nv_dim, c, h, w] [0, 1]
+            if save_size < mem_dimgs.size(-1):
+                mem_dimgs = F.adaptive_avg_pool2d(mem_dimgs, (save_size, save_size)).cpu().numpy()
+            else:
+                mem_dimgs = mem_dimgs.cpu().numpy()
+            print('mem_dimgs.shape:', mem_dimgs.shape)
+            mem_dimgs = add_outline(mem_dimgs)
+            save_image_grid(mem_dimgs, os.path.join(run_dir, f'mdimgs_init.png'), drange=[0,1], grid_size=(1, walk_grid_size[1]))
+
+
     # Initialize logs.
     if rank == 0:
         print('Initializing logs...')
@@ -347,6 +361,18 @@ def training_loop(
                     images = images.cpu().numpy()
                 images = add_outline(images)
                 save_image_grid(images, os.path.join(run_dir, f'trav_{cur_nimg//1000:06d}_s{w_scale}.png'), drange=[-1,1], grid_size=walk_grid_size)
+
+            if M_kwargs.mem_kwargs.memcontrast_lamb > 0:
+                # M.mem_dimgs # [nv_dim, c, h, w]
+                dimgs_flat = M.mem_dimgs.view(M.nv_dim, -1)
+                dimgs_max, dimgs_min = dimgs_flat.max(-1)[0].view(M.nv_dim, 1, 1, 1), dimgs_flat.min(-1)[0].view(M.nv_dim, 1, 1, 1) # [nv_dim, 1, 1, 1]
+                mem_dimgs = (M.mem_dimgs + dimgs_min) / (dimgs_max - dimgs_min) # [nv_dim, c, h, w] [0, 1]
+                if save_size < mem_dimgs.size(-1):
+                    mem_dimgs = F.adaptive_avg_pool2d(mem_dimgs, (save_size, save_size)).cpu().numpy()
+                else:
+                    mem_dimgs = mem_dimgs.cpu().numpy()
+                mem_dimgs = add_outline(mem_dimgs)
+                save_image_grid(mem_dimgs, os.path.join(run_dir, f'mdimgs_{cur_nimg//1000:06d}.png'), drange=[0,1], grid_size=(1, walk_grid_size[1]))
 
         # Save network snapshot.
         snapshot_pkl = None

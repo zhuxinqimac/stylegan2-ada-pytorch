@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 28 Jan 2022 18:35:50 AEDT
+# --- Last Modified: Wed 09 Feb 2022 02:56:37 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -39,7 +39,9 @@ def bool_own(v):
 KEY_BRIEF_NAMES = {'z': 'nv_dim', 'at': 'att_type', 'nt': 'nav_type', 'amf': 'att_middle_feat', 'nmf': 'nav_middle_feat',
                    'afc': 'att_fc_layers', 'nfc': 'nav_fc_layers', 'atl': 'att_layers',
                    'atg': 'att_gaussian_size', 'agst': 'att_gaussian_std', 'stmp': 'sm_temp', 'nod': 'norm_on_depth',
-                   'comp': 'compose_lamb', 'cont': 'contrast_lamb', 'sig': 'significance_lamb', 'Sim': 'Sim_lambda', 'Comp': 'Comp_lambda',
+                   'comp': 'compose_lamb', 'cont': 'contrast_lamb', 'mcont': 'memcontrast_lamb',
+                   'dis': 'dimg_size', 'dic': 'dimg_ch',
+                   'sig': 'significance_lamb', 'Sim': 'Sim_lambda', 'Comp': 'Comp_lambda',
                    'ncol': 'loss_n_colors', 'div': 'div_lamb', 'norm': 'norm_lamb', 'widenatt': 'widenatt_lamb',
                    'vars': 'var_sample_scale', 'varm': 'var_sample_mean', 'sensl': 'sensor_used_layers', 'nomask': 'use_norm_mask',
                    'divmsum': 'divide_mask_sum', 'dys': 'use_dynamic_scale', 'norasm': 'use_norm_as_mask', 'lr': 'lrate',
@@ -56,7 +58,9 @@ KEY_BRIEF_NAMES = {'z': 'nv_dim', 'at': 'att_type', 'nt': 'nav_type', 'amf': 'at
 KEY_DTYPES = {'nv_dim': int, 'att_type': str, 'nav_type': str, 'att_middle_feat': int, 'nav_middle_feat': int,
               'att_fc_layers': int, 'nav_fc_layers': int, 'att_layers': int,
               'att_gaussian_size': int, 'att_gaussian_std': float, 'sm_temp': float, 'norm_on_depth': bool_own,
-              'compose_lamb': float, 'contrast_lamb': float, 'significance_lamb': float, 'Sim_lambda': float, 'Comp_lambda': float,
+              'compose_lamb': float, 'contrast_lamb': float, 'memcontrast_lamb': float,
+              'dimg_size': int, 'dimg_ch': int,
+              'significance_lamb': float, 'Sim_lambda': float, 'Comp_lambda': float,
               'loss_n_colors': int, 'div_lamb': float, 'norm_lamb': float, 'widenatt_lamb': float,
               'var_sample_scale': float, 'var_sample_mean': float, 'sensor_used_layers': int, 'use_norm_mask': bool_own,
               'divide_mask_sum': bool_own, 'use_dynamic_scale': bool_own, 'use_norm_as_mask': bool_own, 'lrate': float,
@@ -181,8 +185,8 @@ def setup_training_loop_kwargs(
         'auto':      dict(ref_gpus=-1, kimg=25000,  mb=-1, mbstd=-1, fmaps=-1,  lrate=-1,     gamma=-1,   ema=-1,  ramp=0.05, map=2), # Populated dynamically based on resolution and GPU count.
         'basic':      dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, gamma=10, ema=10,  ramp=0.05,
                            nv_dim=20, att_type='fixed', nav_type='fixed', att_middle_feat=128, nav_middle_feat=128,
-                           att_fc_layers=1, nav_fc_layers=1, att_layers=5, att_gaussian_size=0, att_gaussian_std=1, sm_temp=1., norm_on_depth=True,
-                           compose_lamb=0, contrast_lamb=0, significance_lamb=0., Sim_lambda=0, Comp_lambda=0,
+                           att_fc_layers=1, nav_fc_layers=1, att_layers=5, att_gaussian_size=0, att_gaussian_std=1, sm_temp=1., norm_on_depth=False,
+                           compose_lamb=0, contrast_lamb=0, memcontrast_lamb=0, significance_lamb=0., Sim_lambda=0, Comp_lambda=0,
                            loss_n_colors=5, div_lamb=0, norm_lamb=0, var_sample_scale=1, var_sample_mean=0., widenatt_lamb=0.,
                            sensor_used_layers=10, use_norm_mask=True, divide_mask_sum=True, use_dynamic_scale=True, use_norm_as_mask=False,
                            diff_avg_lerp_rate=0.01, lerp_lamb=0., lerp_norm=False, neg_lamb=1., pos_lamb=1., neg_on_self=False, use_catdiff=False,
@@ -192,7 +196,7 @@ def setup_training_loop_kwargs(
                            recog_lamb=0., vs_lamb=0.25, R_ch_in=6, R_net_name='resnet18', R_pretrained=False,
                            vit_return_multi_layer=True, var_feat_type='s', no_spatial=False,
                            no_bn=False, no_relu=False, no_skip=False, xent_lamb=0., xent_temp=0.5, use_flat_diff=False, use_feat_from_top=True,
-                           nav_n_eigen=100, abs_diff=False)
+                           nav_n_eigen=100, abs_diff=False, dimg_size=128, dimg_ch=3)
         # 'stylegan2': dict(ref_gpus=8,  kimg=25000,  mb=32, mbstd=4,  fmaps=1,   lrate=0.002),
     }
 
@@ -220,6 +224,8 @@ def setup_training_loop_kwargs(
                                                    att_layers=spec.att_layers, filter_size=spec.att_gaussian_size, filter_std=spec.att_gaussian_std,
                                                    temp=spec.sm_temp)
         args.M_kwargs.nav_kwargs = dnnlib.EasyDict(middle_feat=spec.nav_middle_feat, nav_fc_layers=spec.nav_fc_layers, n_eigen=spec.nav_n_eigen)
+        if spec.memcontrast_lamb > 0:
+            args.M_kwargs.mem_kwargs = dnnlib.EasyDict(memcontrast_lamb=spec.memcontrast_lamb, dimg_size=spec.dimg_size, dimg_ch=spec.dimg_ch)
 
     if spec.recog_lamb > 0:
         args.R_kwargs = dnnlib.EasyDict(class_name='training.networks_recog_resnet.RecogResNet', nv_dim=spec.nv_dim, ch_in=spec.R_ch_in,
@@ -231,6 +237,7 @@ def setup_training_loop_kwargs(
 
     args.loss_kwargs = dnnlib.EasyDict(class_name='training.loss_discover.DiscoverLoss',
                                        norm_on_depth=spec.norm_on_depth, compose_lamb=spec.compose_lamb, contrast_lamb=spec.contrast_lamb,
+                                       memcontrast_lamb=spec.memcontrast_lamb,
                                        significance_lamb=spec.significance_lamb, Sim_lambda=spec.Sim_lambda, Comp_lambda=spec.Comp_lambda,
                                        Sim_pkl=common_sense_net_sim_pkl, Comp_pkl=common_sense_net_comp_pkl,
                                        n_colors=spec.loss_n_colors, div_lamb=spec.div_lamb, norm_lamb=spec.norm_lamb, var_sample_scale=spec.var_sample_scale,

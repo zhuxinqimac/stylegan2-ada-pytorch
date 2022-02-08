@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 08 Feb 2022 01:26:10 AEDT
+# --- Last Modified: Wed 09 Feb 2022 01:33:09 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -24,6 +24,7 @@ from torch_utils import training_stats
 from torch_utils import misc
 from torch_utils.ops import conv2d_gradfix
 from training.loss import Loss
+import memcont_utils
 
 def get_color_cuts(n_segs, len_v):
     '''
@@ -760,8 +761,8 @@ class DiscoverLoss(Loss):
         if do_Mmemcontrast:
             with torch.autograd.profiler.record_function('Mmemcontrast_sample_q'):
                 # Sample directions for query.
-                pos_idx = torch.randint(self.nv_dim, size=[b])
-                delta_q = delta[torch.arange(b), pos_idx] # [b, num_ws, w_dim]
+                q_idx = torch.randint(self.nv_dim, size=[b])
+                delta_q = delta[torch.arange(b), q_idx] # [b, num_ws, w_dim]
                 # step_scale_q = self.get_dir_scale(delta_q)
                 # step_sign_q = self.get_dir_sign(ws_orig, delta_q)
 
@@ -802,11 +803,14 @@ class DiscoverLoss(Loss):
                 # Contrast loss
                 if self.use_flat_diff:
                     # loss_contrast = self.extract_flatdiff_loss_pn(outs_all)
-                    loss_memcontrast = memcont_utils.extract_flatdiff_loss(outs_all, mems_all)
+                    loss_memcontrast = memcont_utils.extract_flatdiff_loss(outs_all, mems_all, q_idx)
                 elif self.use_catdiff:
-                    loss_memcontrast = memcont_utils.extract_catdiff_loss(outs_all, mems_all)
+                    loss_memcontrast = memcont_utils.extract_catdiff_loss(outs_all, mems_all, q_idx)
                 else:
-                    loss_memcontrast = memcont_utils.extract_diff_loss(outs_all, mems_all)
+                    kwargs = {'sensor_used_layers': self.sensor_used_layers, 'use_feat_from_top': self.use_feat_from_top,
+                              'use_norm_as_mask': self.use_norm_as_mask, 'use_norm_mask': self.use_norm_mask,
+                              'pos_lamb': self.pos_lamb, 'neg_lamb': self.neg_lamb}
+                    loss_memcontrast = memcont_utils.extract_diff_loss(outs_all, mems_all, q_idx, **kwargs)
             loss_all += self.memcontrast_lamb * loss_memcontrast.mean()
 
         # Mcontrast: Maximize cos_sim between same-var pairs and minimize between orth-var pairs.

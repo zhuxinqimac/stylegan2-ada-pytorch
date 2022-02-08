@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 05 Feb 2022 05:45:44 AEDT
+# --- Last Modified: Wed 09 Feb 2022 02:16:19 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -435,6 +435,7 @@ class Navigator(torch.nn.Module):
         nav_type        = 'ada1w',  # Navigator type, e.g. 'ada1w', 'fixed'.
         att_kwargs      = {},       # Keyword args for att_net construction.
         nav_kwargs      = {},       # Keyword args for nav_net construction.
+        mem_kwargs      = {},       # Keyword args for image variation memory.
     ):
         # common_kwargs = dict(c_dim=G.c_dim, w_dim=G.w_dim, num_ws=G.num_ws, w_avg=G.mapping.w_avg, s_values=s_values, v_mat=v_mat)
         super().__init__()
@@ -450,6 +451,11 @@ class Navigator(torch.nn.Module):
             self.s_values = nav_kwargs['s_values'] # Singular values of w_SVD. [q]
         if 'v_mat' in nav_kwargs:
             self.v_mat = nav_kwargs['v_mat'] # PCA basis of w. [w_dim, q]
+
+        # if 'dimg_size' in mem_kwargs and mem_kwargs['dimg_size'] > 0:
+        if mem_kwargs.memcontrast_lamb > 0:
+            ch, h, w = mem_kwargs['dimg_ch'], mem_kwargs['dimg_size'], mem_kwargs['dimg_size']
+            self.mem_dimgs = nn.Parameter(torch.normal(mean=torch.zeros(self.nv_dim, ch, h, w), std=0.01), requires_grad=True)
 
         # Attention net: map tensor w [b, num_ws, w_dim] --> nv_dims of ws attentions [b, nv_dim, num_ws], should be [0, 1]
         if self.att_type == 'none':
