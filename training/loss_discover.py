@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 09 Feb 2022 03:50:16 AEDT
+# --- Last Modified: Wed 09 Feb 2022 06:06:47 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -786,7 +786,6 @@ class DiscoverLoss(Loss):
             with torch.autograd.profiler.record_function('Mmemcontrast_var_features'):
                 outs_all = []
                 mems_all = []
-                print('imgs_all.shape:', imgs_all.shape)
                 # if 'g' in self.var_feat_type:
                     # outs_all += gen_feats_all
                 if 's' in self.var_feat_type:
