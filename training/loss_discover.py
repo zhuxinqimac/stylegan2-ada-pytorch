@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 09 Feb 2022 03:46:37 AEDT
+# --- Last Modified: Wed 09 Feb 2022 03:50:16 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -560,8 +560,7 @@ class DiscoverLoss(Loss):
             delta1 = delta.reshape(-1, 1, nv_dim, w_dim) # [b*num_ws, 1, nv_dim, w_dim]
             delta2 = delta.reshape(-1, nv_dim, 1, w_dim) # [b*num_ws, nv_dim, 1, w_dim]
             print('diversity loss: delta1.shape:', delta1.shape)
-            # cos_div = self.cos_fn_diversity(delta1.repeat(1, nv_dim, 1, 1), delta2.repeat(1, 1, nv_dim, 1)) # (b*num_ws, nv_dim, nv_dim)
-            cos_div = self.cos_fn_diversity(delta1, delta2) # (b*num_ws, nv_dim, nv_dim)
+            cos_div = self.cos_fn_diversity(delta1.repeat(1, nv_dim, 1, 1), delta2.repeat(1, 1, nv_dim, 1)) # (b*num_ws, nv_dim, nv_dim)
             print('diversity loss: cos_div.shape:', cos_div.shape)
             div_mask = 1. - torch.eye(self.nv_dim, device=delta.device).view(1, self.nv_dim, self.nv_dim)
             loss = (cos_div * div_mask).square()
@@ -571,8 +570,7 @@ class DiscoverLoss(Loss):
         delta2 = delta.flatten(2)[:, :, np.newaxis, ...] # (b, nv_dim, 1, num_ws * w_dim)
         # print('delta1.len:', torch.norm(delta1, dim=-1).squeeze())
         # norm = torch.norm(diff, dim=1) # (0.5batch, h, w)
-        # cos_div = self.cos_fn_diversity(delta1.repeat(1, nv_dim, 1, 1), delta2.repeat(1, 1, nv_dim, 1)) # (b, nv_dim, nv_dim)
-        cos_div = self.cos_fn_diversity(delta1, delta2) # (b, nv_dim, nv_dim)
+        cos_div = self.cos_fn_diversity(delta1.repeat(1, nv_dim, 1, 1), delta2.repeat(1, 1, nv_dim, 1)) # (b, nv_dim, nv_dim)
         # print('cos_div:', cos_div)
         div_mask = 1. - torch.eye(self.nv_dim, device=delta.device).view(1, self.nv_dim, self.nv_dim)
         loss = (cos_div * div_mask).square()
