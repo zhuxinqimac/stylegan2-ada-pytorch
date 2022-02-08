@@ -8,7 +8,7 @@
 
 # --- File Name: memcont_utils.py
 # --- Creation Date: 08-02-2022
-# --- Last Modified: Wed 09 Feb 2022 01:17:00 AEDT
+# --- Last Modified: Wed 09 Feb 2022 03:19:31 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -37,19 +37,28 @@ def extract_flatdiff_loss(outs_all, mems_all, q_idx):
     mem_flat = []
     for q_feat, mem_feat in zip(outs_all, mems_all):
         # q_feat, mem_feat: [2*b, ...]
+        print('q_feat.shape:', q_feat.shape)
+        print('mem_feat.shape:', mem_feat.shape)
         q_flat.append(q_feat.flatten(1))
         mem_flat.append(mem_feat.flatten(1))
     q_flat = torch.cat(q_flat, dim=1) # [2*b, n_feat]
     mem_flat = torch.cat(mem_flat, dim=1) # [nv_dim, n_feat]
+    print('q_flat.shape:', q_flat.shape)
+    print('mem_flat.shape:', mem_flat.shape)
     qd_flat = q_flat[b:, ...] - q_flat[:b, ...] # [b, n_feat]
     qd_flat = qd_flat / qd_flat.norm(dim=1).reshape(b, 1)
+    print('qd_flat.shape:', qd_flat.shape)
 
     # similarity matrix
     sim = torch.mm(qd_flat, mem_flat.t())**2 # [b, nv_dim]
+    print('sim.shape:', sim.shape)
     # sim = F.cosine_similarity(qd_flat.view(b, 1, -1), mem_flat.view(1, nv_dim, -1), dim=2) # [b, nv_dim]
     pos_mask = F.one_hot(q_idx, num_classes=nv_dim).bool()
+    print('pos_mask.shape:', pos_mask.shape)
     pos = sim.masked_select(pos_mask).view(b, -1)
     neg = sim.masked_select(~pos_mask).view(b, -1)
+    print('pos.shape:', pos.shape)
+    print('neg.shape:', neg.shape)
     pos = pos.mean(dim=-1)
     neg = neg.mean(dim=-1)
 

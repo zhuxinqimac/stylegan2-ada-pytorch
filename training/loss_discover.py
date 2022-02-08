@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 09 Feb 2022 03:08:18 AEDT
+# --- Last Modified: Wed 09 Feb 2022 03:16:31 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -793,10 +793,14 @@ class DiscoverLoss(Loss):
                     outs_all += self.run_S(imgs_all)
                     if isinstance(self.M, torch.nn.parallel.DistributedDataParallel):
                         mems_all += self.run_S(self.M.module.mem_dimgs)
+                    else:
+                        mems_all += self.run_S(self.M.mem_dimgs)
                 if 'i' in self.var_feat_type:
                     outs_all += [imgs_all]
                     if isinstance(self.M, torch.nn.parallel.DistributedDataParallel):
                         mems_all += [self.M.module.mem_dimgs]
+                    else:
+                        mems_all += [self.M.mem_dimgs]
             # for j, out in enumerate(outs_all):
                 # print(f'outs_{j}.shape:', out.shape)
 
