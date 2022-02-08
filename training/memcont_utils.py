@@ -8,7 +8,7 @@
 
 # --- File Name: memcont_utils.py
 # --- Creation Date: 08-02-2022
-# --- Last Modified: Wed 09 Feb 2022 06:23:56 AEDT
+# --- Last Modified: Wed 09 Feb 2022 06:26:56 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -113,7 +113,6 @@ def extract_loss_L_by_maskdiff(diff_q, diff_mems, mask_q, mask_mems, idx, q_idx,
     # Similarity matrix
     if use_norm_mask:
         mask_comb = mask_q.view(b, 1, h, w) * mask_mems.view(1, nv_dim, h, w) # [b, nv_dim, h, w]
-        print('mask_comb.shape:', mask_comb.shape)
         cos_sim_hw *= mask_comb
         cos_sim = (cos_sim_hw**2).sum(dim=[2,3]) / (mask_comb.sum(dim=[2,3]) + 1e-6) # [b, nv_dim]
     else:
