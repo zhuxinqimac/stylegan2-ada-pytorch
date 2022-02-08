@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 09 Feb 2022 03:57:37 AEDT
+# --- Last Modified: Wed 09 Feb 2022 06:01:28 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -228,7 +228,7 @@ def training_loop(
             # M.mem_dimgs # [nv_dim, c, h, w]
             dimgs_flat = M.mem_dimgs.view(M.nv_dim, -1)
             dimgs_max, dimgs_min = dimgs_flat.max(-1)[0].view(M.nv_dim, 1, 1, 1), dimgs_flat.min(-1)[0].view(M.nv_dim, 1, 1, 1) # [nv_dim, 1, 1, 1]
-            mem_dimgs = (M.mem_dimgs + dimgs_min) / (dimgs_max - dimgs_min) # [nv_dim, c, h, w] [0, 1]
+            mem_dimgs = (M.mem_dimgs - dimgs_min) / (dimgs_max - dimgs_min) # [nv_dim, c, h, w] [0, 1]
             if save_size < mem_dimgs.size(-1):
                 mem_dimgs = F.adaptive_avg_pool2d(mem_dimgs, (save_size, save_size)).cpu().numpy()
             else:
@@ -370,7 +370,7 @@ def training_loop(
                 # M.mem_dimgs # [nv_dim, c, h, w]
                 dimgs_flat = M.mem_dimgs.view(M.nv_dim, -1)
                 dimgs_max, dimgs_min = dimgs_flat.max(-1)[0].view(M.nv_dim, 1, 1, 1), dimgs_flat.min(-1)[0].view(M.nv_dim, 1, 1, 1) # [nv_dim, 1, 1, 1]
-                mem_dimgs = (M.mem_dimgs + dimgs_min) / (dimgs_max - dimgs_min) # [nv_dim, c, h, w] [0, 1]
+                mem_dimgs = (M.mem_dimgs - dimgs_min) / (dimgs_max - dimgs_min) # [nv_dim, c, h, w] [0, 1]
                 print('dimgs_max:', dimgs_max)
                 print('dimgs_min:', dimgs_min)
                 if save_size < mem_dimgs.size(-1):
