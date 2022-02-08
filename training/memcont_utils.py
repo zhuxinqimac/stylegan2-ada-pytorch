@@ -8,7 +8,7 @@
 
 # --- File Name: memcont_utils.py
 # --- Creation Date: 08-02-2022
-# --- Last Modified: Wed 09 Feb 2022 06:10:59 AEDT
+# --- Last Modified: Wed 09 Feb 2022 06:14:56 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -105,22 +105,33 @@ def extract_loss_L_by_maskdiff(diff_q, diff_mems, mask_q, mask_mems, idx, q_idx,
     mask_mems: (nv_dim, h, w)
     q_idx: (b)
     '''
+    print('diff_q.shape:', diff_q.shape)
+    print('diff_mems.shape:', diff_mems.shape)
+    print('mask_q.shape:', mask_q.shape)
+    print('mask_mems.shape:', mask_mems.shape)
     b, c, h, w = diff_q.shape
     nv_dim = diff_mems.shape[0]
     cos_sim_hw = F.cosine_similarity(diff_q.view(b, 1, c, h, w).repeat(1, nv_dim, 1, 1, 1),
                                      diff_mems.view(1, nv_dim, c, h, w).repeat(b, 1, 1, 1, 1), dim=2) # [b, nv_dim, h, w]
+    print('cos_sim_hw.shape:', cos_sim_hw.shape)
 
     # Similarity matrix
     if use_norm_mask:
         mask_comb = mask_q.view(b, 1, h, w) * mask_mems.view(1, nv_dim, h, w) # [b, nv_dim, h, w]
+        print('mask_comb.shape:', mask_comb.shape)
         cos_sim_hw *= mask_comb
-        cos_sim = (cos_sim_hw**2).sum(dim=[2,3]) / mask_comb.sum(dim=[2,3] + 1e-6) # [b, nv_dim]
+        print('cos_sim_hw.shape:', cos_sim_hw.shape)
+        cos_sim = (cos_sim_hw**2).sum(dim=[2,3]) / (mask_comb.sum(dim=[2,3]) + 1e-6) # [b, nv_dim]
     else:
         cos_sim = (cos_sim_hw**2).mean(dim=[2,3])
+    print('cos_sim.shape:', cos_sim.shape)
 
     pos_mask = F.one_hot(q_idx, num_classes=nv_dim).bool().to(cos_sim.device) # [b, nv_dim]
+    print('pos_mask.shape:', pos_mask.shape)
     pos = cos_sim.masked_select(pos_mask).view(b, -1)
     neg = cos_sim.masked_select(~pos_mask).view(b, -1)
+    print('pos.shape:', pos.shape)
+    print('neg.shape:', neg.shape)
     loss_pos = pos.mean(dim=-1)
     loss_neg = neg.mean(dim=-1)
 
