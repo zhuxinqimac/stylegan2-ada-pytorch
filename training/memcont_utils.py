@@ -8,7 +8,7 @@
 
 # --- File Name: memcont_utils.py
 # --- Creation Date: 08-02-2022
-# --- Last Modified: Wed 09 Feb 2022 05:03:58 AEDT
+# --- Last Modified: Wed 09 Feb 2022 06:10:59 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -39,7 +39,7 @@ def extract_flatdiff_loss(outs_all, mems_all, q_idx):
         # q_feat, mem_feat: [2*b, ...]
 
         _, _, h, w = q_feat.shape
-        mem_feat = F.interpolate(mem_feat, size=(h, w), mode='bilinear') # [nv_dim, c, h, w]
+        mem_feat = F.interpolate(mem_feat, size=(h, w), mode='bilinear', align_corners=False) # [nv_dim, c, h, w]
         q_flat.append(q_feat.flatten(1))
         mem_flat.append(mem_feat.flatten(1))
     q_flat = torch.cat(q_flat, dim=1) # [2*b, n_feat]
@@ -137,7 +137,7 @@ def extract_loss_L(diff_q, diff_mems, idx, q_idx, **kwargs):
     q_idx: (b)
     '''
     _, _, h, w = diff_q.shape
-    diff_mems = F.interpolate(diff_mems, size=(h, w), mode='bilinear') # [nv_dim, c, h, w]
+    diff_mems = F.interpolate(diff_mems, size=(h, w), mode='bilinear', align_corners=False) # [nv_dim, c, h, w]
 
     mask_q = get_norm_mask(diff_q, **kwargs) # (b, h, w), (b, h, w)
     mask_mems = get_norm_mask(diff_mems, **kwargs) # (nv_dim, h, w), (nv_dim, h, w)
