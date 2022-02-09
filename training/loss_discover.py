@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 09 Feb 2022 06:06:47 AEDT
+# --- Last Modified: Thu 10 Feb 2022 05:07:27 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -773,7 +773,7 @@ class DiscoverLoss(Loss):
                     else:
                         scale_q = (torch.randn(b, device=delta.device) * self.var_sample_scale + self.var_sample_mean).view(b, 1, 1)
                 else:
-                    scale_q = (self.var_sample_scale).view(b, 1, 1)
+                    scale_q = (torch.ones(b, device=delta.device) * self.var_sample_scale).view(b, 1, 1)
 
                 # Apply variations to ws.
                 ws_q = ws_orig + (delta_q * scale_q) # (b, num_ws, w_dim)
