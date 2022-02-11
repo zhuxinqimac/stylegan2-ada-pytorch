@@ -8,7 +8,7 @@
 
 # --- File Name: memcont_utils.py
 # --- Creation Date: 08-02-2022
-# --- Last Modified: Fri 11 Feb 2022 23:02:36 AEDT
+# --- Last Modified: Fri 11 Feb 2022 23:12:15 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -44,13 +44,12 @@ def extract_flatdiff_loss(outs_all, mems_all, q_idx):
         mem_flat.append(mem_feat.flatten(1))
     q_flat = torch.cat(q_flat, dim=1) # [2*b, n_feat]
     mem_flat = torch.cat(mem_flat, dim=1) # [nv_dim, n_feat]
+    mem_flat = mem_flat / mem_flat.norm(dim=1).reshape(nv_dim, 1)
     qd_flat = q_flat[b:, ...] - q_flat[:b, ...] # [b, n_feat]
     qd_flat = qd_flat / qd_flat.norm(dim=1).reshape(b, 1)
 
     # similarity matrix
-    # sim = torch.mm(qd_flat, mem_flat.t())**2 # [b, nv_dim]
-    sim = F.cosine_similarity(qd_flat.view(b, 1, -1).repeat(1, nv_dim, 1), 
-                              mem_flat.view(1, nv_dim, -1).repeat(b, 1, 1), dim=2)**2 # [b, nv_dim]
+    sim = torch.mm(qd_flat, mem_flat.t())**2 # [b, nv_dim]
     pos_mask = F.one_hot(q_idx, num_classes=nv_dim).bool().to(sim.device)
     pos = sim.masked_select(pos_mask).view(b, -1)
     neg = sim.masked_select(~pos_mask).view(b, -1)
