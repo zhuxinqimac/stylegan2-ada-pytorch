@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Thu 10 Feb 2022 05:07:27 AEDT
+# --- Last Modified: Sat 12 Feb 2022 05:09:59 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -80,7 +80,7 @@ class DiscoverLoss(Loss):
                  neg_lamb=1., pos_lamb=1., neg_on_self=False, use_catdiff=False,
                  Sim_pkl=None, Comp_pkl=None, Sim_lambda=0., Comp_lambda=0., widenatt_lamb=0.,
                  s_values_normed=None, v_mat=None, w_avg=None, per_w_dir=False, sensor_type='alex',
-                 use_pca_scale=False, use_pca_sign=False, use_uniform=False,
+                 use_pca_scale=False, use_pca_sign=False, use_uniform=False, use_mirror_symmetry=False,
                  mask_after_square=False, union_spatial=False, recog_lamb=0., vs_lamb=0.25, var_feat_type='s',
                  xent_lamb=0., xent_temp=0.5, use_flat_diff=False, use_feat_from_top=True, abs_diff=False):
         super().__init__()
@@ -101,6 +101,7 @@ class DiscoverLoss(Loss):
         self.mask_after_square = mask_after_square
         self.union_spatial = union_spatial
         self.use_uniform = use_uniform
+        self.use_mirror_symmetry = use_mirror_symmetry
         self.R = R
         self.var_feat_type = var_feat_type
         self.xent_lamb = xent_lamb
@@ -788,18 +789,18 @@ class DiscoverLoss(Loss):
                 mems_all = []
                 # if 'g' in self.var_feat_type:
                     # outs_all += gen_feats_all
+                if isinstance(self.M, torch.nn.parallel.DistributedDataParallel):
+                    mem_dimgs = self.M.module.mem_dimgs
+                else:
+                    mem_dimgs = self.M.mem_dimgs
+                if self.use_mirror_symmetry and torch.rand(1)[0] > 0.5:
+                    mem_dimgs = -mem_dimgs.flip(dims=[-1]) # Apply mirror symmetry.
                 if 's' in self.var_feat_type:
                     outs_all += self.run_S(imgs_all)
-                    if isinstance(self.M, torch.nn.parallel.DistributedDataParallel):
-                        mems_all += self.run_S(self.M.module.mem_dimgs)
-                    else:
-                        mems_all += self.run_S(self.M.mem_dimgs)
+                    mems_all += self.run_S(mem_dimgs)
                 if 'i' in self.var_feat_type:
                     outs_all += [imgs_all]
-                    if isinstance(self.M, torch.nn.parallel.DistributedDataParallel):
-                        mems_all += [self.M.module.mem_dimgs]
-                    else:
-                        mems_all += [self.M.mem_dimgs]
+                    mems_all += [mem_dimgs]
             # for j, out in enumerate(outs_all):
                 # print(f'outs_{j}.shape:', out.shape)
 
