@@ -8,7 +8,7 @@
 
 # --- File Name: memcont_utils.py
 # --- Creation Date: 08-02-2022
-# --- Last Modified: Fri 11 Feb 2022 23:12:15 AEDT
+# --- Last Modified: Fri 11 Feb 2022 23:33:19 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -106,8 +106,11 @@ def extract_loss_L_by_maskdiff(diff_q, diff_mems, mask_q, mask_mems, idx, q_idx,
     '''
     b, c, h, w = diff_q.shape
     nv_dim = diff_mems.shape[0]
-    cos_sim_hw = F.cosine_similarity(diff_q.view(b, 1, c, h, w).repeat(1, nv_dim, 1, 1, 1),
-                                     diff_mems.view(1, nv_dim, c, h, w).repeat(b, 1, 1, 1, 1), dim=2) # [b, nv_dim, h, w]
+    # cos_sim_hw = F.cosine_similarity(diff_q.view(b, 1, c, h, w).repeat(1, nv_dim, 1, 1, 1),
+                                     # diff_mems.view(1, nv_dim, c, h, w).repeat(b, 1, 1, 1, 1), dim=2) # [b, nv_dim, h, w]
+    diff_q = diff_q / diff_q.norm(dim=1, keepdim=True)
+    diff_mems = diff_mems / diff_mems.norm(dim=1, keepdim=True)
+    cos_sim_hw = (diff_q.view(b, 1, c, h, w) * diff_mems.view(1, nv_dim, c, h, w)).sum(dim=2) # [b, nv_dim, h, w]
 
     # Similarity matrix
     if use_norm_mask:
@@ -125,7 +128,7 @@ def extract_loss_L_by_maskdiff(diff_q, diff_mems, mask_q, mask_mems, idx, q_idx,
 
     training_stats.report('Loss/M/loss_diff_pos_{}'.format(idx), loss_pos)
     training_stats.report('Loss/M/loss_diff_neg_{}'.format(idx), loss_neg)
-    loss = pos_lamb * loss_pos + neg_lamb * loss_neg # (0.5batch)
+    loss = - pos_lamb * loss_pos + neg_lamb * loss_neg # (0.5batch)
     # loss = -torch.log(loss_pos / loss_neg).mean()
     return loss
 
