@@ -8,7 +8,7 @@
 
 # --- File Name: memcont_utils.py
 # --- Creation Date: 08-02-2022
-# --- Last Modified: Fri 11 Feb 2022 23:40:28 AEDT
+# --- Last Modified: Sat 12 Feb 2022 00:36:43 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -44,9 +44,9 @@ def extract_flatdiff_loss(outs_all, mems_all, q_idx):
         mem_flat.append(mem_feat.flatten(1))
     q_flat = torch.cat(q_flat, dim=1) # [2*b, n_feat]
     mem_flat = torch.cat(mem_flat, dim=1) # [nv_dim, n_feat]
-    mem_flat = mem_flat / mem_flat.norm(dim=1).reshape(nv_dim, 1)
+    mem_flat = mem_flat / (mem_flat.norm(dim=1).reshape(nv_dim, 1) + 1e-6)
     qd_flat = q_flat[b:, ...] - q_flat[:b, ...] # [b, n_feat]
-    qd_flat = qd_flat / qd_flat.norm(dim=1).reshape(b, 1)
+    qd_flat = qd_flat / (qd_flat.norm(dim=1).reshape(b, 1) + 1e-6)
 
     # similarity matrix
     sim = torch.mm(qd_flat, mem_flat.t())**2 # [b, nv_dim]
@@ -108,8 +108,8 @@ def extract_loss_L_by_maskdiff(diff_q, diff_mems, mask_q, mask_mems, idx, q_idx,
     nv_dim = diff_mems.shape[0]
     # cos_sim_hw = F.cosine_similarity(diff_q.view(b, 1, c, h, w).repeat(1, nv_dim, 1, 1, 1),
                                      # diff_mems.view(1, nv_dim, c, h, w).repeat(b, 1, 1, 1, 1), dim=2) # [b, nv_dim, h, w]
-    diff_q = diff_q / diff_q.norm(dim=1, keepdim=True)
-    diff_mems = diff_mems / diff_mems.norm(dim=1, keepdim=True)
+    diff_q = diff_q / (diff_q.norm(dim=1, keepdim=True) + 1e-6)
+    diff_mems = diff_mems / (diff_mems.norm(dim=1, keepdim=True) + 1e-6)
     cos_sim_hw = (diff_q.view(b, 1, c, h, w) * diff_mems.view(1, nv_dim, c, h, w)).sum(dim=2) # [b, nv_dim, h, w]
 
     # Similarity matrix
