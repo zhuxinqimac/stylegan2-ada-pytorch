@@ -8,7 +8,7 @@
 
 # --- File Name: memcont_utils.py
 # --- Creation Date: 08-02-2022
-# --- Last Modified: Fri 11 Feb 2022 23:33:51 AEDT
+# --- Last Modified: Fri 11 Feb 2022 23:40:28 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -128,9 +128,9 @@ def extract_loss_L_by_maskdiff(diff_q, diff_mems, mask_q, mask_mems, idx, q_idx,
 
     training_stats.report('Loss/M/loss_diff_pos_{}'.format(idx), -loss_pos)
     training_stats.report('Loss/M/loss_diff_neg_{}'.format(idx), loss_neg)
-    loss = - pos_lamb * loss_pos + neg_lamb * loss_neg # (0.5batch)
+    loss = - pos_lamb * loss_pos + neg_lamb * loss_neg
     # loss = -torch.log(loss_pos / loss_neg).mean()
-    return loss
+    return loss.mean()
 
 def extract_loss_L(diff_q, diff_mems, idx, q_idx, **kwargs):
     '''
