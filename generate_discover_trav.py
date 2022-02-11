@@ -8,7 +8,7 @@
 
 # --- File Name: generate_trav.py
 # --- Creation Date: 23-08-2021
-# --- Last Modified: Wed 24 Nov 2021 18:22:11 AEDT
+# --- Last Modified: Thu 10 Feb 2022 18:59:55 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Generate traversals using pretrained network pickle."""
@@ -175,6 +175,7 @@ def get_duplicated_dirs(imgs, thresh=0.5, start_from_last=True):
 @click.option('--use_pca_scale', type=bool, help='If using pca scale in walking')
 @click.option('--tiny_step', type=float, help='The tiny step in w_walk')
 @click.option('--thresh', type=float, help='The threshold in deduplication')
+@click.option('--sort_imgs', type=bool, help='If show perceptually sorted images')
 @click.option('--save_gifs_per_attr', type=bool, help='If saving gifs for each attribute')
 def generate_travs(
     ctx: click.Context,
@@ -188,6 +189,7 @@ def generate_travs(
     use_pca_scale: bool,
     tiny_step: float,
     thresh: float,
+    sort_imgs: bool,
     save_gifs_per_attr: bool,
 ):
     print('Loading networks from "%s"...' % generator_pkl)
@@ -242,13 +244,16 @@ def generate_travs(
             _, c, h, w = images.shape
             images = images.view(M.nv_dim, n_samples_per, c, h, w)
 
-            images = percept_sort(images)
-            remove_dirs = get_duplicated_dirs(images, thresh=thresh) # Remove duplicated directions.
-            images[remove_dirs] = images[0, n_samples_per // 2].clone().unsqueeze(0)
-            images = percept_sort(images).reshape(M.nv_dim * n_samples_per, c, h, w)
+            if sort_imgs:
+                images = percept_sort(images)
+                remove_dirs = get_duplicated_dirs(images, thresh=thresh) # Remove duplicated directions.
+                images[remove_dirs] = images[0, n_samples_per // 2].clone().unsqueeze(0)
+                images = percept_sort(images).reshape(M.nv_dim * n_samples_per, c, h, w)
+            else:
+                images = images.view(M.nv_dim * n_samples_per, c, h, w)
 
             if not save_gifs_per_attr:
-                save_image_grid(images, os.path.join(outdir, f'seed{seed:04d}_sinv{semi_inverse}_scale{trav_walk_scale}_thresh{thresh}.png'), drange=[-1,1], grid_size=grid_size)
+                save_image_grid(images, os.path.join(outdir, f'seed{seed:04d}_sinv{semi_inverse}_scale{trav_walk_scale}_sort{sort_imgs}_thresh{thresh}.png'), drange=[-1,1], grid_size=grid_size)
             else:
                 cur_dir = os.path.join(outdir, f'seed{seed:04d}_sinv{semi_inverse}')
                 os.makedirs(cur_dir, exist_ok=True)
