@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 12 Feb 2022 05:11:08 AEDT
+# --- Last Modified: Sat 12 Feb 2022 07:47:33 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -297,10 +297,10 @@ def setup_training_loop_kwargs(
 
     assert gan_network_pkl is not None
     if gan_network_pkl in resume_specs:
-        desc += f'-gan_network_pkl{gan_network_pkl}'
+        # desc += f'-gan_network_pkl{gan_network_pkl}'
         args.gan_network_pkl = resume_specs[gan_network_pkl] # predefined url
     else:
-        desc += '-resumecustom'
+        # desc += '-resumecustom'
         args.gan_network_pkl = gan_network_pkl # custom path or url
 
     assert resume is None or isinstance(resume, str)
