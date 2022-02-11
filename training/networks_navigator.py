@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 09 Feb 2022 02:16:19 AEDT
+# --- Last Modified: Sat 12 Feb 2022 03:01:00 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -455,7 +455,7 @@ class Navigator(torch.nn.Module):
         # if 'dimg_size' in mem_kwargs and mem_kwargs['dimg_size'] > 0:
         if mem_kwargs.memcontrast_lamb > 0:
             ch, h, w = mem_kwargs['dimg_ch'], mem_kwargs['dimg_size'], mem_kwargs['dimg_size']
-            self.mem_dimgs = nn.Parameter(torch.normal(mean=torch.zeros(self.nv_dim, ch, h, w), std=0.01), requires_grad=True)
+            self.mem_dimgs = nn.Parameter(torch.normal(mean=torch.zeros(self.nv_dim, ch, h, w), std=1), requires_grad=True)
 
         # Attention net: map tensor w [b, num_ws, w_dim] --> nv_dims of ws attentions [b, nv_dim, num_ws], should be [0, 1]
         if self.att_type == 'none':
