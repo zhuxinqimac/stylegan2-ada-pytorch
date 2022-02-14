@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 14 Feb 2022 23:47:51 AEDT
+# --- Last Modified: Tue 15 Feb 2022 00:58:25 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -223,8 +223,9 @@ def setup_training_loop_kwargs(
         args.M_kwargs = dnnlib.EasyDict(class_name='training.networks_navigator.Navigator', nv_dim=spec.nv_dim, att_type=spec.att_type, nav_type=spec.nav_type)
         args.M_kwargs.att_kwargs = dnnlib.EasyDict(middle_feat=spec.att_middle_feat, att_fc_layers=spec.att_fc_layers,
                                                    att_layers=spec.att_layers, filter_size=spec.att_gaussian_size, filter_std=spec.att_gaussian_std,
-                                                   temp=spec.sm_temp, ndup=spec.ndup)
-        args.M_kwargs.nav_kwargs = dnnlib.EasyDict(middle_feat=spec.nav_middle_feat, nav_fc_layers=spec.nav_fc_layers, n_eigen=spec.nav_n_eigen)
+                                                   temp=spec.sm_temp)
+        args.M_kwargs.nav_kwargs = dnnlib.EasyDict(middle_feat=spec.nav_middle_feat, nav_fc_layers=spec.nav_fc_layers,
+                                                   n_eigen=spec.nav_n_eigen, ndup=spec.ndup)
         if spec.memcontrast_lamb > 0:
             args.M_kwargs.mem_kwargs = dnnlib.EasyDict(memcontrast_lamb=spec.memcontrast_lamb, dimg_size=spec.dimg_size, dimg_ch=spec.dimg_ch)
 
