@@ -8,7 +8,7 @@
 
 # --- File Name: train_discriminate.py
 # --- Creation Date: 05-09-2021
-# --- Last Modified: Mon 14 Feb 2022 18:46:18 AEDT
+# --- Last Modified: Mon 14 Feb 2022 18:50:44 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -153,7 +153,7 @@ def setup_training_loop_kwargs(
     assert data is not None
     assert isinstance(data, str)
     # args.training_set_kwargs = dnnlib.EasyDict(class_name='training.dataset.ImageFolderDataset', path=data, use_labels=True, max_size=None, xflip=False)
-    args.training_set_kwargs = dnnlib.EasyDict(class_name='training.dataset_discriminate.ImageFolderDiscrimDataset', path=data, use_labels=True, max_size=spec.train_max_size, xflip=False)
+    args.training_set_kwargs = dnnlib.EasyDict(class_name='training.dataset_discriminate.ImageFolderDiscrimDataset', path=data, max_size=spec.train_max_size, xflip=False)
     # if spec.loss_name == 'simp':
         # args.training_set_kwargs = dnnlib.EasyDict(class_name='training.dataset_discriminate.Paired3DShapes', path=data)
     # elif spec.loss_name == 'compos':
