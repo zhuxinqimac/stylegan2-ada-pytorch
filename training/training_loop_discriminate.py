@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discriminate.py
 # --- Creation Date: 05-09-2021
-# --- Last Modified: Mon 14 Feb 2022 07:08:23 AEDT
+# --- Last Modified: Mon 14 Feb 2022 20:23:21 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -304,7 +304,9 @@ def training_loop(
             if rank == 0:
                 print('Evaluating metrics...')
             for metric in metrics:
-                result_dict = metric_main.calc_metric(metric=metric, G=snapshot_data['D_ema'],
+                # result_dict = metric_main.calc_metric(metric=metric, G=snapshot_data['D_ema'],
+                    # dataset_kwargs=training_set_kwargs, num_gpus=num_gpus, rank=rank, device=device)
+                result_dict = metric_main.calc_metric(metric=metric, G=snapshot_data['D'],
                     dataset_kwargs=training_set_kwargs, num_gpus=num_gpus, rank=rank, device=device)
                 if rank == 0:
                     metric_main.report_metric(result_dict, run_dir=run_dir, snapshot_pkl=snapshot_pkl)
