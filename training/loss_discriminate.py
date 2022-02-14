@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discriminate.py
 # --- Creation Date: 05-09-2021
-# --- Last Modified: Fri 10 Sep 2021 00:35:59 AEST
+# --- Last Modified: Mon 14 Feb 2022 07:19:16 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -41,7 +41,9 @@ def build_loss(loss_name):
         # return mean_square_loss
         return nn.BCEWithLogitsLoss()
     else:
-        raise ValueError('Unknown loss_name:', loss_name)
+        return mean_square_loss
+    # else:
+        # raise ValueError('Unknown loss_name:', loss_name)
 
 #----------------------------------------------------------------------------
 
@@ -76,15 +78,16 @@ class DiscriminateLoss(Loss):
         if do_Dmain:
             with torch.autograd.profiler.record_function('Dmain_forward'):
                 gen_logits = self.run_D(real_img, sync=sync)
-                if self.loss_name == 'simp':
-                    n_vars = ((real_c[:, 0] - real_c[:, 1]) != 0).sum(dim=1, keepdim=True)
-                    label = torch.logical_or(n_vars == 1, n_vars == 0).float() # 1 dim_var is True, other dim_var is False
-                elif self.loss_name == 'compos':
-                    n_vars_1 = (real_c[:, 1] - real_c[:, 0] != 0).sum(dim=1, keepdim=True)
-                    n_vars_2 = (real_c[:, 2] - real_c[:, 0] != 0).sum(dim=1, keepdim=True) # [b, 1]
-                    n_vars_label = torch.logical_and(n_vars_1 <= 1, n_vars_2 <= 1)
-                    comp_label = ((real_c[:, 1] - real_c[:, 0] + real_c[:, 2] == real_c[:, 3]).sum(dim=1, keepdim=True) == real_c.shape[-1]) # [b, 1]
-                    label = torch.logical_and(n_vars_label, comp_label).float()
+                # if self.loss_name == 'simp':
+                    # n_vars = ((real_c[:, 0] - real_c[:, 1]) != 0).sum(dim=1, keepdim=True)
+                    # label = torch.logical_or(n_vars == 1, n_vars == 0).float() # 1 dim_var is True, other dim_var is False
+                # elif self.loss_name == 'compos':
+                    # n_vars_1 = (real_c[:, 1] - real_c[:, 0] != 0).sum(dim=1, keepdim=True)
+                    # n_vars_2 = (real_c[:, 2] - real_c[:, 0] != 0).sum(dim=1, keepdim=True) # [b, 1]
+                    # n_vars_label = torch.logical_and(n_vars_1 <= 1, n_vars_2 <= 1)
+                    # comp_label = ((real_c[:, 1] - real_c[:, 0] + real_c[:, 2] == real_c[:, 3]).sum(dim=1, keepdim=True) == real_c.shape[-1]) # [b, 1]
+                    # label = torch.logical_and(n_vars_label, comp_label).float()
+                label = real_c
                 loss_Dmain = self.loss_fn(gen_logits, label)
                 training_stats.report('Loss/D/loss', loss_Dmain)
             with torch.autograd.profiler.record_function('Dmain_backward'):

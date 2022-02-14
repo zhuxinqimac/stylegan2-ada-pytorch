@@ -18,6 +18,7 @@ from . import kernel_inception_distance
 from . import precision_recall
 from . import perceptual_path_length
 from . import inception_score
+from . import discrim_validation
 
 #----------------------------------------------------------------------------
 
@@ -150,3 +151,9 @@ def ppl_wend(opts):
     return dict(ppl_wend=ppl)
 
 #----------------------------------------------------------------------------
+# Custom metrics.
+
+@register_metric
+def discrim_val(opts):
+    discrim_val_loss = discrim_validation.compute_validation_loss(opts)
+    return dict(val_loss=discrim_val_loss)

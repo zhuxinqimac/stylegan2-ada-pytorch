@@ -8,7 +8,7 @@
 
 # --- File Name: train_discriminate.py
 # --- Creation Date: 05-09-2021
-# --- Last Modified: Wed 08 Sep 2021 22:25:37 AEST
+# --- Last Modified: Mon 14 Feb 2022 07:12:00 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -37,8 +37,8 @@ class UserError(Exception):
 def bool_own(v):
     return v.lower() == 'true'
 
-KEY_BRIEF_NAMES = {'ch': 'net_ch_in', 'dout': 'net_dim_out', 'netn': 'net_name', 'pretr': 'pretrained', 'loss': 'loss_name'}
-KEY_DTYPES = {'net_ch_in': int, 'net_dim_out': int, 'net_name': str, 'pretrained': bool_own, 'loss_name': str}
+KEY_BRIEF_NAMES = {'ch': 'net_ch_in', 'dout': 'net_dim_out', 'netn': 'net_name', 'pretr': 'pretrained', 'loss': 'loss_name', 'tsize': 'train_max_size'}
+KEY_DTYPES = {'net_ch_in': int, 'net_dim_out': int, 'net_name': str, 'pretrained': bool_own, 'loss_name': str, 'train_max_size': int}
 
 def parse_cfg(cfg):
     '''
@@ -140,7 +140,7 @@ def setup_training_loop_kwargs(
     cfg_specs = {
         'auto':      dict(ref_gpus=-1, kimg=25000, mb=-1, mbstd=-1, fmaps=-1, lrate=-1, ema=-1, ramp=0.05, map=8), # Populated dynamically based on resolution and GPU count.
         'basic':     dict(ref_gpus=2, kimg=25000,  mb=32, mbstd=4, fmaps=0.125, lrate=0.002, ema=10,  ramp=0.05,
-                          net_ch_in=6, net_dim_out=1, net_name='resnet50', pretrained=True, loss_name='simp'),
+                          net_ch_in=6, net_dim_out=1, net_name='resnet50', pretrained=True, loss_name='simp', train_max_size=20000),
     }
 
     # assert cfg in cfg_specs
@@ -151,10 +151,11 @@ def setup_training_loop_kwargs(
     assert data is not None
     assert isinstance(data, str)
     # args.training_set_kwargs = dnnlib.EasyDict(class_name='training.dataset.ImageFolderDataset', path=data, use_labels=True, max_size=None, xflip=False)
-    if spec.loss_name == 'simp':
-        args.training_set_kwargs = dnnlib.EasyDict(class_name='training.dataset_discriminate.Paired3DShapes', path=data)
-    elif spec.loss_name == 'compos':
-        args.training_set_kwargs = dnnlib.EasyDict(class_name='training.dataset_discriminate.Triplet3DShapes', path=data)
+    args.training_set_kwargs = dnnlib.EasyDict(class_name='training.dataset.ImageFolderDiscrimDataset', path=data, use_labels=True, max_size=spec.train_max_size, xflip=False)
+    # if spec.loss_name == 'simp':
+        # args.training_set_kwargs = dnnlib.EasyDict(class_name='training.dataset_discriminate.Paired3DShapes', path=data)
+    # elif spec.loss_name == 'compos':
+        # args.training_set_kwargs = dnnlib.EasyDict(class_name='training.dataset_discriminate.Triplet3DShapes', path=data)
     args.data_loader_kwargs = dnnlib.EasyDict(pin_memory=True, num_workers=3, prefetch_factor=2)
     try:
         training_set = dnnlib.util.construct_class_by_name(**args.training_set_kwargs) # subclass of training.dataset.Dataset
@@ -168,16 +169,6 @@ def setup_training_loop_kwargs(
     # Base config: cfg, gamma, kimg, batch
     # ------------------------------------
     desc += f'-{cfg}'
-    if cfg == 'auto':
-        desc += f'{gpus:d}'
-        spec.ref_gpus = gpus
-        res = args.training_set_kwargs.resolution
-        spec.mb = max(min(gpus * min(4096 // res, 32), 64), gpus) # keep gpu memory consumption at bay
-        spec.mbstd = min(spec.mb // gpus, 4) # other hyperparams behave more predictably if mbstd group size remains fixed
-        spec.fmaps = 1 if res >= 512 else 0.5
-        spec.lrate = 0.002 if res >= 1024 else 0.0025
-        spec.gamma = 0.0002 * (res ** 2) / spec.mb # heuristic formula
-        spec.ema = spec.mb * 10 / 32
 
     args.D_kwargs = dnnlib.EasyDict(class_name='training.networks_common_sense.BackboneNet', ch_in=spec.net_ch_in, dim_out=spec.net_dim_out,
                                     net_name=spec.net_name, pretrained=spec.pretrained)
