@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 14 Feb 2022 23:40:08 AEDT
+# --- Last Modified: Mon 14 Feb 2022 23:51:18 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -352,6 +352,7 @@ class SefaNavigatorNet(NoneNavigatorNet):
         w_dim,                      # Intermediate latent (W) dimensionality.
         sefa_v,                     # Sefa eigen vectors [n_eigens, w_dim].
         sefa_s,                     # Sefa eigen values [n_eigens].
+        ndup=1,                     # Sefa number of large eigen duplications.
         **kwargs,
     ):
         '''
@@ -362,12 +363,15 @@ class SefaNavigatorNet(NoneNavigatorNet):
         self.sefa_v = sefa_v
         self.sefa_s = sefa_s
         assert self.nv_dim <= self.sefa_v.shape[0]
+        self.ndup = ndup
+        assert self.nv_dim % self.ndup == 0
 
     def forward(self, ws_in):
         # ws_in: [b, num_ws, w_dim]
         # return: [b, nv_dim, w_dim]
         b = ws_in.shape[0]
-        w_dirs = self.sefa_v[:self.nv_dim, ...] # [nv_dim, w_dim]
+        # w_dirs = self.sefa_v[:self.nv_dim, ...] # [nv_dim, w_dim]
+        w_dirs = self.sefa_v[:self.nv_dim // self.ndup].repeat(self.ndup, 1) # [nv_dim, w_dim]
         return w_dirs.view(1, self.nv_dim, self.w_dim).repeat(b, 1, 1).to(ws_in.device)
 
 @persistence.persistent_class
