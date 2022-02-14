@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 12 Feb 2022 07:47:33 AEDT
+# --- Last Modified: Mon 14 Feb 2022 23:47:51 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -49,7 +49,7 @@ KEY_BRIEF_NAMES = {'z': 'nv_dim', 'at': 'att_type', 'nt': 'nav_type', 'amf': 'at
                    'nself': 'neg_on_self', 'catd': 'use_catdiff', 'nper': 'n_samples_per',
                    'sensor': 'sensor_type', 'prand': 'pnet_rand', 'ssize': 'save_size',
                    'wals': 'trav_walk_scale', 'recw': 'recursive_walk', 'shownm': 'show_normD', 'perw': 'per_w_dir',
-                   'pcas': 'use_pca_scale', 'pcan': 'use_pca_sign',
+                   'pcas': 'use_pca_scale', 'pcan': 'use_pca_sign', 'ndup': 'ndup',
                    'mafsq': 'mask_after_square', 'usp': 'union_spatial', 'uni': 'use_uniform', 'mir': 'use_mirror_symmetry',
                    'recg': 'recog_lamb', 'vs': 'vs_lamb', 'Rch': 'R_ch_in', 'Rna': 'R_net_name', 'Rpre': 'R_pretrained',
                    'vmul': 'vit_return_multi_layer', 'vart': 'var_feat_type', 'nsp': 'no_spatial',
@@ -68,7 +68,7 @@ KEY_DTYPES = {'nv_dim': int, 'att_type': str, 'nav_type': str, 'att_middle_feat'
               'neg_on_self': bool_own, 'use_catdiff': bool_own, 'n_samples_per': int,
               'sensor_type': str, 'pnet_rand': bool_own, 'save_size': int,
               'trav_walk_scale': float, 'recursive_walk': bool_own, 'show_normD': bool_own, 'per_w_dir': bool_own,
-              'use_pca_scale': bool_own, 'use_pca_sign': bool_own,
+              'use_pca_scale': bool_own, 'use_pca_sign': bool_own, 'ndup': int,
               'mask_after_square': bool_own, 'union_spatial': bool_own, 'use_uniform': bool_own, 'use_mirror_symmetry': bool_own,
               'recog_lamb': float, 'vs_lamb': float, 'R_ch_in': int, 'R_net_name': str, 'R_pretrained': bool_own,
               'vit_return_multi_layer': bool_own, 'var_feat_type': str, 'no_spatial': bool_own,
@@ -193,7 +193,7 @@ def setup_training_loop_kwargs(
                            n_samples_per=7, sensor_type='alex', pnet_rand=False,
                            save_size=128, trav_walk_scale=0.2, recursive_walk=True, show_normD=True, per_w_dir=False,
                            use_pca_scale=False, use_pca_sign=False, mask_after_square=False, union_spatial=False, use_uniform=True,
-                           use_mirror_symmetry=False,
+                           use_mirror_symmetry=False, ndup=1,
                            recog_lamb=0., vs_lamb=0.25, R_ch_in=6, R_net_name='resnet18', R_pretrained=False,
                            vit_return_multi_layer=True, var_feat_type='s', no_spatial=False,
                            no_bn=False, no_relu=False, no_skip=False, xent_lamb=0., xent_temp=0.5, use_flat_diff=False, use_feat_from_top=True,
@@ -223,7 +223,7 @@ def setup_training_loop_kwargs(
         args.M_kwargs = dnnlib.EasyDict(class_name='training.networks_navigator.Navigator', nv_dim=spec.nv_dim, att_type=spec.att_type, nav_type=spec.nav_type)
         args.M_kwargs.att_kwargs = dnnlib.EasyDict(middle_feat=spec.att_middle_feat, att_fc_layers=spec.att_fc_layers,
                                                    att_layers=spec.att_layers, filter_size=spec.att_gaussian_size, filter_std=spec.att_gaussian_std,
-                                                   temp=spec.sm_temp)
+                                                   temp=spec.sm_temp, ndup=spec.ndup)
         args.M_kwargs.nav_kwargs = dnnlib.EasyDict(middle_feat=spec.nav_middle_feat, nav_fc_layers=spec.nav_fc_layers, n_eigen=spec.nav_n_eigen)
         if spec.memcontrast_lamb > 0:
             args.M_kwargs.mem_kwargs = dnnlib.EasyDict(memcontrast_lamb=spec.memcontrast_lamb, dimg_size=spec.dimg_size, dimg_ch=spec.dimg_ch)

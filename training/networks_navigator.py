@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 12 Feb 2022 05:13:52 AEDT
+# --- Last Modified: Mon 14 Feb 2022 23:40:08 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -322,6 +322,7 @@ class PCANavigatorNet(NoneNavigatorNet):
         w_avg,                      # G.mapping.w_avg.
         s_values,                   # Singular values of w pca [q].
         v_mat,                      # PCA basis of w [w_dim, q].
+        ndup=1,                     # PCA number of large eigen duplications.
         **kwargs,
     ):
         '''
@@ -332,12 +333,15 @@ class PCANavigatorNet(NoneNavigatorNet):
         self.s_values = s_values
         self.v_mat = v_mat
         assert self.nv_dim <= self.v_mat.shape[1]
+        self.ndup = ndup
+        assert self.nv_dim % self.ndup == 0
 
     def forward(self, ws_in):
         # ws_in: [b, num_ws, w_dim]
         # return: [b, nv_dim, w_dim]
         b = ws_in.shape[0]
-        w_dirs = self.v_mat[:, :self.nv_dim].transpose(1, 0) # [nv_dim, w_dim]
+        # w_dirs = self.v_mat[:, :self.nv_dim].transpose(1, 0) # [nv_dim, w_dim]
+        w_dirs = self.v_mat[:, :self.nv_dim // self.ndup].transpose(1, 0).repeat(self.ndup, 1) # [nv_dim, w_dim]
         return w_dirs.view(1, self.nv_dim, self.w_dim).repeat(b, 1, 1).to(ws_in.device)
 
 @persistence.persistent_class
