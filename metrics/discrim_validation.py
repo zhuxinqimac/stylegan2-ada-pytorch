@@ -8,7 +8,7 @@
 
 # --- File Name: discrim_validation.py
 # --- Creation Date: 14-02-2022
-# --- Last Modified: Mon 14 Feb 2022 19:11:40 AEDT
+# --- Last Modified: Mon 14 Feb 2022 19:12:09 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -32,7 +32,7 @@ def compute_validation_loss(opts):
     device = opts.device
     # Define validation set.
     val_set = dnnlib.util.construct_class_by_name(is_val=True, **opts.dataset_kwargs) # subclass of training.dataset.Dataset
-    val_loader = torch.utils.data.DataLoader(dataset=val_set, batch_size=4, shuffle=False,
+    val_loader = torch.utils.data.DataLoader(dataset=val_set, batch_size=16, shuffle=False,
                                              pin_memory=True, num_workers=3, prefetch_factor=2)
     loss_fn = mean_square_loss
 
