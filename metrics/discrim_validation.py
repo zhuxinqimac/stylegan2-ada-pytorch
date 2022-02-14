@@ -8,7 +8,7 @@
 
 # --- File Name: discrim_validation.py
 # --- Creation Date: 14-02-2022
-# --- Last Modified: Mon 14 Feb 2022 19:12:09 AEDT
+# --- Last Modified: Mon 14 Feb 2022 19:20:00 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -28,7 +28,7 @@ from training.loss_discriminate import mean_square_loss
 # discrim_val_score = discrim_validation.compute_validation_score(opts)
 
 def compute_validation_loss(opts):
-    D = opts.G
+    D = copy.deepcopy(opts.G).eval().requires_grad_(False).to(opts.device)
     device = opts.device
     # Define validation set.
     val_set = dnnlib.util.construct_class_by_name(is_val=True, **opts.dataset_kwargs) # subclass of training.dataset.Dataset
