@@ -8,7 +8,7 @@
 
 # --- File Name: train_discriminate.py
 # --- Creation Date: 05-09-2021
-# --- Last Modified: Mon 14 Feb 2022 07:12:00 AEDT
+# --- Last Modified: Mon 14 Feb 2022 18:46:18 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -37,8 +37,10 @@ class UserError(Exception):
 def bool_own(v):
     return v.lower() == 'true'
 
-KEY_BRIEF_NAMES = {'ch': 'net_ch_in', 'dout': 'net_dim_out', 'netn': 'net_name', 'pretr': 'pretrained', 'loss': 'loss_name', 'tsize': 'train_max_size'}
-KEY_DTYPES = {'net_ch_in': int, 'net_dim_out': int, 'net_name': str, 'pretrained': bool_own, 'loss_name': str, 'train_max_size': int}
+KEY_BRIEF_NAMES = {'ch': 'net_ch_in', 'dout': 'net_dim_out', 'netn': 'net_name', 'pretr': 'pretrained',
+                   'loss': 'loss_name', 'tsize': 'train_max_size'}
+KEY_DTYPES = {'net_ch_in': int, 'net_dim_out': int, 'net_name': str, 'pretrained': bool_own,
+              'loss_name': str, 'train_max_size': int}
 
 def parse_cfg(cfg):
     '''
@@ -151,7 +153,7 @@ def setup_training_loop_kwargs(
     assert data is not None
     assert isinstance(data, str)
     # args.training_set_kwargs = dnnlib.EasyDict(class_name='training.dataset.ImageFolderDataset', path=data, use_labels=True, max_size=None, xflip=False)
-    args.training_set_kwargs = dnnlib.EasyDict(class_name='training.dataset.ImageFolderDiscrimDataset', path=data, use_labels=True, max_size=spec.train_max_size, xflip=False)
+    args.training_set_kwargs = dnnlib.EasyDict(class_name='training.dataset_discriminate.ImageFolderDiscrimDataset', path=data, use_labels=True, max_size=spec.train_max_size, xflip=False)
     # if spec.loss_name == 'simp':
         # args.training_set_kwargs = dnnlib.EasyDict(class_name='training.dataset_discriminate.Paired3DShapes', path=data)
     # elif spec.loss_name == 'compos':
