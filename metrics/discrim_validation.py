@@ -8,7 +8,7 @@
 
 # --- File Name: discrim_validation.py
 # --- Creation Date: 14-02-2022
-# --- Last Modified: Mon 14 Feb 2022 07:30:01 AEDT
+# --- Last Modified: Mon 14 Feb 2022 19:11:40 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -29,6 +29,7 @@ from training.loss_discriminate import mean_square_loss
 
 def compute_validation_loss(opts):
     D = opts.G
+    device = opts.device
     # Define validation set.
     val_set = dnnlib.util.construct_class_by_name(is_val=True, **opts.dataset_kwargs) # subclass of training.dataset.Dataset
     val_loader = torch.utils.data.DataLoader(dataset=val_set, batch_size=4, shuffle=False,
@@ -37,6 +38,10 @@ def compute_validation_loss(opts):
 
     losses = []
     for i, (images, labels) in enumerate(val_loader):
+        images = ((images.to(device).to(torch.float32) / 255.) - torch.tensor([0.485, 0.456, 0.406]).to(device).view(1,3,1,1).repeat(1,D.ch_in // 3,1,1)) / \
+            torch.tensor([0.229, 0.224, 0.225]).to(device).view(1,3,1,1).repeat(1,D.ch_in // 3,1,1)
+        labels = labels.to(device)
+
         logits = D(images)
         loss = loss_fn(logits, labels) # [b]
         losses.append(loss)
