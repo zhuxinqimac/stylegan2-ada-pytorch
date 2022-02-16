@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 12 Feb 2022 05:09:59 AEDT
+# --- Last Modified: Thu 17 Feb 2022 07:40:50 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -770,18 +770,21 @@ class DiscoverLoss(Loss):
                 # Sample variation scales.
                 if self.use_dynamic_scale:
                     if self.use_uniform:
-                        scale_q = ((torch.rand(b, device=delta.device) - 0.5) * 2. * self.var_sample_scale + self.var_sample_mean).view(b, 1, 1)
+                        # scale_q = ((torch.rand(b, device=delta.device) - 0.5) * 2. * self.var_sample_scale + self.var_sample_mean).view(b, 1, 1)
+                        scale_q = (torch.rand(b, device=delta.device) * self.var_sample_scale).view(b, 1, 1)
                     else:
-                        scale_q = (torch.randn(b, device=delta.device) * self.var_sample_scale + self.var_sample_mean).view(b, 1, 1)
+                        # scale_q = (torch.randn(b, device=delta.device) * self.var_sample_scale + self.var_sample_mean).view(b, 1, 1)
+                        scale_q = (torch.randn(b, device=delta.device) * self.var_sample_scale + self.var_sample_mean).view(b, 1, 1).abs()
                 else:
                     scale_q = (torch.ones(b, device=delta.device) * self.var_sample_scale).view(b, 1, 1)
 
                 # Apply variations to ws.
-                ws_q = ws_orig + (delta_q * scale_q) # (b, num_ws, w_dim)
+                ws_o = ws_orig - (delta_q * scale_q * 0.5) # (b, num_ws, w_dim)
+                ws_q = ws_orig + (delta_q * scale_q * 0.5) # (b, num_ws, w_dim)
 
             with torch.autograd.profiler.record_function('Mmemcontrast_generate_imgs'):
                 # Generate images.
-                ws_all = torch.cat([ws_orig, ws_q], dim=0) # (2 * b, num_ws, w_dim)
+                ws_all = torch.cat([ws_o, ws_q], dim=0) # (2 * b, num_ws, w_dim)
                 gen_feats_all, imgs_all = self.run_G_synthesis(ws_all, return_feats=True)
 
             with torch.autograd.profiler.record_function('Mmemcontrast_var_features'):
