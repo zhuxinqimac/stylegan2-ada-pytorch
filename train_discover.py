@@ -8,12 +8,13 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 18 Feb 2022 05:40:26 AEDT
+# --- Last Modified: Fri 18 Feb 2022 06:25:53 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
 
 import os
+from typing import List
 import click
 import re
 import json
