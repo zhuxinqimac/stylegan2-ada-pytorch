@@ -8,7 +8,7 @@
 
 # --- File Name: memcont_utils.py
 # --- Creation Date: 08-02-2022
-# --- Last Modified: Fri 18 Feb 2022 05:41:01 AEDT
+# --- Last Modified: Fri 18 Feb 2022 06:35:10 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -112,7 +112,7 @@ def extract_loss_L_by_maskdiff(diff_q, diff_mems, mask_q, mask_mems, idx, q_idx,
     diff_q = diff_q / (diff_q.norm(dim=1, keepdim=True) + 1e-6)
     diff_mems = diff_mems / (diff_mems.norm(dim=1, keepdim=True) + 1e-6)
     cos_sim_hw = (diff_q.view(b, 1, c, h, w) * diff_mems.view(1, nv_dim, c, h, w)).sum(dim=2) # [b, nv_dim, h, w]
-    if contrast_mat:
+    if contrast_mat is not None:
         print('Using contrast_mat')
         b_mat = contrast_mat[q_idx] # [b, nv_dim]
         cos_sim_hw = cos_sim_hw * b_mat.view(b, nv_dim, 1, 1) # [b, nv_dim, h, w]
