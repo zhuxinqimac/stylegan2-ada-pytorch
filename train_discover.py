@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 15 Feb 2022 00:58:25 AEDT
+# --- Last Modified: Fri 18 Feb 2022 00:02:13 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -50,7 +50,8 @@ KEY_BRIEF_NAMES = {'z': 'nv_dim', 'at': 'att_type', 'nt': 'nav_type', 'amf': 'at
                    'sensor': 'sensor_type', 'prand': 'pnet_rand', 'ssize': 'save_size',
                    'wals': 'trav_walk_scale', 'recw': 'recursive_walk', 'shownm': 'show_normD', 'perw': 'per_w_dir',
                    'pcas': 'use_pca_scale', 'pcan': 'use_pca_sign', 'ndup': 'ndup',
-                   'mafsq': 'mask_after_square', 'usp': 'union_spatial', 'uni': 'use_uniform', 'mir': 'use_mirror_symmetry',
+                   'mafsq': 'mask_after_square', 'usp': 'union_spatial', 'uni': 'use_uniform',
+                   'mir': 'use_mirror_symmetry', 'ldimg': 'limit_mem_dimgs',
                    'recg': 'recog_lamb', 'vs': 'vs_lamb', 'Rch': 'R_ch_in', 'Rna': 'R_net_name', 'Rpre': 'R_pretrained',
                    'vmul': 'vit_return_multi_layer', 'vart': 'var_feat_type', 'nsp': 'no_spatial',
                    'nbn': 'no_bn', 'nrl': 'no_relu', 'nsk': 'no_skip', 'xent': 'xent_lamb', 'xetp': 'xent_temp', 'fdf': 'use_flat_diff',
@@ -69,7 +70,8 @@ KEY_DTYPES = {'nv_dim': int, 'att_type': str, 'nav_type': str, 'att_middle_feat'
               'sensor_type': str, 'pnet_rand': bool_own, 'save_size': int,
               'trav_walk_scale': float, 'recursive_walk': bool_own, 'show_normD': bool_own, 'per_w_dir': bool_own,
               'use_pca_scale': bool_own, 'use_pca_sign': bool_own, 'ndup': int,
-              'mask_after_square': bool_own, 'union_spatial': bool_own, 'use_uniform': bool_own, 'use_mirror_symmetry': bool_own,
+              'mask_after_square': bool_own, 'union_spatial': bool_own, 'use_uniform': bool_own,
+              'use_mirror_symmetry': bool_own, 'limit_mem_dimgs': bool_own,
               'recog_lamb': float, 'vs_lamb': float, 'R_ch_in': int, 'R_net_name': str, 'R_pretrained': bool_own,
               'vit_return_multi_layer': bool_own, 'var_feat_type': str, 'no_spatial': bool_own,
               'no_bn': bool_own, 'no_relu': bool_own, 'no_skip': bool_own, 'xent_lamb': float, 'xent_temp': float, 'use_flat_diff': bool_own,
@@ -193,7 +195,7 @@ def setup_training_loop_kwargs(
                            n_samples_per=7, sensor_type='alex', pnet_rand=False,
                            save_size=128, trav_walk_scale=0.2, recursive_walk=True, show_normD=True, per_w_dir=False,
                            use_pca_scale=False, use_pca_sign=False, mask_after_square=False, union_spatial=False, use_uniform=True,
-                           use_mirror_symmetry=False, ndup=1,
+                           use_mirror_symmetry=False, limit_mem_dimgs=False, ndup=1,
                            recog_lamb=0., vs_lamb=0.25, R_ch_in=6, R_net_name='resnet18', R_pretrained=False,
                            vit_return_multi_layer=True, var_feat_type='s', no_spatial=False,
                            no_bn=False, no_relu=False, no_skip=False, xent_lamb=0., xent_temp=0.5, use_flat_diff=False, use_feat_from_top=True,
@@ -250,7 +252,7 @@ def setup_training_loop_kwargs(
                                        neg_lamb=spec.neg_lamb, pos_lamb=spec.pos_lamb, neg_on_self=spec.neg_on_self, use_catdiff=spec.use_catdiff,
                                        per_w_dir=spec.per_w_dir, sensor_type=spec.sensor_type, use_pca_scale=spec.use_pca_scale, use_pca_sign=spec.use_pca_sign,
                                        mask_after_square=spec.mask_after_square, union_spatial=spec.union_spatial, use_uniform=spec.use_uniform,
-                                       use_mirror_symmetry=spec.use_mirror_symmetry,
+                                       use_mirror_symmetry=spec.use_mirror_symmetry, limit_mem_dimgs=spec.limit_mem_dimgs,
                                        recog_lamb=spec.recog_lamb, vs_lamb=spec.vs_lamb, var_feat_type=spec.var_feat_type,
                                        xent_lamb=spec.xent_lamb, xent_temp=spec.xent_temp, use_flat_diff=spec.use_flat_diff, use_feat_from_top=spec.use_feat_from_top,
                                        abs_diff=spec.abs_diff)
