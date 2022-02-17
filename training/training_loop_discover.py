@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 09 Feb 2022 06:05:25 AEDT
+# --- Last Modified: Fri 18 Feb 2022 00:22:21 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -226,9 +226,10 @@ def training_loop(
 
         if M_kwargs.mem_kwargs.memcontrast_lamb > 0:
             # M.mem_dimgs # [nv_dim, c, h, w]
-            dimgs_flat = M.mem_dimgs.view(M.nv_dim, -1)
+            mem_dimgs = if not loss_kwargs.limit_mem_dimgs M.mem_dimgs else torch.tanh(M.mem_dimgs)
+            dimgs_flat = mem_dimgs.view(M.nv_dim, -1)
             dimgs_max, dimgs_min = dimgs_flat.max(-1)[0].view(M.nv_dim, 1, 1, 1), dimgs_flat.min(-1)[0].view(M.nv_dim, 1, 1, 1) # [nv_dim, 1, 1, 1]
-            mem_dimgs = (M.mem_dimgs - dimgs_min) / (dimgs_max - dimgs_min) # [nv_dim, c, h, w] [0, 1]
+            mem_dimgs = (mem_dimgs - dimgs_min) / (dimgs_max - dimgs_min) # [nv_dim, c, h, w] [0, 1]
             if save_size < mem_dimgs.size(-1):
                 mem_dimgs = F.adaptive_avg_pool2d(mem_dimgs, (save_size, save_size)).cpu().numpy()
             else:
@@ -368,9 +369,10 @@ def training_loop(
 
             if M_kwargs.mem_kwargs.memcontrast_lamb > 0:
                 # M.mem_dimgs # [nv_dim, c, h, w]
-                dimgs_flat = M.mem_dimgs.view(M.nv_dim, -1)
+                mem_dimgs = if not loss_kwargs.limit_mem_dimgs M.mem_dimgs else torch.tanh(M.mem_dimgs)
+                dimgs_flat = mem_dimgs.view(M.nv_dim, -1)
                 dimgs_max, dimgs_min = dimgs_flat.max(-1)[0].view(M.nv_dim, 1, 1, 1), dimgs_flat.min(-1)[0].view(M.nv_dim, 1, 1, 1) # [nv_dim, 1, 1, 1]
-                mem_dimgs = (M.mem_dimgs - dimgs_min) / (dimgs_max - dimgs_min) # [nv_dim, c, h, w] [0, 1]
+                mem_dimgs = (mem_dimgs - dimgs_min) / (dimgs_max - dimgs_min) # [nv_dim, c, h, w] [0, 1]
                 # print('dimgs_max:', dimgs_max)
                 # print('dimgs_min:', dimgs_min)
                 if save_size < mem_dimgs.size(-1):
