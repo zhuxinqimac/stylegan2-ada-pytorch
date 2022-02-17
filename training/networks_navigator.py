@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 18 Feb 2022 06:34:55 AEDT
+# --- Last Modified: Fri 18 Feb 2022 06:39:27 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -435,7 +435,6 @@ class FixedEigenSepNavigatorNet(NoneNavigatorNet):
             # ws_dirs = torch.matmul(ws_dirs_in_eigen, self.v_mat[:, :self.n_eigen].T)
         ws_dirs = torch.cat(ws_dirs_ls, dim=1) # [1, nv_dim, w_dim]
         ws_dirs = ws_dirs.repeat(ws_in.shape[0], 1, 1).to(ws_in.device) # [b, nv_dim, w_dim]
-        print('output ws_dirs.shape:', ws_dirs.shape)
         return ws_dirs
 
 @persistence.persistent_class

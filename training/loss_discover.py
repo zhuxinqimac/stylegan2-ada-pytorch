@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 18 Feb 2022 05:41:25 AEDT
+# --- Last Modified: Fri 18 Feb 2022 06:39:15 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -823,7 +823,6 @@ class DiscoverLoss(Loss):
                     kwargs = {'sensor_used_layers': self.sensor_used_layers, 'use_feat_from_top': self.use_feat_from_top,
                               'use_norm_as_mask': self.use_norm_as_mask, 'use_norm_mask': self.use_norm_mask,
                               'pos_lamb': self.pos_lamb, 'neg_lamb': self.neg_lamb, 'contrast_mat': self.contrast_mat}
-                    print('contrast_mat:', self.contrast_mat)
                     loss_memcontrast = memcont_utils.extract_diff_loss(outs_all, mems_all, q_idx, **kwargs)
             loss_all += self.memcontrast_lamb * loss_memcontrast.mean()
 
