@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 18 Feb 2022 05:14:46 AEDT
+# --- Last Modified: Fri 18 Feb 2022 06:28:47 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -428,6 +428,9 @@ class FixedEigenSepNavigatorNet(NoneNavigatorNet):
         ws_dirs_ls = []
         for i, (nv_dim_i, n_eigen_i) in enumerate(zip(self.nv_sep_ls, self.eigen_sep_ls)):
             ws_dirs_in_eigen_i = self.nav_logits[i].view(1, nv_dim_i, n_eigen_i) # [1, nv_dim_i, n_eigen_i]
+            print('self.v_mat.shape:', self.v_mat.shape)
+            print('s:', s)
+            print('n_eigen_i:', n_eigen_i)
             ws_dirs_i = torch.matmul(ws_dirs_in_eigen_i, self.v_mat[:, s:s+n_eigen_i]) # [1, nv_dim_i, w_dim]
             ws_dirs_ls.append(ws_dirs_i)
             print(f'ws_dirs_{i}.shape:', ws_dirs_i.shape)
