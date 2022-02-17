@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Thu 17 Feb 2022 23:59:08 AEDT
+# --- Last Modified: Fri 18 Feb 2022 05:41:25 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -92,10 +92,12 @@ class DiscoverLoss(Loss):
             self.nv_dim = self.M.module.nv_dim
             self.num_ws = self.M.module.num_ws
             self.w_dim = self.M.module.w_dim
+            self.nav_type = self.M.module.nav_type
         else:
             self.nv_dim = self.M.nv_dim
             self.num_ws = self.M.num_ws
             self.w_dim = self.M.w_dim
+            self.nav_type = self.M.nav_type
         self.per_w_dir = per_w_dir
         self.S = S
         self.mask_after_square = mask_after_square
@@ -109,6 +111,8 @@ class DiscoverLoss(Loss):
         self.xent_temp = xent_temp
         self.use_flat_diff = use_flat_diff
         self.abs_diff = abs_diff
+
+        self.contrast_mat = torch.eye(self.nv_dim).to(device) if self.nav_type[-2:] == 'ES' else None
 
         self.Sim = None
         self.Comp = None
@@ -818,7 +822,8 @@ class DiscoverLoss(Loss):
                 else:
                     kwargs = {'sensor_used_layers': self.sensor_used_layers, 'use_feat_from_top': self.use_feat_from_top,
                               'use_norm_as_mask': self.use_norm_as_mask, 'use_norm_mask': self.use_norm_mask,
-                              'pos_lamb': self.pos_lamb, 'neg_lamb': self.neg_lamb}
+                              'pos_lamb': self.pos_lamb, 'neg_lamb': self.neg_lamb, 'contrast_mat': self.contrast_mat}
+                    print('contrast_mat:', self.contrast_mat)
                     loss_memcontrast = memcont_utils.extract_diff_loss(outs_all, mems_all, q_idx, **kwargs)
             loss_all += self.memcontrast_lamb * loss_memcontrast.mean()
 

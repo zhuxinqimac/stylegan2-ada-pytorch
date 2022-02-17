@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 18 Feb 2022 00:02:13 AEDT
+# --- Last Modified: Fri 18 Feb 2022 05:40:26 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -135,6 +135,8 @@ def setup_training_loop_kwargs(
 
     # Discover network.
     gan_network_pkl = None, # The pretrained GAN network pkl.
+    nv_sep_ls = None, # nv_dim separation list in eigen separation models. Sum should equals to z
+    eigen_sep_ls = None, # eigen space separation list in eigen separation models
 
     # Common sense network.
     common_sense_net_sim_pkl = None, # Common sense net pkl
@@ -227,7 +229,7 @@ def setup_training_loop_kwargs(
                                                    att_layers=spec.att_layers, filter_size=spec.att_gaussian_size, filter_std=spec.att_gaussian_std,
                                                    temp=spec.sm_temp)
         args.M_kwargs.nav_kwargs = dnnlib.EasyDict(middle_feat=spec.nav_middle_feat, nav_fc_layers=spec.nav_fc_layers,
-                                                   n_eigen=spec.nav_n_eigen, ndup=spec.ndup)
+                                                   n_eigen=spec.nav_n_eigen, ndup=spec.ndup, nv_sep_ls=nv_sep_ls, eigen_sep_ls=eigen_sep_ls)
         if spec.memcontrast_lamb > 0:
             args.M_kwargs.mem_kwargs = dnnlib.EasyDict(memcontrast_lamb=spec.memcontrast_lamb, dimg_size=spec.dimg_size, dimg_ch=spec.dimg_ch)
 
@@ -354,6 +356,10 @@ class CommaSeparatedList(click.ParamType):
             return []
         return value.split(',')
 
+def to_list(s: str) -> List[int]:
+    vals = s[1:-1].split(',') # remove '[' and ']'.
+    return [int(x.strip()) for x in vals]
+
 #----------------------------------------------------------------------------
 
 @click.command()
@@ -397,6 +403,8 @@ class CommaSeparatedList(click.ParamType):
 
 # Discover net options.
 @click.option('--gan_network_pkl', help='GAN network pickle', metavar='PKL')
+@click.option('--nv_sep_ls', help='nv_dim separation list in eigen separation models. Sum should equals to z', type=to_list, metavar='LS')
+@click.option('--eigen_sep_ls', help='eigen space separation list in eigen separation models', type=to_list, metavar='LS')
 
 # Common sense net pkl
 @click.option('--common_sense_net_sim_pkl', help='Common sense net pkl', type=str, metavar='STR')

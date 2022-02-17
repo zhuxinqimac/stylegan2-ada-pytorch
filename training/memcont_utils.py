@@ -8,7 +8,7 @@
 
 # --- File Name: memcont_utils.py
 # --- Creation Date: 08-02-2022
-# --- Last Modified: Sat 12 Feb 2022 07:36:50 AEDT
+# --- Last Modified: Fri 18 Feb 2022 05:41:01 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -96,13 +96,14 @@ def get_norm_mask(diff, use_norm_as_mask=False, **kwargs):
     return mask
 
 def extract_loss_L_by_maskdiff(diff_q, diff_mems, mask_q, mask_mems, idx, q_idx,
-                               use_norm_mask=True, pos_lamb=1, neg_lamb=1, **kwargs):
+                               use_norm_mask=True, pos_lamb=1, neg_lamb=1, contrast_mat=None, **kwargs):
     '''
     diff_q: (b, c, h, w)
     diff_mems: (nv_dim, c, h, w)
     mask_q: (b, h, w)
     mask_mems: (nv_dim, h, w)
     q_idx: (b)
+    contrast_mat: None or (nv_dim, nv_dim)
     '''
     b, c, h, w = diff_q.shape
     nv_dim = diff_mems.shape[0]
@@ -111,6 +112,10 @@ def extract_loss_L_by_maskdiff(diff_q, diff_mems, mask_q, mask_mems, idx, q_idx,
     diff_q = diff_q / (diff_q.norm(dim=1, keepdim=True) + 1e-6)
     diff_mems = diff_mems / (diff_mems.norm(dim=1, keepdim=True) + 1e-6)
     cos_sim_hw = (diff_q.view(b, 1, c, h, w) * diff_mems.view(1, nv_dim, c, h, w)).sum(dim=2) # [b, nv_dim, h, w]
+    if contrast_mat:
+        print('Using contrast_mat')
+        b_mat = contrast_mat[q_idx] # [b, nv_dim]
+        cos_sim_hw = cos_sim_hw * b_mat.view(b, nv_dim, 1, 1) # [b, nv_dim, h, w]
 
     # Similarity matrix
     if use_norm_mask:

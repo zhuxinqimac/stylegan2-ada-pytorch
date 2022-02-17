@@ -8,7 +8,7 @@
 
 # --- File Name: networks_navigator.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 14 Feb 2022 23:51:18 AEDT
+# --- Last Modified: Fri 18 Feb 2022 05:14:46 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -399,6 +399,47 @@ class FixedEigenNavigatorNet(NoneNavigatorNet):
         return ws_dirs
 
 @persistence.persistent_class
+class FixedEigenSepNavigatorNet(NoneNavigatorNet):
+    def __init__(self,
+        nv_dim,                     # Navigator latent dim.
+        num_ws,                     # Number of intermediate latents for synthesis net input.
+        w_dim,                      # Intermediate latent (W) dimensionality.
+        v_mat=None,                 # The eigen vector matrix used to project.
+        nv_sep_ls=[],               # The nv_dim separation list.
+        eigen_sep_ls=[],            # The eigen space separation list.
+        **kwargs,
+    ):
+        super().__init__(nv_dim, num_ws, w_dim)
+        self.v_mat = v_mat
+        self.nv_sep_ls = nv_sep_ls
+        self.eigen_sep_ls = eigen_sep_ls
+        assert sum(self.nv_sep_ls) == self.nv_dim
+        assert len(self.nv_sep_ls) == len(self.eigen_sep_ls)
+        # self.nav_logits = nn.Parameter(torch.normal(mean=torch.zeros(nv_dim, n_eigen), std=1),
+                                       # requires_grad=True)
+        param_ls = [nn.Parameter(torch.normal(mean=torch.zeros(nv_dim_i, n_eigen_i), std=1), requires_grad=True)
+                    for nv_dim_i, n_eigen_i in zip(self.nv_sep_ls, self.eigen_sep_ls)]
+        self.nav_logits = nn.ParameterList(param_ls)
+
+    def forward(self, ws_in):
+        # ws_in: [b, num_ws, w_dim]
+        # return: [b, nv_dim, w_dim]
+        s = 0
+        ws_dirs_ls = []
+        for i, (nv_dim_i, n_eigen_i) in enumerate(zip(self.nv_sep_ls, self.eigen_sep_ls)):
+            ws_dirs_in_eigen_i = self.nav_logits[i].view(1, nv_dim_i, n_eigen_i) # [1, nv_dim_i, n_eigen_i]
+            ws_dirs_i = torch.matmul(ws_dirs_in_eigen_i, self.v_mat[:, s:s+n_eigen_i]) # [1, nv_dim_i, w_dim]
+            ws_dirs_ls.append(ws_dirs_i)
+            print(f'ws_dirs_{i}.shape:', ws_dirs_i.shape)
+            s = s+n_eigen_i
+            # ws_dirs_in_eigen = self.nav_logits.view(1, self.nv_dim, self.n_eigen)
+            # ws_dirs = torch.matmul(ws_dirs_in_eigen, self.v_mat[:, :self.n_eigen].T)
+        ws_dirs = torch.cat(ws_dirs_ls, dim=1) # [1, nv_dim, w_dim]
+        ws_dirs = ws_dirs.repeat(ws_in.shape[0], 1, 1).to(ws_in.device) # [b, nv_dim, w_dim]
+        print('output ws_dirs.shape:', ws_dirs.shape)
+        return ws_dirs
+
+@persistence.persistent_class
 class AdaALLwEigenNavigatorNet(NoneNavigatorNet):
     def __init__(self,
         nv_dim,                     # Navigator latent dim.
@@ -486,6 +527,8 @@ class Navigator(torch.nn.Module):
             self.nav_net = FixedNavigatorNet(self.nv_dim, self.num_ws, self.w_dim, **nav_kwargs)
         elif self.nav_type == 'fixedE': # Not depending on input w.
             self.nav_net = FixedEigenNavigatorNet(self.nv_dim, self.num_ws, self.w_dim, **nav_kwargs)
+        elif self.nav_type == 'fixedES': # Not depending on input w.
+            self.nav_net = FixedEigenSepNavigatorNet(self.nv_dim, self.num_ws, self.w_dim, **nav_kwargs)
         elif self.nav_type == 'ada1w': # Depending only on a single w (or averaged w over num_ws).
             self.nav_net = Ada1wNavigatorNet(self.nv_dim, self.num_ws, self.w_dim, **nav_kwargs)
         elif self.nav_type == 'adaALLw': # Depending on all num_ws of ws.
