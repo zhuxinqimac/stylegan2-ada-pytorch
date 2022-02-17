@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 18 Feb 2022 06:39:15 AEDT
+# --- Last Modified: Fri 18 Feb 2022 07:21:04 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -82,7 +82,8 @@ class DiscoverLoss(Loss):
                  s_values_normed=None, v_mat=None, w_avg=None, per_w_dir=False, sensor_type='alex',
                  use_pca_scale=False, use_pca_sign=False, use_uniform=False, use_mirror_symmetry=False, limit_mem_dimgs=False,
                  mask_after_square=False, union_spatial=False, recog_lamb=0., vs_lamb=0.25, var_feat_type='s',
-                 xent_lamb=0., xent_temp=0.5, use_flat_diff=False, use_feat_from_top=True, abs_diff=False):
+                 xent_lamb=0., xent_temp=0.5, use_flat_diff=False, use_feat_from_top=True, abs_diff=False,
+                 nv_sep_ls=None, eigen_sep_ls=None):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -111,8 +112,17 @@ class DiscoverLoss(Loss):
         self.xent_temp = xent_temp
         self.use_flat_diff = use_flat_diff
         self.abs_diff = abs_diff
+        self.nv_sep_ls = nv_sep_ls
+        self.eigen_sep_ls = eigen_sep_ls
 
-        self.contrast_mat = torch.eye(self.nv_dim).to(device) if self.nav_type[-2:] == 'ES' else None
+        if self.nav_type[-2:] == 'ES':
+            self.contrast_mat = torch.zeros(self.nv_dim, self.nv_dim).to(device)
+            s = 0
+            for i, nv_dim_i in enumerate(self.nv_sep_ls):
+                self.contrast_mat[s:s+nv_dim_i, s:s+nv_dim_i] = 1.
+                s += nv_dim_i
+        else:
+            self.contrast_mat = None
 
         self.Sim = None
         self.Comp = None
@@ -557,7 +567,7 @@ class DiscoverLoss(Loss):
         loss = self.extract_loss_L(res_q, res_pos, res_neg, -1, pos_neg_idx)
         return loss
 
-    def calc_loss_diversity(self, delta):
+    def calc_loss_diversity(self, delta, do_Mmemcontrast=False):
         '''
         delta: [b, nv_dim, num_ws, w_dim] or [b, num_ws, nv_dim, w_dim] if per_w_dir
         '''
@@ -577,6 +587,8 @@ class DiscoverLoss(Loss):
         # print('delta1.len:', torch.norm(delta1, dim=-1).squeeze())
         # norm = torch.norm(diff, dim=1) # (0.5batch, h, w)
         cos_div = self.cos_fn_diversity(delta1.repeat(1, nv_dim, 1, 1), delta2.repeat(1, 1, nv_dim, 1)) # (b, nv_dim, nv_dim)
+        if do_Mmemcontrast and self.contrast_mat is not None:
+            cos_div = cos_div * self.contrast_mat.view(1, nv_dim, nv_dim)
         # print('cos_div:', cos_div)
         div_mask = 1. - torch.eye(self.nv_dim, device=delta.device).view(1, self.nv_dim, self.nv_dim)
         loss = (cos_div * div_mask).square()
@@ -1138,7 +1150,7 @@ class DiscoverLoss(Loss):
             # print('Using diverse loss...')
             with torch.autograd.profiler.record_function('Mdiverse_loss'):
                 # Dir diversity loss.
-                loss_diversity = self.calc_loss_diversity(delta) # (b/1)
+                loss_diversity = self.calc_loss_diversity(delta, do_Mmemcontrast) # (b/1)
                 training_stats.report('Loss/M/loss_diversity', loss_diversity)
                 loss_all += self.div_lamb * loss_diversity.mean()
 

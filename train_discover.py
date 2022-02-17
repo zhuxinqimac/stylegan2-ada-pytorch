@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 18 Feb 2022 06:25:53 AEDT
+# --- Last Modified: Fri 18 Feb 2022 07:17:52 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -258,7 +258,7 @@ def setup_training_loop_kwargs(
                                        use_mirror_symmetry=spec.use_mirror_symmetry, limit_mem_dimgs=spec.limit_mem_dimgs,
                                        recog_lamb=spec.recog_lamb, vs_lamb=spec.vs_lamb, var_feat_type=spec.var_feat_type,
                                        xent_lamb=spec.xent_lamb, xent_temp=spec.xent_temp, use_flat_diff=spec.use_flat_diff, use_feat_from_top=spec.use_feat_from_top,
-                                       abs_diff=spec.abs_diff)
+                                       abs_diff=spec.abs_diff, nv_sep_ls=nv_sep_ls, eigen_sep_ls=eigen_sep_ls)
     args.total_kimg = spec.kimg
     args.batch_size = spec.mb
     args.batch_gpu = spec.mb // spec.ref_gpus
