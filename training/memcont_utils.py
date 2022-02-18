@@ -8,7 +8,7 @@
 
 # --- File Name: memcont_utils.py
 # --- Creation Date: 08-02-2022
-# --- Last Modified: Fri 18 Feb 2022 06:38:56 AEDT
+# --- Last Modified: Sat 19 Feb 2022 00:57:24 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -112,9 +112,6 @@ def extract_loss_L_by_maskdiff(diff_q, diff_mems, mask_q, mask_mems, idx, q_idx,
     diff_q = diff_q / (diff_q.norm(dim=1, keepdim=True) + 1e-6)
     diff_mems = diff_mems / (diff_mems.norm(dim=1, keepdim=True) + 1e-6)
     cos_sim_hw = (diff_q.view(b, 1, c, h, w) * diff_mems.view(1, nv_dim, c, h, w)).sum(dim=2) # [b, nv_dim, h, w]
-    if contrast_mat is not None:
-        b_mat = contrast_mat[q_idx] # [b, nv_dim]
-        cos_sim_hw = cos_sim_hw * b_mat.view(b, nv_dim, 1, 1) # [b, nv_dim, h, w]
 
     # Similarity matrix
     if use_norm_mask:
@@ -124,9 +121,16 @@ def extract_loss_L_by_maskdiff(diff_q, diff_mems, mask_q, mask_mems, idx, q_idx,
     else:
         cos_sim = (cos_sim_hw**2).mean(dim=[2,3])
 
+    if contrast_mat is not None:
+        b_mat = contrast_mat[q_idx] # [b, nv_dim]
+        cos_sim = cos_sim * b_mat.view(b, nv_dim) # [b, nv_dim]
+
     pos_mask = F.one_hot(q_idx, num_classes=nv_dim).bool().to(cos_sim.device) # [b, nv_dim]
     pos = cos_sim.masked_select(pos_mask).view(b, -1)
-    neg = cos_sim.masked_select(~pos_mask).view(b, -1)
+    if contrast_mat is not None:
+        neg = cos_sim.masked_select((~pos_mask) & b_mat).view(b, -1)
+    else:
+        neg = cos_sim.masked_select(~pos_mask).view(b, -1)
     loss_pos = pos.mean(dim=-1)
     loss_neg = neg.mean(dim=-1)
 
