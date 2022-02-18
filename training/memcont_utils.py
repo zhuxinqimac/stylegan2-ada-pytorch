@@ -8,7 +8,7 @@
 
 # --- File Name: memcont_utils.py
 # --- Creation Date: 08-02-2022
-# --- Last Modified: Sat 19 Feb 2022 00:57:24 AEDT
+# --- Last Modified: Sat 19 Feb 2022 01:25:03 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -128,7 +128,7 @@ def extract_loss_L_by_maskdiff(diff_q, diff_mems, mask_q, mask_mems, idx, q_idx,
     pos_mask = F.one_hot(q_idx, num_classes=nv_dim).bool().to(cos_sim.device) # [b, nv_dim]
     pos = cos_sim.masked_select(pos_mask).view(b, -1)
     if contrast_mat is not None:
-        neg = cos_sim.masked_select((~pos_mask) & b_mat).view(b, -1)
+        neg = cos_sim.masked_select((~pos_mask) & b_mat.bool()).view(b, -1)
     else:
         neg = cos_sim.masked_select(~pos_mask).view(b, -1)
     loss_pos = pos.mean(dim=-1)
