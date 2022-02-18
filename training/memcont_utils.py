@@ -8,7 +8,7 @@
 
 # --- File Name: memcont_utils.py
 # --- Creation Date: 08-02-2022
-# --- Last Modified: Sat 19 Feb 2022 01:46:07 AEDT
+# --- Last Modified: Sat 19 Feb 2022 02:17:53 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -136,6 +136,8 @@ def extract_loss_L_by_maskdiff(diff_q, diff_mems, mask_q, mask_mems, idx, q_idx,
         neg = cos_sim.masked_select(~pos_mask).mean()
     # loss_pos = pos.mean(dim=-1)
     # loss_neg = neg.mean(dim=-1)
+    loss_pos = pos
+    loss_neg = neg
 
     training_stats.report('Loss/M/loss_diff_pos_{}'.format(idx), -loss_pos)
     training_stats.report('Loss/M/loss_diff_neg_{}'.format(idx), loss_neg)
