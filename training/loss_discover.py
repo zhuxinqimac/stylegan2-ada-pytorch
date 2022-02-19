@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 18 Feb 2022 07:21:04 AEDT
+# --- Last Modified: Sun 20 Feb 2022 02:49:13 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -773,7 +773,7 @@ class DiscoverLoss(Loss):
                 loss_atts_sum, ws_atts, per_w_dir, delta = self.run_M_outALL(ws_orig, sync) # [b, nv_dim, num_ws, w_dim] or [b, num_ws, nv_dim, w_dim] (per_w_dir)
 
         b = self.batch_gpu
-        loss_all = 0.
+        loss_all = torch.tensor(0., device=delta.device)
 
         # Mmemcontrast: contrast sampled delta with a memory of (averaged) deltas.
         if do_Mmemcontrast:
