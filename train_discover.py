@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 18 Feb 2022 07:17:52 AEDT
+# --- Last Modified: Sun 20 Feb 2022 02:45:39 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -198,7 +198,7 @@ def setup_training_loop_kwargs(
                            n_samples_per=7, sensor_type='alex', pnet_rand=False,
                            save_size=128, trav_walk_scale=0.2, recursive_walk=True, show_normD=True, per_w_dir=False,
                            use_pca_scale=False, use_pca_sign=False, mask_after_square=False, union_spatial=False, use_uniform=True,
-                           use_mirror_symmetry=False, limit_mem_dimgs=False, ndup=1,
+                           use_mirror_symmetry=False, limit_mem_dimgs=True, ndup=1,
                            recog_lamb=0., vs_lamb=0.25, R_ch_in=6, R_net_name='resnet18', R_pretrained=False,
                            vit_return_multi_layer=True, var_feat_type='s', no_spatial=False,
                            no_bn=False, no_relu=False, no_skip=False, xent_lamb=0., xent_temp=0.5, use_flat_diff=False, use_feat_from_top=True,
@@ -231,8 +231,8 @@ def setup_training_loop_kwargs(
                                                    temp=spec.sm_temp)
         args.M_kwargs.nav_kwargs = dnnlib.EasyDict(middle_feat=spec.nav_middle_feat, nav_fc_layers=spec.nav_fc_layers,
                                                    n_eigen=spec.nav_n_eigen, ndup=spec.ndup, nv_sep_ls=nv_sep_ls, eigen_sep_ls=eigen_sep_ls)
-        if spec.memcontrast_lamb > 0:
-            args.M_kwargs.mem_kwargs = dnnlib.EasyDict(memcontrast_lamb=spec.memcontrast_lamb, dimg_size=spec.dimg_size, dimg_ch=spec.dimg_ch)
+        # if spec.memcontrast_lamb > 0:
+        args.M_kwargs.mem_kwargs = dnnlib.EasyDict(memcontrast_lamb=spec.memcontrast_lamb, dimg_size=spec.dimg_size, dimg_ch=spec.dimg_ch)
 
     if spec.recog_lamb > 0:
         args.R_kwargs = dnnlib.EasyDict(class_name='training.networks_recog_resnet.RecogResNet', nv_dim=spec.nv_dim, ch_in=spec.R_ch_in,
