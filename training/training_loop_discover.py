@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Fri 18 Feb 2022 01:15:35 AEDT
+# --- Last Modified: Mon 21 Feb 2022 05:24:06 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -239,6 +239,18 @@ def training_loop(
             # print('dimgs_min:', dimgs_min)
             mem_dimgs = add_outline(mem_dimgs)
             save_image_grid(mem_dimgs, os.path.join(run_dir, f'mdimgs_init.png'), drange=[0,1], grid_size=(1, walk_grid_size[1]))
+
+        # Save initial weights
+        snapshot_data = dict()
+        for name, module in [('M', M), ('R', R)]:
+            if module is not None:
+                module = copy.deepcopy(module).eval().requires_grad_(False).cpu()
+            snapshot_data[name] = module
+            del module # conserve memory
+        snapshot_pkl = os.path.join(run_dir, f'network-snapshot-init.pkl')
+        if rank == 0:
+            with open(snapshot_pkl, 'wb') as f:
+                pickle.dump(snapshot_data, f)
 
 
     # Initialize logs.
