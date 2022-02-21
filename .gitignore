@@ -9,3 +9,5 @@ __pycache__/
 *.so
 *.pbs.*
 *hpc_usage_stats.json
+imgs/*.png
+imgs/*.jpg
