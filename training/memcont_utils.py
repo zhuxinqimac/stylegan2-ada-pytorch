@@ -8,7 +8,7 @@
 
 # --- File Name: memcont_utils.py
 # --- Creation Date: 08-02-2022
-# --- Last Modified: Tue 22 Feb 2022 00:08:22 AEDT
+# --- Last Modified: Tue 22 Feb 2022 00:16:30 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -184,7 +184,6 @@ def extract_mem_div_loss_L_by_maskdiff(diff_mems, mask_mems, idx,
     mask_mems: (nv_dim, h, w)
     contrast_mat: None or (nv_dim, nv_dim)
     '''
-    print('using mem_div')
     nv_dim, c, h, w = diff_mems.shape
     diff_mems = diff_mems / (diff_mems.norm(dim=1, keepdim=True) + 1e-6)
     cos_sim_hw = (diff_mems.view(nv_dim, 1, c, h, w) * diff_mems.view(1, nv_dim, c, h, w)).sum(dim=2) # [nv_dim, nv_dim, h, w]
@@ -198,7 +197,6 @@ def extract_mem_div_loss_L_by_maskdiff(diff_mems, mask_mems, idx,
         cos_sim = (cos_sim_hw**2).mean(dim=[2,3])
 
     if contrast_mat is not None:
-        print('using contrast_mat')
         cos_sim = cos_sim * contrast_mat # [nv_dim, nv_dim]
 
     pos_mask = torch.eye(nv_dim).bool().to(cos_sim.device) # [nv_dim, nv_dim]
