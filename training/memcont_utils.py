@@ -8,7 +8,7 @@
 
 # --- File Name: memcont_utils.py
 # --- Creation Date: 08-02-2022
-# --- Last Modified: Sat 19 Feb 2022 02:17:53 AEDT
+# --- Last Modified: Mon 21 Feb 2022 23:36:12 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -154,8 +154,8 @@ def extract_loss_L(diff_q, diff_mems, idx, q_idx, **kwargs):
     _, _, h, w = diff_q.shape
     diff_mems = F.interpolate(diff_mems, size=(h, w), mode='bilinear', align_corners=False) # [nv_dim, c, h, w]
 
-    mask_q = get_norm_mask(diff_q, **kwargs) # (b, h, w), (b, h, w)
-    mask_mems = get_norm_mask(diff_mems, **kwargs) # (nv_dim, h, w), (nv_dim, h, w)
+    mask_q = get_norm_mask(diff_q, **kwargs) # (b, h, w)
+    mask_mems = get_norm_mask(diff_mems, **kwargs) # (nv_dim, h, w)
 
     loss_diff = extract_loss_L_by_maskdiff(diff_q, diff_mems, mask_q, mask_mems, idx, q_idx, **kwargs)
     training_stats.report('Loss/M/loss_diff_{}'.format(idx), loss_diff)
@@ -173,5 +173,57 @@ def extract_diff_loss(outs_all, mems_all, q_idx,
     for kk in range(max(0, len(outs_all)-sensor_used_layers), len(outs_all)) if use_feat_from_top else range(0, min(len(outs_all), sensor_used_layers)):
         qd_fmap = extract_diff_L(outs_all[kk]) # diff feature maps [b, c, h, w]
         loss_kk = extract_loss_L(qd_fmap, mems_all[kk], kk, q_idx, **kwargs)
+        loss += loss_kk
+    return loss
+
+ # ==== mem_div loss ====
+def extract_mem_div_loss_L_by_maskdiff(diff_mems, mask_mems, idx,
+                                       use_norm_mask=True, neg_lamb=1, contrast_mat=None, **kwargs):
+    '''
+    diff_mems: (nv_dim, c, h, w)
+    mask_mems: (nv_dim, h, w)
+    contrast_mat: None or (nv_dim, nv_dim)
+    '''
+    nv_dim, c, h, w = diff_mems.shape
+    diff_mems = diff_mems / (diff_mems.norm(dim=1, keepdim=True) + 1e-6)
+    cos_sim_hw = (diff_mems.view(nv_dim, 1, c, h, w) * diff_mems.view(1, nv_dim, c, h, w)).sum(dim=2) # [nv_dim, nv_dim, h, w]
+
+    # Similarity matrix
+    if use_norm_mask:
+        mask_comb = mask_mems.view(nv_dim, 1, h, w) * mask_mems.view(1, nv_dim, h, w) # [nv_dim, nv_dim, h, w]
+        cos_sim_hw *= mask_comb
+        cos_sim = (cos_sim_hw**2).sum(dim=[2,3]) / (mask_comb.sum(dim=[2,3]) + 1e-6) # [nv_dim, nv_dim]
+    else:
+        cos_sim = (cos_sim_hw**2).mean(dim=[2,3])
+
+    if contrast_mat is not None:
+        cos_sim = cos_sim * contrast_mat # [nv_dim, nv_dim]
+
+    pos_mask = torch.eye(nv_dim).bool().to(cos_sim.device) # [nv_dim, nv_dim]
+    if contrast_mat is not None:
+        # neg = cos_sim.masked_select((~pos_mask) & b_mat.bool()).view(b, -1)
+        neg = cos_sim.masked_select((~pos_mask) & contrast_mat.bool()).mean()
+    else:
+        # neg = cos_sim.masked_select(~pos_mask).view(b, -1)
+        neg = cos_sim.masked_select(~pos_mask).mean()
+    return neg.mean()
+
+def extract_mem_div_loss_L(diff_mems, idx, **kwargs):
+    '''
+    diff_mems: (nv_dim, c, h2, w2)
+    '''
+    mask_mems = get_norm_mask(diff_mems, **kwargs) # (nv_dim, h, w)
+    loss_diff = extract_mem_div_loss_L_by_maskdiff(diff_mems, mask_mems, idx, **kwargs)
+    training_stats.report('Loss/M/loss_mem_div_{}'.format(idx), loss_diff)
+
+    return loss_diff
+
+def mem_div_loss(mems_all, sensor_used_layers=10, use_feat_from_top=True, **kwargs):
+    '''
+    mems_all: list of memory feature maps. Each element is of size [nv_dim, c, h, w]
+    '''
+    loss = 0
+    for kk in range(max(0, len(mems_all)-sensor_used_layers), len(mems_all)) if use_feat_from_top else range(0, min(len(mems_all), sensor_used_layers)):
+        loss_kk = extract_mem_div_loss_L(mems_all[kk], kk, **kwargs)
         loss += loss_kk
     return loss

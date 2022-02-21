@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sun 20 Feb 2022 02:45:39 AEDT
+# --- Last Modified: Mon 21 Feb 2022 23:51:33 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -52,7 +52,7 @@ KEY_BRIEF_NAMES = {'z': 'nv_dim', 'at': 'att_type', 'nt': 'nav_type', 'amf': 'at
                    'wals': 'trav_walk_scale', 'recw': 'recursive_walk', 'shownm': 'show_normD', 'perw': 'per_w_dir',
                    'pcas': 'use_pca_scale', 'pcan': 'use_pca_sign', 'ndup': 'ndup',
                    'mafsq': 'mask_after_square', 'usp': 'union_spatial', 'uni': 'use_uniform',
-                   'mir': 'use_mirror_symmetry', 'ldimg': 'limit_mem_dimgs',
+                   'mir': 'use_mirror_symmetry', 'ldimg': 'limit_mem_dimgs', 'mdiv': 'memdiv_lamb',
                    'recg': 'recog_lamb', 'vs': 'vs_lamb', 'Rch': 'R_ch_in', 'Rna': 'R_net_name', 'Rpre': 'R_pretrained',
                    'vmul': 'vit_return_multi_layer', 'vart': 'var_feat_type', 'nsp': 'no_spatial',
                    'nbn': 'no_bn', 'nrl': 'no_relu', 'nsk': 'no_skip', 'xent': 'xent_lamb', 'xetp': 'xent_temp', 'fdf': 'use_flat_diff',
@@ -72,7 +72,7 @@ KEY_DTYPES = {'nv_dim': int, 'att_type': str, 'nav_type': str, 'att_middle_feat'
               'trav_walk_scale': float, 'recursive_walk': bool_own, 'show_normD': bool_own, 'per_w_dir': bool_own,
               'use_pca_scale': bool_own, 'use_pca_sign': bool_own, 'ndup': int,
               'mask_after_square': bool_own, 'union_spatial': bool_own, 'use_uniform': bool_own,
-              'use_mirror_symmetry': bool_own, 'limit_mem_dimgs': bool_own,
+              'use_mirror_symmetry': bool_own, 'limit_mem_dimgs': bool_own, 'memdiv_lamb': float,
               'recog_lamb': float, 'vs_lamb': float, 'R_ch_in': int, 'R_net_name': str, 'R_pretrained': bool_own,
               'vit_return_multi_layer': bool_own, 'var_feat_type': str, 'no_spatial': bool_own,
               'no_bn': bool_own, 'no_relu': bool_own, 'no_skip': bool_own, 'xent_lamb': float, 'xent_temp': float, 'use_flat_diff': bool_own,
@@ -195,7 +195,7 @@ def setup_training_loop_kwargs(
                            loss_n_colors=5, div_lamb=0, norm_lamb=0, var_sample_scale=1, var_sample_mean=0., widenatt_lamb=0.,
                            sensor_used_layers=10, use_norm_mask=True, divide_mask_sum=True, use_dynamic_scale=True, use_norm_as_mask=False,
                            diff_avg_lerp_rate=0.01, lerp_lamb=0., lerp_norm=False, neg_lamb=1., pos_lamb=1., neg_on_self=False, use_catdiff=False,
-                           n_samples_per=7, sensor_type='alex', pnet_rand=False,
+                           n_samples_per=7, sensor_type='alex', pnet_rand=False, memdiv_lamb=0.,
                            save_size=128, trav_walk_scale=0.2, recursive_walk=True, show_normD=True, per_w_dir=False,
                            use_pca_scale=False, use_pca_sign=False, mask_after_square=False, union_spatial=False, use_uniform=True,
                            use_mirror_symmetry=False, limit_mem_dimgs=True, ndup=1,
@@ -248,7 +248,7 @@ def setup_training_loop_kwargs(
                                        significance_lamb=spec.significance_lamb, Sim_lambda=spec.Sim_lambda, Comp_lambda=spec.Comp_lambda,
                                        Sim_pkl=common_sense_net_sim_pkl, Comp_pkl=common_sense_net_comp_pkl,
                                        n_colors=spec.loss_n_colors, div_lamb=spec.div_lamb, norm_lamb=spec.norm_lamb, var_sample_scale=spec.var_sample_scale,
-                                       widenatt_lamb=spec.widenatt_lamb,
+                                       widenatt_lamb=spec.widenatt_lamb, memdiv_lamb=spec.memdiv_lamb,
                                        var_sample_mean=spec.var_sample_mean, sensor_used_layers=spec.sensor_used_layers, use_norm_mask=spec.use_norm_mask,
                                        divide_mask_sum=spec.divide_mask_sum, use_dynamic_scale=spec.use_dynamic_scale, use_norm_as_mask=spec.use_norm_as_mask,
                                        diff_avg_lerp_rate=spec.diff_avg_lerp_rate, lerp_lamb=spec.lerp_lamb, lerp_norm=spec.lerp_norm,

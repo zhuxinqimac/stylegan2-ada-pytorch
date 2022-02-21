@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sun 20 Feb 2022 02:49:13 AEDT
+# --- Last Modified: Mon 21 Feb 2022 23:42:04 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -83,7 +83,7 @@ class DiscoverLoss(Loss):
                  use_pca_scale=False, use_pca_sign=False, use_uniform=False, use_mirror_symmetry=False, limit_mem_dimgs=False,
                  mask_after_square=False, union_spatial=False, recog_lamb=0., vs_lamb=0.25, var_feat_type='s',
                  xent_lamb=0., xent_temp=0.5, use_flat_diff=False, use_feat_from_top=True, abs_diff=False,
-                 nv_sep_ls=None, eigen_sep_ls=None):
+                 nv_sep_ls=None, eigen_sep_ls=None, memdiv_lamb=0.):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -114,6 +114,7 @@ class DiscoverLoss(Loss):
         self.abs_diff = abs_diff
         self.nv_sep_ls = nv_sep_ls
         self.eigen_sep_ls = eigen_sep_ls
+        self.memdiv_lamb = memdiv_lamb
 
         if self.nav_type[-2:] == 'ES':
             self.contrast_mat = torch.zeros(self.nv_dim, self.nv_dim).to(device)
@@ -836,7 +837,17 @@ class DiscoverLoss(Loss):
                               'use_norm_as_mask': self.use_norm_as_mask, 'use_norm_mask': self.use_norm_mask,
                               'pos_lamb': self.pos_lamb, 'neg_lamb': self.neg_lamb, 'contrast_mat': self.contrast_mat}
                     loss_memcontrast = memcont_utils.extract_diff_loss(outs_all, mems_all, q_idx, **kwargs)
-            loss_all += self.memcontrast_lamb * loss_memcontrast.mean()
+
+            with torch.autograd.profiler.record_function('Mmem_div_loss'):
+                kwargs = {'sensor_used_layers': self.sensor_used_layers, 'use_feat_from_top': self.use_feat_from_top,
+                          'use_norm_as_mask': self.use_norm_as_mask, 'use_norm_mask': self.use_norm_mask,
+                          'contrast_mat': self.contrast_mat}
+                if self.memdiv_lamb != 0:
+                    loss_memdiv = memcont_utils.mem_div_loss(mems_all, **kwargs)
+                else:
+                    loss_memdiv = 0.
+
+            loss_all += self.memcontrast_lamb * loss_memcontrast.mean() + self.memdiv_lamb * loss_memdiv.mean()
 
         # Mcontrast: Maximize cos_sim between same-var pairs and minimize between orth-var pairs.
         if do_Mcontrast:
