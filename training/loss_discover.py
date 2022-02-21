@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 21 Feb 2022 23:42:04 AEDT
+# --- Last Modified: Tue 22 Feb 2022 00:27:59 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -845,7 +845,7 @@ class DiscoverLoss(Loss):
                 if self.memdiv_lamb != 0:
                     loss_memdiv = memcont_utils.mem_div_loss(mems_all, **kwargs)
                 else:
-                    loss_memdiv = 0.
+                    loss_memdiv = torch.tensor(0., device=delta.device)
 
             loss_all += self.memcontrast_lamb * loss_memcontrast.mean() + self.memdiv_lamb * loss_memdiv.mean()
 
