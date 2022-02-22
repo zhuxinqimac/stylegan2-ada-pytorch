@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 22 Feb 2022 00:27:59 AEDT
+# --- Last Modified: Tue 22 Feb 2022 16:41:02 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -788,11 +788,11 @@ class DiscoverLoss(Loss):
                 # Sample variation scales.
                 if self.use_dynamic_scale:
                     if self.use_uniform:
-                        # scale_q = ((torch.rand(b, device=delta.device) - 0.5) * 2. * self.var_sample_scale + self.var_sample_mean).view(b, 1, 1)
-                        scale_q = (torch.rand(b, device=delta.device) * self.var_sample_scale).view(b, 1, 1)
+                        scale_q = ((torch.rand(b, device=delta.device) - 0.5) * 2. * self.var_sample_scale + self.var_sample_mean).view(b, 1, 1)
+                        # scale_q = (torch.rand(b, device=delta.device) * self.var_sample_scale).view(b, 1, 1)
                     else:
-                        # scale_q = (torch.randn(b, device=delta.device) * self.var_sample_scale + self.var_sample_mean).view(b, 1, 1)
-                        scale_q = (torch.randn(b, device=delta.device) * self.var_sample_scale + self.var_sample_mean).view(b, 1, 1).abs()
+                        scale_q = (torch.randn(b, device=delta.device) * self.var_sample_scale + self.var_sample_mean).view(b, 1, 1)
+                        # scale_q = (torch.randn(b, device=delta.device) * self.var_sample_scale + self.var_sample_mean).view(b, 1, 1).abs()
                 else:
                     scale_q = (torch.ones(b, device=delta.device) * self.var_sample_scale).view(b, 1, 1)
 
