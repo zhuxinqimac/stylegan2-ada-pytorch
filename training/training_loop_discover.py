@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 26 Feb 2022 04:59:07 AEDT
+# --- Last Modified: Sat 26 Feb 2022 05:09:33 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -165,6 +165,8 @@ def training_loop(
     for name, module in [('G_mapping', G.mapping), ('G_synthesis', G.synthesis), ('M', M), ('S', S), ('R', R)]:
         if (num_gpus > 1) and (module is not None) and len(list(module.parameters())) != 0:
             if (name == 'M') or (name == 'R' and module is not None) or (name == 'S' and module is not None and train_S):
+                if name == 'S':
+                    print('training S')
                 module.requires_grad_(True)
                 module = torch.nn.parallel.DistributedDataParallel(module, device_ids=[device], broadcast_buffers=False)
                 module.requires_grad_(False)
@@ -200,6 +202,8 @@ def training_loop(
         if subm is not None:
             if name == 'S' and not train_S:
                 continue
+            if name == 'S':
+                print('training S')
             module_param += list(subm.parameters())
             module_ls.append(subm)
     opt = dnnlib.util.construct_class_by_name(params=module_param, **M_opt_kwargs) # subclass of torch.optim.Optimizer
