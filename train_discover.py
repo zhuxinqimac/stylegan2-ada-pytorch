@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 21 Feb 2022 23:51:33 AEDT
+# --- Last Modified: Sat 26 Feb 2022 05:05:08 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -142,6 +142,9 @@ def setup_training_loop_kwargs(
     # Common sense network.
     common_sense_net_sim_pkl = None, # Common sense net pkl
     common_sense_net_comp_pkl = None, # Common sense net pkl
+
+    # Train S.
+    train_s = None, # If train S network
 ):
     args = dnnlib.EasyDict()
 
@@ -175,6 +178,10 @@ def setup_training_loop_kwargs(
         seed = 0
     assert isinstance(seed, int)
     args.random_seed = seed
+
+    if train_s is None:
+        train_s = False
+    args.train_S = train_s
 
     # ------------------------------------
     # Base config: cfg, gamma, kimg, batch
@@ -410,6 +417,9 @@ def to_list(s: str) -> List[int]:
 # Common sense net pkl
 @click.option('--common_sense_net_sim_pkl', help='Common sense net pkl', type=str, metavar='STR')
 @click.option('--common_sense_net_comp_pkl', help='Common sense net pkl', type=str, metavar='STR')
+
+# Trainable S network
+@click.option('--train_s', help='If train S network, default=False', type=bool, metavar='STR')
 def main(ctx, outdir, dry_run, **config_kwargs):
     dnnlib.util.Logger(should_flush=True)
 

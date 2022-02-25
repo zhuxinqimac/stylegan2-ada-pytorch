@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Tue 22 Feb 2022 16:41:02 AEDT
+# --- Last Modified: Sat 26 Feb 2022 05:01:01 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -275,7 +275,8 @@ class DiscoverLoss(Loss):
             if self.use_discrim_as_S:
                 feats_tmp_ls = self.discrim_forward(imgs, None)
             else:
-                feats_tmp_ls = self.S.forward(imgs) # [f1, f2, f3]
+                # feats_tmp_ls = self.S.forward(imgs) # [f1, f2, f3]
+                feats_tmp_ls = self.S(imgs) # [f1, f2, f3]
             if i == 0:
                 feats_ls = feats_tmp_ls
             else:

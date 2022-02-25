@@ -8,7 +8,7 @@
 
 # --- File Name: training_loop_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Mon 21 Feb 2022 05:24:06 AEDT
+# --- Last Modified: Sat 26 Feb 2022 04:59:07 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -75,6 +75,7 @@ def training_loop(
     recursive_walk          = True,     # If recursive walk.
     show_normD              = False,    # If normD when show heatmap.
     per_w_dir               = True,     # If use per_w_dir network.
+    train_S                 = False,    # If train S net.
 ):
     # Initialize.
     start_time = time.time()
@@ -135,9 +136,10 @@ def training_loop(
             # resume_data = legacy.load_network_pkl(f)
         with open(resume_pkl, 'rb') as f:
             resume_data = pickle.load(f)
-        for name, module in [('M', M), ('R', R)]:
-            if module is not None:
-                misc.copy_params_and_buffers(resume_data[name], module, require_all=False)
+        for name, module in [('M', M), ('R', R), ('S', S)]:
+            if (name == 'S' and train_S) or not name == 'S':
+                if module is not None:
+                    misc.copy_params_and_buffers(resume_data[name], module, require_all=False)
 
     if rank == 0:
         print('Passed resume')
@@ -162,7 +164,7 @@ def training_loop(
     ddp_modules = dict()
     for name, module in [('G_mapping', G.mapping), ('G_synthesis', G.synthesis), ('M', M), ('S', S), ('R', R)]:
         if (num_gpus > 1) and (module is not None) and len(list(module.parameters())) != 0:
-            if (name == 'M') or (name == 'R' and module is not None):
+            if (name == 'M') or (name == 'R' and module is not None) or (name == 'S' and module is not None and train_S):
                 module.requires_grad_(True)
                 module = torch.nn.parallel.DistributedDataParallel(module, device_ids=[device], broadcast_buffers=False)
                 module.requires_grad_(False)
@@ -181,15 +183,27 @@ def training_loop(
     # for name, module, opt_kwargs in [('M', M, M_opt_kwargs)]:
         # opt = dnnlib.util.construct_class_by_name(params=module.parameters(), **opt_kwargs) # subclass of torch.optim.Optimizer
         # phases += [dnnlib.EasyDict(name=name+'all', module=module, opt=opt, interval=1)]
-    if R is None:
-        opt = dnnlib.util.construct_class_by_name(params=M.parameters(), **M_opt_kwargs) # subclass of torch.optim.Optimizer
-        phases += [dnnlib.EasyDict(name='Mall', module=M, opt=opt, interval=1)]
-    else:
-        module_param = []
-        for subm in [M, R]:
+
+    # if R is None:
+        # opt = dnnlib.util.construct_class_by_name(params=M.parameters(), **M_opt_kwargs) # subclass of torch.optim.Optimizer
+        # phases += [dnnlib.EasyDict(name='Mall', module=M, opt=opt, interval=1)]
+    # else:
+        # module_param = []
+        # for subm in [M, R]:
+            # module_param += list(subm.parameters())
+        # opt = dnnlib.util.construct_class_by_name(params=module_param, **M_opt_kwargs) # subclass of torch.optim.Optimizer
+        # phases += [dnnlib.EasyDict(name='Mall', module=[M, R], opt=opt, interval=1)]
+
+    module_param = []
+    module_ls = []
+    for name, subm in [('M', M), ('R', R), ('S', S)]:
+        if subm is not None:
+            if name == 'S' and not train_S:
+                continue
             module_param += list(subm.parameters())
-        opt = dnnlib.util.construct_class_by_name(params=module_param, **M_opt_kwargs) # subclass of torch.optim.Optimizer
-        phases += [dnnlib.EasyDict(name='Mall', module=[M, R], opt=opt, interval=1)]
+            module_ls.append(subm)
+    opt = dnnlib.util.construct_class_by_name(params=module_param, **M_opt_kwargs) # subclass of torch.optim.Optimizer
+    phases += [dnnlib.EasyDict(name='Mall', module=module_ls, opt=opt, interval=1)]
 
     for phase in phases:
         phase.start_event = None
@@ -242,8 +256,10 @@ def training_loop(
 
         # Save initial weights
         snapshot_data = dict()
-        for name, module in [('M', M), ('R', R)]:
+        for name, module in [('M', M), ('R', R), ('S', S)]:
             if module is not None:
+                if name == 'S' and not train_S:
+                    continue
                 module = copy.deepcopy(module).eval().requires_grad_(False).cpu()
             snapshot_data[name] = module
             del module # conserve memory
@@ -399,8 +415,10 @@ def training_loop(
         snapshot_data = None
         if (network_snapshot_ticks is not None) and (done or cur_tick % network_snapshot_ticks == 0):
             snapshot_data = dict()
-            for name, module in [('M', M), ('R', R)]:
+            for name, module in [('M', M), ('R', R), ('S', S)]:
                 if module is not None:
+                    if name == 'S' and not train_S:
+                        continue
                     if num_gpus > 1:
                         misc.check_ddp_consistency(module, ignore_regex=r'.*\.w_avg')
                     module = copy.deepcopy(module).eval().requires_grad_(False).cpu()

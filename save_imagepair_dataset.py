@@ -8,7 +8,7 @@
 
 # --- File Name: save_imagepair_dataset.py
 # --- Creation Date: 22-05-2021
-# --- Last Modified: Fri 29 Oct 2021 01:24:45 AEDT
+# --- Last Modified: Fri 25 Feb 2022 18:00:50 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -51,16 +51,25 @@ def get_duplicated_dirs_batch(M, G, device, b=512, var_scale=1., thresh=0.5):
         with torch.no_grad():
             g_w = G.mapping(g_z, g_c) # (mini_b, num_ws, w_dim)
             out_M = M(g_w) # [mini_b, nv_dim, num_ws, w_dim]
-        img_orig = G.synthesis(g_w) # [mini_b, c, h, w]
-        if img_orig.shape[1] == 1:
-            img_orig = img_orig.repeat(1, 3, 1, 1)
-        feat_orig = list(fnet(img_orig)) # ls of [mini_b, fc, fh, fw]
+        # img_orig = G.synthesis(g_w) # [mini_b, c, h, w]
+        # if img_orig.shape[1] == 1:
+            # img_orig = img_orig.repeat(1, 3, 1, 1)
+        # feat_orig = list(fnet(img_orig)) # ls of [mini_b, fc, fh, fw]
         for nv in range(M.nv_dim):
+            # --- varied img
             g_w_var = g_w + var_scale * out_M[:, nv]
             img_var = G.synthesis(g_w_var) # [mini_b, c, h, w]
             if img_var.shape[1] == 1:
                 img_var = img_var.repeat(1, 3, 1, 1)
             feat_var = list(fnet(img_var)) # ls of [mini_b, fc, fh, fw]
+
+            # --- orig_img (neg_varied)
+            g_w_orig = g_w - var_scale * out_M[:, nv]
+            img_orig = G.synthesis(g_w_orig) # [mini_b, c, h, w]
+            if img_orig.shape[1] == 1:
+                img_orig = img_orig.repeat(1, 3, 1, 1)
+            feat_orig = list(fnet(img_orig)) # ls of [mini_b, fc, fh, fw]
+
             diff = [f_var - feat_orig[l] for l, f_var in enumerate(feat_var)] # ls of [mini_b, fc, fh, fw]
             if i == 0:
                 diff_all.append([dif.sum(0) for dif in diff])
@@ -77,6 +86,7 @@ def get_duplicated_dirs_batch(M, G, device, b=512, var_scale=1., thresh=0.5):
         for j in range(len(diff_all)):
             for l in range(len(diff_all[i])):
                 sim_grid_sum[i, j] += get_sim(diff_all[i][l], diff_all[j][l])
+            sim_grid_sum[i, j] /= len(diff_all[i])
     print('sim_grid_sum:', sim_grid_sum)
 
     dir_ls = []
@@ -145,18 +155,25 @@ def run_create_dataset(
     c_origin = torch.from_numpy(rand_state.randn(1, G.c_dim)).to(device)
     w_origin = G.mapping(z_origin, c_origin, truncation_psi=0.5) # (1, num_ws, w_dim)
     w_nv = M(w_origin) # [1, nv_dim, num_ws, w_dim]
+    # w_var = w_origin[:, np.newaxis, ...].repeat(1, M.nv_dim, 1, 1) + dedup_var_scale * w_nv # [1, nv_dim, num_ws, w_dim]
     w_var = w_origin[:, np.newaxis, ...].repeat(1, M.nv_dim, 1, 1) + dedup_var_scale * w_nv # [1, nv_dim, num_ws, w_dim]
+    w_var_neg = w_origin[:, np.newaxis, ...].repeat(1, M.nv_dim, 1, 1) - dedup_var_scale * w_nv # [1, nv_dim, num_ws, w_dim]
 
     imgs = G.synthesis(w_var.squeeze()) # [nv_dim, c, h, w]
-    _, c, h, w = imgs.shape
-    w_var[:, remove_dirs] = w_origin[:, np.newaxis]
-    imgs_dedup = G.synthesis(w_var.squeeze()) # [nv_dim, c, h, w]
-    imgs_origin = G.synthesis(w_origin.repeat(M.nv_dim, 1, 1)) # [nv_dim, c, h, w]
+    imgs_neg = G.synthesis(w_var_neg.squeeze()) # [nv_dim, c, h, w]
 
-    imgs_save = torch.cat([imgs_origin[:, np.newaxis, ...], imgs[:, np.newaxis, ...]], dim=1).view(M.nv_dim*2, c, h, w)
-    imgs_save_dedup = torch.cat([imgs_origin[:, np.newaxis, ...], imgs_dedup[:, np.newaxis, ...]], dim=1).view(M.nv_dim*2, c, h, w)
-    save_image_grid(imgs_save.cpu(), os.path.join(outdir, f'before_dedup_scale{dedup_var_scale}.png'), drange=[-1,1], grid_size=(2, M.nv_dim))
-    save_image_grid(imgs_save_dedup.cpu(), os.path.join(outdir, f'after_dedup_scale{dedup_var_scale}.png'), drange=[-1,1], grid_size=(2, M.nv_dim))
+    w_var[:, remove_dirs] = w_origin[:, np.newaxis]
+    w_var_neg[:, remove_dirs] = w_origin[:, np.newaxis]
+    imgs_dedup = G.synthesis(w_var.squeeze()) # [nv_dim, c, h, w]
+    imgs_neg_dedup = G.synthesis(w_var_neg.squeeze()) # [nv_dim, c, h, w]
+
+    imgs_origin = G.synthesis(w_origin.repeat(M.nv_dim, 1, 1)) # [nv_dim, c, h, w]
+    _, c, h, w = imgs_origin.shape
+
+    imgs_save = torch.cat([imgs_neg[:, np.newaxis, ...], imgs_origin[:, np.newaxis, ...], imgs[:, np.newaxis, ...]], dim=1).view(M.nv_dim*3, c, h, w)
+    imgs_save_dedup = torch.cat([imgs_neg_dedup[:, np.newaxis, ...], imgs_origin[:, np.newaxis, ...], imgs_dedup[:, np.newaxis, ...]], dim=1).view(M.nv_dim*3, c, h, w)
+    save_image_grid(imgs_save.cpu(), os.path.join(outdir, f'before_dedup_scale{dedup_var_scale}.png'), drange=[-1,1], grid_size=(3, M.nv_dim))
+    save_image_grid(imgs_save_dedup.cpu(), os.path.join(outdir, f'after_dedup_scale{dedup_var_scale}.png'), drange=[-1,1], grid_size=(3, M.nv_dim))
 
     # pdb.set_trace()
 
@@ -187,8 +204,10 @@ def run_create_dataset(
         # w = (g_w + delta).unsqueeze(1).repeat(1, M.num_ws, 1) # (b, num_ws, w_dim)
         # g_w = g_w.unsqueeze(1).repeat(1, M.num_ws, 1)
         w = g_w + delta
+        w_neg = g_w - delta
         with torch.no_grad():
-            images_orig = G.synthesis(g_w, noise_mode='const') # (b, c, h, w)
+            # images_orig = G.synthesis(g_w, noise_mode='const') # (b, c, h, w)
+            images_orig = G.synthesis(w_neg, noise_mode='const') # (b, c, h, w)
             images_edit = G.synthesis(w, noise_mode='const') # (b, c, h, w)
         labels = var_idx # (b)
         images_orig = img_to_255(images_orig) # (b, h, w, c) of uint8
