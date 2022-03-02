@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 02 Mar 2022 22:36:07 AEDT
+# --- Last Modified: Thu 03 Mar 2022 04:30:46 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -247,7 +247,7 @@ def setup_training_loop_kwargs(
         args.R_kwargs = dnnlib.EasyDict(class_name='training.networks_recog_resnet.RecogResNet', nv_dim=spec.nv_dim, ch_in=spec.R_ch_in,
                                         net_name=spec.R_net_name, pretrained=spec.R_pretrained)
     args.S_kwargs = dnnlib.EasyDict(return_multi_layer=spec.vit_return_multi_layer, no_spatial=spec.no_spatial,
-                                    no_bn=spec.no_spatial, no_relu=spec.no_spatial, no_skip=spec.no_spatial)
+                                    no_bn=spec.no_bn, no_relu=spec.no_relu, no_skip=spec.no_skip)
 
     args.M_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', lr=spec.lrate, betas=[0, 0.99], eps=1e-8)
 
