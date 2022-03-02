@@ -8,7 +8,7 @@
 
 # --- File Name: train_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 02 Mar 2022 22:25:23 AEDT
+# --- Last Modified: Wed 02 Mar 2022 22:36:07 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """Train networks to discover the interpretable directions in the W space."""
@@ -77,7 +77,8 @@ KEY_DTYPES = {'nv_dim': int, 'att_type': str, 'nav_type': str, 'att_middle_feat'
               'recog_lamb': float, 'vs_lamb': float, 'R_ch_in': int, 'R_net_name': str, 'R_pretrained': bool_own,
               'vit_return_multi_layer': bool_own, 'var_feat_type': str, 'no_spatial': bool_own,
               'no_bn': bool_own, 'no_relu': bool_own, 'no_skip': bool_own, 'xent_lamb': float, 'xent_temp': float, 'use_flat_diff': bool_own,
-              'use_feat_from_top': bool_own, 'nav_n_eigen': int, 'abs_diff': bool_own}
+              'use_feat_from_top': bool_own, 'nav_n_eigen': int, 'abs_diff': bool_own,
+              'contrast_mat_in_div': bool_own, 'contrast_mat_in_loss': bool_own}
 
 def parse_cfg(cfg):
     '''
