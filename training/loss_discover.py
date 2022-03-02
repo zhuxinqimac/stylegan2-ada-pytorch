@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Wed 02 Mar 2022 22:28:10 AEDT
+# --- Last Modified: Wed 02 Mar 2022 22:42:23 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -339,7 +339,7 @@ class DiscoverLoss(Loss):
                 pos = torch.randint(z_dim, [batch]) # [b]
                 neg = []
                 for i in range(batch):
-                    neg_ls = self.i2neg[pos[i]]
+                    neg_ls = self.i2neg[pos[i].item()]
                     neg.append(random.choice(neg_ls))
                 return torch.stack([pos, torch.tensor(neg, dtype=pos.dtype)], dim=1)
             else:
@@ -349,7 +349,7 @@ class DiscoverLoss(Loss):
                 pos = torch.randint(z_dim, [batch]) # [b]
                 neg = []
                 for i in range(batch):
-                    neg_ls = self.i2neg[pos[i]]
+                    neg_ls = self.i2neg[pos[i].item()]
                     neg.append(random.choice(neg_ls))
                 return torch.stack([pos, torch.tensor(neg, dtype=pos.dtype)], dim=1)
         else:
