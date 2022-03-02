@@ -8,7 +8,7 @@
 
 # --- File Name: loss_discover.py
 # --- Creation Date: 27-04-2021
-# --- Last Modified: Sat 26 Feb 2022 05:01:01 AEDT
+# --- Last Modified: Wed 02 Mar 2022 22:28:10 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -16,6 +16,7 @@ Loss for Discover Network. Code borrowed from Nvidia StyleGAN2-ada-pytorch.
 """
 
 import pickle
+import random
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -83,7 +84,7 @@ class DiscoverLoss(Loss):
                  use_pca_scale=False, use_pca_sign=False, use_uniform=False, use_mirror_symmetry=False, limit_mem_dimgs=False,
                  mask_after_square=False, union_spatial=False, recog_lamb=0., vs_lamb=0.25, var_feat_type='s',
                  xent_lamb=0., xent_temp=0.5, use_flat_diff=False, use_feat_from_top=True, abs_diff=False,
-                 nv_sep_ls=None, eigen_sep_ls=None, memdiv_lamb=0.):
+                 nv_sep_ls=None, eigen_sep_ls=None, memdiv_lamb=0., contrast_mat_in_div=False, contrast_mat_in_loss=False):
         super().__init__()
         self.device = device
         self.G_mapping = G_mapping
@@ -116,14 +117,29 @@ class DiscoverLoss(Loss):
         self.eigen_sep_ls = eigen_sep_ls
         self.memdiv_lamb = memdiv_lamb
 
-        if self.nav_type[-2:] == 'ES':
+        self.contrast_mat_in_loss = contrast_mat_in_loss
+        self.contrast_mat_in_div = contrast_mat_in_div
+        self.i2neg = dict()
+        if self.nav_type[-2:] == 'ES' and self.contrast_mat_in_loss:
             self.contrast_mat = torch.zeros(self.nv_dim, self.nv_dim).to(device)
             s = 0
             for i, nv_dim_i in enumerate(self.nv_sep_ls):
                 self.contrast_mat[s:s+nv_dim_i, s:s+nv_dim_i] = 1.
+                for idx in range(s, s+nv_dim_i):
+                    self.i2neg[idx] = set(range(s, s+nv_dim_i))
+                    self.i2neg[idx].remove(idx)
+                    self.i2neg[idx] = list(self.i2neg[idx])
                 s += nv_dim_i
         else:
             self.contrast_mat = None
+            for idx in range(self.nv_dim):
+                self.i2neg[idx] = set(range(self.nv_dim))
+                self.i2neg[idx].remove(idx)
+                self.i2neg[idx] = list(self.i2neg[idx])
+        print('contrast_mat:')
+        print(self.contrast_mat)
+        print('i2neg:')
+        print(self.i2neg)
 
         self.Sim = None
         self.Comp = None
@@ -319,9 +335,23 @@ class DiscoverLoss(Loss):
 
     def sample_batch_pos_neg_dirs(self, batch, z_dim, without_repeat=True):
         if without_repeat:
-            rand = torch.rand(batch, z_dim)
-            z_dim_perm = rand.argsort(dim=1) # (b, z_dim)
-            return z_dim_perm[:, :2]
+            if self.contrast_mat is not None: # Is not None when contrast_mat_in_loss is True
+                pos = torch.randint(z_dim, [batch]) # [b]
+                neg = []
+                for i in range(batch):
+                    neg_ls = self.i2neg[pos[i]]
+                    neg.append(random.choice(neg_ls))
+                return torch.stack([pos, torch.tensor(neg, dtype=pos.dtype)], dim=1)
+            else:
+                # rand = torch.rand(batch, z_dim)
+                # z_dim_perm = rand.argsort(dim=1) # (b, z_dim)
+                # return z_dim_perm[:, :2]
+                pos = torch.randint(z_dim, [batch]) # [b]
+                neg = []
+                for i in range(batch):
+                    neg_ls = self.i2neg[pos[i]]
+                    neg.append(random.choice(neg_ls))
+                return torch.stack([pos, torch.tensor(neg, dtype=pos.dtype)], dim=1)
         else:
             rand = torch.randint(z_dim, size=[batch, 2])
             return rand
@@ -589,7 +619,8 @@ class DiscoverLoss(Loss):
         # print('delta1.len:', torch.norm(delta1, dim=-1).squeeze())
         # norm = torch.norm(diff, dim=1) # (0.5batch, h, w)
         cos_div = self.cos_fn_diversity(delta1.repeat(1, nv_dim, 1, 1), delta2.repeat(1, 1, nv_dim, 1)) # (b, nv_dim, nv_dim)
-        if do_Mmemcontrast and self.contrast_mat is not None:
+        # if do_Mmemcontrast and self.contrast_mat is not None:
+        if self.contrast_mat_in_div and self.contrast_mat is not None:
             cos_div = cos_div * self.contrast_mat.view(1, nv_dim, nv_dim)
         # print('cos_div:', cos_div)
         div_mask = 1. - torch.eye(self.nv_dim, device=delta.device).view(1, self.nv_dim, self.nv_dim)
@@ -836,13 +867,14 @@ class DiscoverLoss(Loss):
                 else:
                     kwargs = {'sensor_used_layers': self.sensor_used_layers, 'use_feat_from_top': self.use_feat_from_top,
                               'use_norm_as_mask': self.use_norm_as_mask, 'use_norm_mask': self.use_norm_mask,
-                              'pos_lamb': self.pos_lamb, 'neg_lamb': self.neg_lamb, 'contrast_mat': self.contrast_mat}
+                              'pos_lamb': self.pos_lamb, 'neg_lamb': self.neg_lamb,
+                              'contrast_mat_in_div': self.contrast_mat_in_div, 'contrast_mat': self.contrast_mat}
                     loss_memcontrast = memcont_utils.extract_diff_loss(outs_all, mems_all, q_idx, **kwargs)
 
             with torch.autograd.profiler.record_function('Mmem_div_loss'):
                 kwargs = {'sensor_used_layers': self.sensor_used_layers, 'use_feat_from_top': self.use_feat_from_top,
                           'use_norm_as_mask': self.use_norm_as_mask, 'use_norm_mask': self.use_norm_mask,
-                          'contrast_mat': self.contrast_mat}
+                          'contrast_mat_in_div': self.contrast_mat_in_div, 'contrast_mat': self.contrast_mat}
                 if self.memdiv_lamb != 0:
                     loss_memdiv = memcont_utils.mem_div_loss(mems_all, **kwargs)
                 else:

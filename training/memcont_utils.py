@@ -8,7 +8,7 @@
 
 # --- File Name: memcont_utils.py
 # --- Creation Date: 08-02-2022
-# --- Last Modified: Tue 22 Feb 2022 00:16:30 AEDT
+# --- Last Modified: Wed 02 Mar 2022 22:27:40 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -178,7 +178,8 @@ def extract_diff_loss(outs_all, mems_all, q_idx,
 
  # ==== mem_div loss ====
 def extract_mem_div_loss_L_by_maskdiff(diff_mems, mask_mems, idx,
-                                       use_norm_mask=True, neg_lamb=1, contrast_mat=None, **kwargs):
+                                       use_norm_mask=True, neg_lamb=1,
+                                       contrast_mat_in_div=False, contrast_mat=None, **kwargs):
     '''
     diff_mems: (nv_dim, c, h, w)
     mask_mems: (nv_dim, h, w)
@@ -196,11 +197,11 @@ def extract_mem_div_loss_L_by_maskdiff(diff_mems, mask_mems, idx,
     else:
         cos_sim = (cos_sim_hw**2).mean(dim=[2,3])
 
-    if contrast_mat is not None:
+    if contrast_mat_in_div and contrast_mat is not None:
         cos_sim = cos_sim * contrast_mat # [nv_dim, nv_dim]
 
     pos_mask = torch.eye(nv_dim).bool().to(cos_sim.device) # [nv_dim, nv_dim]
-    if contrast_mat is not None:
+    if contrast_mat_in_div and contrast_mat is not None:
         # neg = cos_sim.masked_select((~pos_mask) & b_mat.bool()).view(b, -1)
         neg = cos_sim.masked_select((~pos_mask) & contrast_mat.bool()).mean()
     else:
