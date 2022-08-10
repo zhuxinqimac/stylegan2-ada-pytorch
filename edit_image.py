@@ -8,7 +8,7 @@
 
 # --- File Name: edit_image.py
 # --- Creation Date: 16-05-2021
-# --- Last Modified: Thu 04 Nov 2021 16:55:56 AEDT
+# --- Last Modified: Thu 03 Mar 2022 20:11:39 AEDT
 # --- Author: Xinqi Zhu
 # .<.<.<.<.<.<.<.<.<.<.<.<.<.<.<.<
 """
@@ -175,16 +175,6 @@ class CommaSeparatedFloatList(click.ParamType):
             return []
         return [float(x.strip()) for x in value[1:-1].split(',')]
 
-def num_range(s: str) -> List[int]:
-    '''Accept either a comma separated list of numbers 'a,b,c' or a range 'a-c' and return as a list of ints.'''
-
-    range_re = re.compile(r'^(\d+)-(\d+)$')
-    m = range_re.match(s)
-    if m:
-        return list(range(int(m.group(1)), int(m.group(2))+1))
-    vals = s.split(',')
-    return [int(x) for x in vals]
-
 #----------------------------------------------------------------------------
 
 @click.command()
@@ -290,7 +280,7 @@ def run_edit(
 
         # Save final projected frame and W vector.
         target_pil.save(f'{outdir}/target.png')
-        projected_w = projected_w_steps[-1].unsqueeze(0) # (num_ws, w_dim)
+        projected_w = projected_w_steps[-1].unsqueeze(0) # (1, num_ws, w_dim)
         synth_image = G.synthesis(projected_w, noise_mode='const')
         synth_image = (synth_image + 1) * (255/2)
         synth_image = synth_image.permute(0, 2, 3, 1).clamp(0, 255).to(torch.uint8)[0].cpu().numpy()
